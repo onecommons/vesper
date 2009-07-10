@@ -1,0 +1,30 @@
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_7> <http://rx4rdf.sf.net/ns/archive#last-modified> "1061139829.687" .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_7> <http://rx4rdf.sf.net/ns/wiki#name> "about" .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_7> <http://rx4rdf.sf.net/ns/wiki#revisions> <http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_5> .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_5> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_4> .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_5> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_5> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_1> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_9> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+<http://4suite.org/rdf/anonymous/xc52aaabe-6b72-42d1-8772-fcb90303c24b_7> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#NamedContent> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://rx4rdf.sf.net/ns/archive#contents> "[Rx4RDF] is a specification and reference implementation for querying, transforming and updating W3C's [RDF].  By specifying a deterministic mapping of the RDF model to an abstract XML DOM familiar XML technologies can be used to manipulate RDF, in particular XPath, XSLT and XUpdate.  We call their RDF equivalents [RxPath], [RxSLT], and [RxUpdate] respectively. You can also find here [RxML], alternative XML serialization for RDF that is designed for easy and simple authoring, particularly in conjunction with [Rxity]" .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://rx4rdf.sf.net/namespaces/rxml#P> "You can also find here some applications demonstrating the power of this technology, including:\n" .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://rx4rdf.sf.net/namespaces/rxml#H5> "About this site\n" .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://rx4rdf.sf.net/namespaces/rxml#P> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "Rx4RDF is an adhoc, open source project. Your feedback and participation is strongly encouraged. It is hosted by Source Forge -- mailing lists, etc. can be found " .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://rx4rdf.sf.net/namespaces/rxml#A> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> ".\n" .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://rx4rdf.sf.net/ns/archive#transformed-by> <http://rx4rdf.sf.net/ns/wiki#item-format-rxityml> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#ContentTransform> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_9> <http://rx4rdf.sf.net/ns/archive#contents> <http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_11> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_9> <http://rx4rdf.sf.net/ns/archive#created-on> "1061139829.687" .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_9> <http://rx4rdf.sf.net/ns/wiki#item-disposition> <http://rx4rdf.sf.net/ns/wiki#item-disposition-entry> .
+<http://4suite.org/rdf/anonymous/x467ce421-1a30-4a2f-9208-0a4b01cd0da1_9> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/wiki#Item> .
+

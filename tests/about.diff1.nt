@@ -1,0 +1,12 @@
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "Rx4RDF is an adhoc, open source project. Your feedback and participation is strongly encouraged. It is hosted by Source Forge -- mailing lists, etc. can be found " .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <http://rx4rdf.sf.net/namespaces/rxml#A> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> ".\n" .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#List> .
+<http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+
+
+
