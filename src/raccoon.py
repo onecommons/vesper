@@ -744,68 +744,7 @@ the Action is run (default is False).
                 contextNode = None
             return self.doActions(actions, templatekw, contextNode,
                 errorSequence=errorSequence, newTransaction=newTransaction)             
-            
-    ###########################################
-    ## update processing 
-    ###########################################                
-                                                    
-        def updateDom(self, addStmts, removedNodes=None):
-            '''
-            update the DOM store (assumes a RxPath DOM)
-            addStmts is a list of Statements to add
-            removedNodes is a list of RxPath nodes
-               (either subject or predicate nodes) to remove
-            '''
-            removedNodes = removedNodes or []
-            #log.debug('removing %s' % removeResources)
-            self.txnSvc.join(self.domStore)
-
-            #delete the statements or whole resources from the dom:
-            for node in removedNodes:
-                node.parentNode.removeChild(node)
-                
-            #and add the statements
-            RxPath.addStatements(self.domStore.dom, addStmts)
-
-        def updateStoreWithRDF(self, contents, type, uri, resources=None):    
-            '''        
-            Update the model with the given RDF document.
-            
-            The resources is a list of resources originally contained in
-            RDF document before it was edited. If present, this list is
-            used to create a diff between those resources statements in
-            the model and the statements in the current RDF doc.
-            
-            If resources is None, the RDF statements are treated as new
-            to the model and bNode labels are renamed if they are used in
-            the existing model.
-
-            uri is URI to be used for relative URIs in the RDF source
-              if omitted or none, the server BASE_MODEL_URI is used
-            '''
-            if not uri:
-                #relative URLs in RDF will be based on this uri
-                uri = self.BASE_MODEL_URI
-            
-            revNsMap = dict(map(lambda x: (x[1], x[0]), self.nsMap.items()) )    
-            srcDom = RxPath.RxPathDOMFromStatements(
-                    RxPath.parseRDFFromString(contents,uri,type), revNsMap, uri)
-            
-            storeDom = self.domStore.dom
-            if (storeDom.graphManager
-                and storeDom.graphManager.currentTxn.specificContexts[-1]):
-                #compare against the current ContextDoc
-                storeDom = storeDom.graphManager.currentTxn.specificContexts[-1]
-
-            if resources is None:
-                #no resources specified -- just add all the statements
-                newStatements, removedNodes = RxPath.addDOM(
-                                    storeDom, srcDom)
-            else:
-                newStatements, removedNodes = RxPath.mergeDOM(
-                            storeDom, srcDom,resources)
-            return self.updateDom(newStatements, removedNodes)
-                    
+                                
     class HTTPRequestProcessor(RequestProcessor):
         '''
         Adds functionality for handling an HTTP request.
