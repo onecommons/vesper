@@ -275,22 +275,22 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         self.initThreadLocals(state=RaccoonTransactionState())
         super(RaccoonTransactionService, self).__init__(server.log.name)
 
-    def newResourceHook(self, node):
+    def newResourceHook(self, uri):
         '''
         This is intended to be set as the DOMStore's newResourceTrigger
         '''
         if self.isActive() and self.state.safeToJoin:
-            self.state.newResources.append(node)
-            self._runActions('before-new', {'_newResources' : [node]})
+            self.state.newResources.append(uri)
+            self._runActions('before-new', {'_newResources' : [uri]})
 
-    def addHook(self, node):
+    def addHook(self, stmt):
         '''
         This is intended to be set as the DOMStore's addTrigger
         '''
         if self.isActive() and self.state.safeToJoin:            
-            self.state.additions.append(node)
-            isnew = node.parentNode in self.state.newResources
-            kw = {'_added' : [node], '_isnew' : isnew,
+            self.state.additions.append(stmt)
+            isnew = stmt.SUBJECT in self.state.newResources
+            kw = {'_added' : [stmt], '_isnew' : isnew,
                   '_newResources': self.state.newResources}
             self._runActions('before-add', kw)
 
@@ -298,15 +298,17 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         '''
         This is intended to be set as the DOMStore's removeTrigger
         '''
-        from rx import RxPathDom
         if self.isActive() and self.state.safeToJoin:
-            state = self.state
-            if isinstance(node, RxPathDom.Resource):
-                state.removals.extend(node.childNodes)
-                isnew = node in state.newResources                
+            from rx import RxPath
+            state = self.state            
+            if not isinstance(node, RxPath.BaseStatement):
+                #assume it's a resource being removed and node is a list of all its statements
+                assert len(set([s.SUBJECT for s in node])) == 1, 'all subjects should be the same'
+                state.removals.extend(node)
+                isnew = node[0].SUBJECT in state.newResources                
             else:
                 state.removals.append(node)
-                isnew = node.parentNode in state.newResources
+                isnew = node.SUBJECT in state.newResources
             kw = {'_removed' : [node], '_isnew' : isnew,
                   '_newResources': state.newResources}
             self._runActions('before-remove', kw)

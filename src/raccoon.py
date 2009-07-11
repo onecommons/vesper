@@ -385,7 +385,7 @@ the Action is run (default is False).
                 self.LockFile = glock.NullLockFile #the default
 
             self.txnSvc = transactions.RaccoonTransactionService(self)
-            domStoreFactory = kw.get('domStoreFactory', DomStore.RxPathDomStore)
+            domStoreFactory = kw.get('domStoreFactory', DomStore.BasicDomStore)
             self.domStore = domStoreFactory(**kw)                        
             self.domStore.addTrigger = self.txnSvc.addHook
             self.domStore.removeTrigger = self.txnSvc.removeHook
