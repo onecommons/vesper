@@ -124,16 +124,20 @@ else:
         different actions.
         '''        
         actionid = id(action) #do this to avoid memory leaks
-        return lambda resultNodeset, kw, contextNode, retVal: (
-          actionid, cacheKeyPredicate(resultNodeset, kw, contextNode, retVal))
+        return lambda kw, retVal: (actionid, cacheKeyPredicate(kw, retVal))
         
     def notCacheableKeyPredicate(*args, **kw):
         raise MRUCache.NotCacheable
 
-    class ActionQuery(object):
-        def evaluate(self, requestProcessor, kw, contextNode):
-            return RxPath.XTrue
-        
+    def defaultActionValueCacheableCalc(hkey, value, kw, retResult):
+        if value is retResult:
+            #when the result hasn't changed, store NotModified in the cache
+            #instead of the result. This way the retVal won't need to be part 
+            #of the cache key
+            return Action.NotModified
+        else:
+            return value
+          
     class Action(object):
         '''
 The Action class encapsulates a step in the request processing pipeline.
@@ -142,111 +146,56 @@ An Action has two parts, one or more match expressions and an action
 function that is invoked if the request metadata matches one of the
 match expressions. The action function returns a value which is passed
 onto the next Action in the sequence.
-        '''
+        '''    
+        NotModified = ('notmodified',)
                 
-        def __init__(self, queries=None, action=None, matchFirst=True,
-                forEachNode = False, depthFirst=True, requiresContext=False,
+        def __init__(self, action,
                 cachePredicate=notCacheableKeyPredicate,
                 sideEffectsPredicate=None, sideEffectsFunc=None,
-                isValueCacheableCalc=None,
+                isValueCacheableCalc=defaultActionValueCacheableCalc,
                 cachePredicateFactory=defaultActionCacheKeyPredicateFactory,
-                canReceiveStreams=False, debug=False):
-            '''Queries is a list of RxPath expressions associated with this action
+                debug=False):
+            '''
 action must be a function with this signature:    
-def action(matchResult, kw, contextNode, retVal) where:
-    result is the result of the action's matching RxPath query 
+def action(kw, retVal) where:
     kw is the dictionary of metadata associated with the request
-    contentNode is the context node used when the RxPath expressions were evaluated
     retVal was the return value of the last action invoked in the in action sequence or None
-
-If action is None this action will set the context node to the first node
-in the nodeset returned by the matching expression
-
-If matchFirst is True (the default) the requesthandler will stop after
-the first matching query. Otherwise all the match expression be
-evaluated and the action function call after each match.
-
-If forEachNode is True then the action function will be called for
-each node in a matching expression's result nodeset. The action
-function's result parameter will be a nodeset contain only that
-current node.
 '''        
-            if queries is None:
-                queries = [ActionQuery()]            
-            assert [q for q in queries if isinstance(q, ActionQuery)]
-            self.queries = queries
             self.action = action
-            self.matchFirst = matchFirst 
-            self.forEachNode = forEachNode
-            self.requiresContext = requiresContext
-            self.depthFirst = depthFirst
-            self.preVars = []
-            self.postVars = []            
-            # self.requiresRetVal = requiresRetVal not yet implemented
             self.cacheKeyPredicate = cachePredicateFactory(self, cachePredicate)
             self.cachePredicateFactory = cachePredicateFactory
             self.sideEffectsPredicate = sideEffectsPredicate
             self.sideEffectsFunc = sideEffectsFunc
             self.isValueCacheableCalc = isValueCacheableCalc
-            self.canReceiveStreams = canReceiveStreams
             self.debug = debug
 
-        def __deepcopy__(self, memo):
-            '''deepcopy() fails when trying to copy function pointers,
-            so just deepcopy what we need here.'''
-            #todo deal with cacheKeyPredicate and cachePredicateFactory
-            import copy
-            dup = copy.copy(self)
-            dup.queries = copy.copy( self.queries )
-            dup.preVars = copy.copy( self.preVars )
-            dup.postVars = copy.copy( self.postVars )
-            return dup
-            
-        def assign(self, varName, *exps, **kw):
-            '''
-Add a variable and expression list. Before the Action is run each
-expression evaluated, the first one that returns a non-empty value is
-assigned to the variable. Otherwise, the result of last expression is
-assigned (so you can choose between '', [], and 0). If the
-'assignEmpty' keyword argument is set to False the variable will only
-be assigned if the result is non-zero (default is True). If the 'post'
-keyword argument is set to True the variable will be assigned after
-the Action is run (default is False).
-            '''
-            assert len(exps), 'Action.assign requires at least one expression'
-            assignWhenEmpty = kw.get('assignEmpty', True)            
+        def __call__(self, kw, retVal):
+            return self.action(kw, retVal)
 
-            if kw.get('post'):
-                varlist=self.postVars
+    class Result(object):
+        def __init__(self, retVal):
+            self.value = retVal
+        
+        @property
+        def asBytes(self):
+            value = self.value
+            if isinstance(value, unicode):
+                return value.decode('utf8')
+            elif hasattr(value, 'read'):
+                self.value = value.read()
+            return str(self.value)
+        
+        @property
+        def asUnicode(self):
+            if hasattr(self.value, 'read'):
+                self.value = value.read()
+            if isinstance(self.value, str):
+                return self.value.encode('utf8')
+            elif isinstance(self.value, unicode):
+                return self.value
             else:
-                varlist=self.preVars
-            for i in xrange(len(varlist)):
-                if varName == varlist[i][0]:#replace if names match
-                    varlist[i] = (varName,  exps, assignWhenEmpty)
-                    break
-            else:
-                varlist.append( (varName,  exps, assignWhenEmpty) )                    
-    
-    class SimpleAction(Action, ActionQuery):
-        '''
-        Override match and go
-        '''
-
-        def __init__(self):
-            Action.__init__(self, [self], self.runAction)
-            
-        def match(self, kw):
-            return True
-            
-        def go(self, kw):
-            return None
-    
-        def evaluate(self, requestProcessor, kw, contextNode):
-            return self.match(kw)# and RxPath.XTrue or RxPath.XFalse
-            
-        def runAction(self, result, kw, contextNode, retVal):
-            return self.go(kw)    
-                                                                     
+                return unicode(self.value)
+                                                            
     def assignVars(self, kw, varlist, default):
         '''
         Helper function for assigning variables from the config file.
@@ -394,10 +343,8 @@ the Action is run (default is False).
             self.defaultPageName = kw.get('defaultPageName', 'index')
             #cache settings:                
             initConstants( ['LIVE_ENVIRONMENT', 'useEtags'], 1)
-            self.defaultExpiresIn = kw.get('defaultExpiresIn', 3600)
-            initConstants( ['XPATH_CACHE_SIZE','ACTION_CACHE_SIZE'], 1000)
-            initConstants( ['XPATH_PARSER_CACHE_SIZE',
-                            'STYLESHEET_CACHE_SIZE'], 200)
+            self.defaultExpiresIn = kw.get('defaultExpiresIn', 0)
+            initConstants( ['ACTION_CACHE_SIZE'], 1000)
             #disable by default(default cache size used to be 10000000 (~10mb))
             initConstants( ['maxCacheableStream','FILE_CACHE_SIZE'], 0)
                         
@@ -444,12 +391,6 @@ the Action is run (default is False).
                 
             lock = self.getLock()
             try:
-                #self.queryCache = MRUCache.MRUCache(self.XPATH_CACHE_SIZE,
-                #        lambda compExpr, context: compExpr.evaluate(context),
-                #        lambda compExpr, context: getKeyFromXPathExp(compExpr,
-                #                        context, self.NOT_CACHEABLE_FUNCTIONS),
-                #        processXPathExpSideEffects, calcXPathSideEffects)
-                #self.queryCache.debug = self.log.info
                 self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
                                                      digestKey=True)
                 
@@ -477,111 +418,38 @@ the Action is run (default is False).
                 errorSequence = self.actions.get(triggerName+'-error')
                 return self.doActions(sequence, kw, retVal=initVal,
                     errorSequence=errorSequence, newTransaction=newTransaction)
-                            
-        STOP_VALUE = u'2334555393434302' #hack
-        
-        def __assign(self, actionvars, kw, contextNode, debug=False):
-            #context = XPath.Context.Context(None, processorNss = self.nsMap)
-            for name, exps, assignEmpty in actionvars:
-                assert False, 'TODO!' #XXX
-                vars, extFunMap = self.mapToXPathVars(kw)            
-                for exp in exps:
-                    result = self.evalXPath(exp, vars=vars,
-                                extFunctionMap=extFunMap, node=contextNode)                    
-                    if result:
-                        break
-                if debug:
-                    print name, exp; print result
-                if assignEmpty or result:
-                    AssignMetaData(kw, context, name, result, authorize=False)
-                    #print name, result, contextNode
-
-        def _doActionsBare(self, sequence, kw, contextNode, retVal):
-            result = None
+                                    
+        def _doActionsBare(self, sequence, kw, retVal):
             try:
-                for action in sequence:            
-                    if action.requiresContext:
-                        #if the next action requires a contextnode
-                        #and there isn't one, end the sequence
-                        if not contextNode: 
-                            return retVal
-
-                    self.__assign(action.preVars, kw, contextNode, action.debug)
-                                        
-                    for xpath in action.queries:
-                        result = xpath.evaluate(self, kw, contextNode)
-                        if result is self.STOP_VALUE:#for $STOP
-                            break
-                        if result: #todo: if result != []:
-                            #if not equal empty nodeset (empty strings ok)
-                            
-                            #if no action function is defined
-                            #the action resets the contextNode instead
-                            if not action.action: 
-                                if type(result) == list:
-                                    #only set context if result is a nonempty nodeset
-                                    contextNode = result[0]
-                                    kw['__context'] = [ contextNode ]
-                                    self.log.debug('context changed: %s',result)
-                                    #why would you want to evaluate
-                                    #every query in this case?
-                                    assert action.matchFirst 
-                                break
-                            else:
-                                if (not action.canReceiveStreams
-                                        and hasattr(retVal, 'read')):
-                                    retVal = retVal.read()
-                                if action.forEachNode:
-                                    assert type(result) == list, (
-                                        'result must be a nodeset')
-                                    if action.depthFirst:
-                                        #we probably want the reverse of
-                                        #document order
-                                        #(e.g. the deepest first)
-                                        #copy the list since it might have
-                                        #been cached
-                                        result = result[:] 
-                                        result.reverse()
-                                    for node in result:
-                                        if kw.get('_metadatachanges'):
-                                            del kw['_metadatachanges']
-                                        retVal = self.actionCache.getOrCalcValue(
-                action.action, [node], kw, contextNode, retVal,
-                hashCalc=action.cacheKeyPredicate,
-                sideEffectsCalc=action.sideEffectsPredicate,
-                sideEffectsFunc=action.sideEffectsFunc,
-                isValueCacheableCalc=action.isValueCacheableCalc)
-                                else:
-                                    if kw.get('_metadatachanges'):
-                                        del kw['_metadatachanges']
-                                        
-                                    retVal = self.actionCache.getOrCalcValue(
-                action.action, result, kw, contextNode, retVal,
-                hashCalc=action.cacheKeyPredicate,
-                sideEffectsCalc=action.sideEffectsPredicate,
-                sideEffectsFunc=action.sideEffectsFunc,
-                isValueCacheableCalc=action.isValueCacheableCalc)
-                            if action.matchFirst:
-                                break
-
-                    self.__assign(action.postVars,kw,contextNode,action.debug)
+                for action in sequence:
+                    retResult = Result(retVal)                   
+                    #try to retrieve action result from cache
+                    #when an action is not cachable (the default)
+                    #just calls the action 
+                    newRetVal = self.actionCache.getOrCalcValue(
+                        action, kw, retResult,
+                        hashCalc=action.cacheKeyPredicate,
+                        sideEffectsCalc=action.sideEffectsPredicate,
+                        sideEffectsFunc=action.sideEffectsFunc,
+                        isValueCacheableCalc=action.isValueCacheableCalc)
+                    
+                    if (newRetVal is not retResult 
+                            and newRetVal is not Action.NotModified):
+                        retVal = newRetVal
             except:
                 exc = ActionWrapperException()
-                exc.state = (result, contextNode, retVal)
+                exc.state = retVal
                 raise exc
-            return result, contextNode, retVal
+            return retVal
 
-        def _doActionsTxn(self, sequence, kw, contextNode, retVal):            
+        def _doActionsTxn(self, sequence, kw, retVal):            
             self.txnSvc.begin()
             self.txnSvc.state.kw = kw
             txnCtxtResult = self.domStore.getTransactionContext()
             self.txnSvc.state.kw['__current-transaction'] = txnCtxtResult or []
-
-            self.txnSvc.state.contextNode = contextNode
             self.txnSvc.state.retVal = retVal
             try:
-                result, contextNode, retVal = self._doActionsBare(
-                                 sequence, kw, contextNode, retVal)
+                retVal = self._doActionsBare(sequence, kw, retVal)
             except:
                 if self.txnSvc.isActive(): #else its already been aborted
                     self.txnSvc.abort()
@@ -589,9 +457,6 @@ the Action is run (default is False).
             else:
                 if self.txnSvc.isActive(): #could have already been aborted                    
                     self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-
-                    self.txnSvc.state.result = result
-                    self.txnSvc.state.contextNode = contextNode
                     self.txnSvc.state.retVal = retVal
                     if self.txnSvc.isDirty(): 
                         if kw.get('__readOnly'):
@@ -604,35 +469,28 @@ the Action is run (default is False).
                         self.txnSvc.abort()    #need this to clean up the transaction
             return retVal
                 
-        def doActions(self, sequence, kw=None, contextNode=None,retVal=None,
+        def doActions(self, sequence, kw=None, retVal=None,
                       errorSequence=None, newTransaction=False):
             if kw is None: kw = {}
-            result = None
-            #todo: reexamine this logic
-            if isinstance(contextNode, type([])) and contextNode:
-                contextNode = contextNode[0]        
 
             kw['__requestor__'] = self.requestDispatcher
             kw['__server__'] = self
-            kw['__context'] = [ contextNode ]  
 
             try:
                 if newTransaction:
-                    retVal = self._doActionsTxn(sequence, kw,
-                                                contextNode, retVal)
-                else:                    
+                    retVal = self._doActionsTxn(sequence, kw, retVal)
+                else:
                     if '__current-transaction' not in kw:
                         txnCtxtResult = self.domStore.getTransactionContext()
                         kw['__current-transaction'] = txnCtxtResult or []
-                    result, contextNode, retVal = self._doActionsBare(
-                                    sequence, kw, contextNode, retVal)
+                    retVal = self._doActionsBare(sequence, kw, retVal)
             except (KeyboardInterrupt, SystemExit):
                 raise
             except:
                 #print newTransaction, self.txnSvc.state.timestamp
                 exc_info = sys.exc_info()
                 if isinstance(exc_info[1], ActionWrapperException):
-                    result, contextNode, retVal = exc_info[1].state
+                    retVal = exc_info[1].state
                     exc_info = exc_info[1].nested_exc_info
 
                 if self.inErrorHandler or kw.get('_noErrorHandling'):
@@ -678,11 +536,10 @@ the Action is run (default is False).
                         self.log.warning("invoking error handler on exception:\n"+
                                          kw['_errorInfo']['details'])
                         try:
-                            return self.callActions(errorSequence, result, kw,
-                                    contextNode, retVal, self.globalRequestVars,
+                            return self.callActions(errorSequence, kw, retVal,                                 
                             #if we're creating a new transaction,
                             #it has been aborted by now, so start a new one:
-                                                newTransaction=newTransaction)
+                                newTransaction=newTransaction)
                         finally:
                             del kw['_errorInfo']
                     else:
@@ -692,14 +549,13 @@ the Action is run (default is False).
                     self.inErrorHandler -= 1
             return retVal
 
-        def callActions(self, actions,resultNodeset, kw, contextNode, retVal,
-                    globalVars=None, errorSequence=None, newTransaction=False):
+        def callActions(self, actions, kw, retVal, errorSequence=None, globalVars=None, newTransaction=False):
             '''
             process another set of actions using the current context as input,
             but without modified the current context.
             Particularly useful for template processing.
             '''
-            globalVars = globalVars or []
+            globalVars = self.globalRequestVars + (globalVars or [])
 
             #merge previous prevkw, overriding vars as necessary
             prevkw = kw.get('_prevkw', {}).copy() 
@@ -721,16 +577,7 @@ the Action is run (default is False).
                 retVal = retVal.read()            
             templatekw['_contents'] = retVal
             
-            #nodeset containing current resource
-            templatekw['_previousContext']=contextNode and [contextNode] or []
-            templatekw['_originalContext']=kw.get('_originalContext',
-                                                templatekw['_previousContext'])
-            #use the resultNodeset as the contextNode for call action
-            if isinstance(resultNodeset, list): 
-                contextNode = resultNodeset
-            else:
-                contextNode = None
-            return self.doActions(actions, templatekw, contextNode,
+            return self.doActions(actions, templatekw,
                 errorSequence=errorSequence, newTransaction=newTransaction)             
                                 
     class HTTPRequestProcessor(RequestProcessor):
@@ -763,13 +610,14 @@ the Action is run (default is False).
         ]
 
         def __init__(self,*args, **kwargs):
+            #add missing mimetypes that IE cares about:
             mimetypes.types_map['.ico']='image/x-icon'
             mimetypes.types_map['.htc']='text/x-component' 
             
             super(HTTPRequestProcessor,self).__init__(*args, **kwargs)                
 
         def handleHTTPRequest(self, kw):
-                if self.requestsRecord is not None:
+            if self.requestsRecord is not None:
                 self.requestsRecord.append(kw)
             
             #if the request name has an extension try to set
@@ -795,15 +643,6 @@ the Action is run (default is False).
                 
                 result = self.runActions('http-request', kw)
                 if result is not None: 
-                    if (self.defaultExpiresIn and
-                        'expires' not in kw['_responseHeaders']):
-                        if self.defaultExpiresIn == -1:
-                            expires = '-1'
-                        else:                             
-                            expires = time.strftime("%a, %d %b %Y %H:%M:%S GMT",
-                                            time.gmtime(time.time() + self.defaultExpiresIn))
-                        kw['_responseHeaders']['expires'] = expires
-                    
                     #if mimetype is not set, make another attempt
                     if 'content-type' not in kw['_responseHeaders']:
                         contentType = self.guessMimeTypeFromContent(result)
@@ -813,8 +652,21 @@ the Action is run (default is False).
                     status = kw['_responseHeaders']['_status']
                     if isinstance(status, (float, int)):
                        msg = self.statusMessages.get(status, '')
-                       kw['_responseHeaders']['_status'] = '%d %s' % (status, msg)
+                       status  = '%d %s' % (status, msg)
+                       kw['_responseHeaders']['_status'] = status
                     
+                    if not status.startswith('200'):
+                        return result #don't set the following headers
+                                        
+                    if (self.defaultExpiresIn and
+                        'expires' not in kw['_responseHeaders']):
+                        if self.defaultExpiresIn == -1:
+                            expires = '-1'
+                        else:                             
+                            expires = time.strftime("%a, %d %b %Y %H:%M:%S GMT",
+                                            time.gmtime(time.time() + self.defaultExpiresIn))
+                        kw['_responseHeaders']['expires'] = expires
+                                        
                     #XXX this etag stuff should be an action
                     if self.useEtags:
                         resultHash = kw['_responseHeaders'].get('etag')
@@ -825,7 +677,7 @@ the Action is run (default is False).
                             kw['_responseHeaders']['etag'] = resultHash
                         etags = kw['_environ'].get('HTTP_IF_NONE_MATCH')
                         if etags and resultHash in [x.strip() for x in etags.split(',')]:
-                            kw['_status'] = "304 Not Modified"
+                            kw['_responseHeaders']['_status'] = "304 Not Modified"
                             return ''
 
                     return result

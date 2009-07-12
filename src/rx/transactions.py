@@ -259,9 +259,7 @@ class RaccoonTransactionState(TransactionState):
         self.additions = []
         self.removals = []
         self.newResources = []
-        self.result = []
         self.kw = {}
-        self.contextNode = None
         self.retVal = None
 
 class RaccoonTransactionService(TransactionService,utils.object_with_threadlocals):
@@ -324,9 +322,8 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                            '_newResources': state.newResources}
             kw.update(morekw)
             errorSequence= self.server.actions.get(trigger+'-error')
-            self.server.callActions(actions,state.result, kw,
-                    state.contextNode,  state.retVal,
-                    globalVars= self.server.globalRequestVars + morekw.keys(),
+            self.server.callActions(actions, kw, state.retVal,
+                    globalVars=morekw.keys(),
                     errorSequence=errorSequence)
 
     def join(self, participant):

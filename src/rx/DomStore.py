@@ -151,9 +151,6 @@ class BasicDomStore(DomStore):
         
         self.graphManager = graphManager
         self.model = model
-                
-        #associate the queryCache with the DOM Document
-        #self.dom.queryCache = requestProcessor.queryCache 
 
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    
@@ -179,8 +176,6 @@ class BasicDomStore(DomStore):
         #if isinstance(key, MRUCache.InvalidationKey):
         #    if txnService.server.actionCache:
         #        txnService.server.actionCache.invalidate(key)
-        #    if txnService.server.queryCache:
-        #       txnService.server.queryCache.invalidate(key)
 
     def getTransactionContext(self):
         if self.graphManager:

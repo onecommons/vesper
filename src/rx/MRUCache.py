@@ -12,7 +12,7 @@ from rx import utils
 import weakref, md5, repr as Repr
 
 _defexception = utils.DynaExceptionFactory(__name__)
-_defexception('not cacheable')
+_defexception('not cacheable') #define NotCacheable
 
 class UseNode(object):
     """For linked list kept in most-recent .. least-recent *use* order"""
@@ -181,10 +181,13 @@ class MRUCache:
             #note this check doesn't take into account the current
             #nodeSize so the cache can grow to just less than double the capacity
             
-            if isValueCacheableCalc and not isValueCacheableCalc(
-                                            hkey, value, *args, **kw):
-                if self.debug: self.debug('value is not cachable'+Repr.repr(value))
-                return value #value isn't cacheable
+            if isValueCacheableCalc:
+                newvalue = isValueCacheableCalc(hkey, value, *args, **kw)
+                if newvalue is NotCacheable:
+                    if self.debug: self.debug('value is not cachable'+Repr.repr(value))
+                    return value #value isn't cacheable
+                else:
+                    value = newvalue
                         
             if sideEffectsCalc:
                 sideEffects = sideEffectsCalc(value, *args, **kw)
