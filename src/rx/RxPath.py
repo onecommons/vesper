@@ -14,7 +14,7 @@ from __future__ import generators
 #from Ft.Lib.boolean import false as XFalse, true as XTrue, bool as Xbool
 #from Ft.Xml.XPath.Conversions import StringValue, NumberValue
 #from Ft.Xml import XPath, InputSource, SplitQName, EMPTY_NAMESPACE
-from rx.FtStub import * #todo? add StringValue, NumberValue, XPath, InputSource
+from rx.FtStub import * 
 
 from rx import utils
 from rx.RxPathUtils import *

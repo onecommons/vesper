@@ -3,8 +3,9 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-__all__ = ['glockTest', 'testmodpatching','raccoonTest', 'MRUCacheTest', 
- 'transactionsTest', 'utilsTest', 'RDFDomTest', ] #XXXX
+__all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
+ 'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
+  'sjsonTest', 'jqlTest'] #XXX these 2 aren't TestSuites
 
 import unittest
 class TestProgram(unittest.TestProgram):

@@ -6,7 +6,6 @@
     http://rx4rdf.sf.net    
 '''
 
-from __future__ import generators
 import re, types
 try:
     import cStringIO
@@ -450,10 +449,10 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
         elif uri[-4:] == '.rdf':
             type = 'rdfxml'
 
-    from Ft.Xml import InputSource #XXX
-    inputSource = InputSource.DefaultFactory.fromUri(uri)
-    contents = inputSource.stream.read()
-    inputSource.stream.close()
+    import urllib2
+    stream = urllib2.urlopen(uri)
+    contents = stream.read()
+    stream.close()
     return parseRDFFromString(contents, modelbaseuri, type, scope, incrementHook=incrementHook)
      
 def RxPathDOMFromStatements(statements, uri2prefixMap, uri=None,schemaClass=None):    

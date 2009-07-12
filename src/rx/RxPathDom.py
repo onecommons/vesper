@@ -1887,15 +1887,6 @@ class DocumentFragment(DomTree.DocumentFragment, Node):
         
 import traceback, sys, re
 
-def invokeRxSLT(modelPath, stylesheetPath):
-    #_4suiteModel, db = RxPath.deserializeRDF( RDFPath )
-    #model = RxPath.FtModel(_4suiteModel)
-    uri = RxPath.Uri.OsPathToUri(modelPath)
-    model = RxPath.MemModel(RxPath.parseRDFFromURI(uri))    
-    rxPathDom = RxPath.createDOM(model)
-    stylesheetContents = file(stylesheetPath).read()    
-    return RxPath.applyXslt(rxPathDom, stylesheetContents)
-
 def main(argv=sys.argv):
     modelPath = None
     try:
@@ -1954,8 +1945,8 @@ usage:
             #for n in res:
             #    Ft.Xml.Lib.Print.PrettyPrint(n)
 
-    
-    uri = RxPath.Uri.OsPathToUri(modelPath)
+    from rx import Uri
+    uri = Uri.OsPathToUri(modelPath)
     model = RxPath.MemModel(RxPath.parseRDFFromURI(uri))
         
     #model = RxPath.initRedlandHashBdbModel('test-bdb', file(modelPath))    

@@ -585,6 +585,7 @@ def _loadRDFFile(path, defaultStatements,context='', incrementHook=None):
     with the statements specified in defaultModel
     '''
     if os.path.exists(path):
+        from rx import Uri
         uri = Uri.OsPathToUri(path)
         stmts = parseRDFFromURI(uri, scope=context,incrementHook=incrementHook)
     else:
