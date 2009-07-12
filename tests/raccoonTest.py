@@ -33,8 +33,8 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless( '<html><body>not found!</body></html>' == result)
 
     def testErrorHandling(self):
-        root = raccoon.RequestProcessor(a='testErrorHandling-config.py',model_uri = 'test:')
-        result = root.runActions('test-error-request', dict(_name='foo'))
+        root = raccoon.HTTPRequestProcessor(a='testErrorHandling-config.py',model_uri = 'test:')
+        result = root.handleHTTPRequest(dict(_name='foo', _responseHeaders={}, _environ={}))
         
         response = "404 not found"
         self.failUnless(response == result)

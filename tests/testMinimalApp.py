@@ -9,6 +9,7 @@ class TestAction(SimpleAction):
         if query:
             return query[0]
         else:
+            kw['_status'] = 404
             return 'not found!'
             
     def runAction(self, result, kw, contextNode, retVal):

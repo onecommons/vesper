@@ -181,7 +181,7 @@ current node.
             self.requiresContext = requiresContext
             self.depthFirst = depthFirst
             self.preVars = []
-            self.postVars = []
+            self.postVars = []            
             # self.requiresRetVal = requiresRetVal not yet implemented
             self.cacheKeyPredicate = cachePredicateFactory(self, cachePredicate)
             self.cachePredicateFactory = cachePredicateFactory
@@ -272,18 +272,15 @@ the Action is run (default is False).
     class RequestProcessor(utils.object_with_threadlocals):                
         DEFAULT_CONFIG_PATH = ''#'raccoon-default-config.py'
         lock = None
-        #DefaultDisabledContentProcessors = []        
-                    
-        #expCache = MRUCache.MRUCache(0, XPath.Compile, sideEffectsFunc = 
-        #    lambda cacheValue,sideEffects,*args: setattr(cacheValue,'fromCache',True))    
                 
         requestsRecord = None
         log = log        
 
-        #keys found in the request metadata dictionary that
-        #can't be mapped to XPath variables
-        COMPLEX_REQUESTVARS = ['__requestor__', '__server__',
-                                '_prevkw', '__argv__', '_errorInfo']
+        defaultGlobalVars = ['_name', '_noErrorHandling',
+                '__current-transaction','__store', '_APP_BASE', '__readOnly'
+                '__requestor__', '__server__',
+                '_prevkw', '__argv__', '_errorInfo'                
+                ]
         
         def __init__(self,
                      #correspond to equivalentl command line args:
@@ -393,8 +390,7 @@ the Action is run (default is False).
             
             self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
             initConstants( ['globalRequestVars'], [])
-            self.globalRequestVars.extend( ['_name', '_noErrorHandling',
-                '__current-transaction','__store', '_APP_BASE', '__readOnly'] )
+            self.globalRequestVars.extend( self.defaultGlobalVars )
             self.defaultPageName = kw.get('defaultPageName', 'index')
             #cache settings:                
             initConstants( ['LIVE_ENVIRONMENT', 'useEtags'], 1)
@@ -681,10 +677,6 @@ the Action is run (default is False).
                         kw['_errorInfo'] = getErrorKWs()
                         self.log.warning("invoking error handler on exception:\n"+
                                          kw['_errorInfo']['details'])
-                        #todo: provide a protocol for mapping exceptions attributes to
-                        #XPath variables, e.g. line # for parsing errors
-                        #kw['errorInfo'].update(self.extractXPathVars(
-                        #                  kw['errorInfo']['value']) )
                         try:
                             return self.callActions(errorSequence, result, kw,
                                     contextNode, retVal, self.globalRequestVars,
@@ -707,15 +699,11 @@ the Action is run (default is False).
             but without modified the current context.
             Particularly useful for template processing.
             '''
+            globalVars = globalVars or []
+
             #merge previous prevkw, overriding vars as necessary
             prevkw = kw.get('_prevkw', {}).copy() 
             templatekw = {}
-            
-            globalVars = globalVars or []
-            #globalVars are variables that should be present throughout the
-            #whole request so copy them into templatekw instead of _prevkw
-            globalVars = self.COMPLEX_REQUESTVARS + globalVars
-
             for k, v in kw.items():                
                 #initialize the templates variable map copying the
                 #core request kws and copy the r est (the application
@@ -729,7 +717,7 @@ the Action is run (default is False).
                     prevkw[k] = v
             templatekw['_prevkw'] = prevkw
             if hasattr(retVal, 'read'):
-                #todo: delay doing this until $_contents is required
+                #XXXX delay doing this until $_contents is required
                 retVal = retVal.read()            
             templatekw['_contents'] = retVal
             
@@ -750,118 +738,159 @@ the Action is run (default is False).
         Adds functionality for handling an HTTP request.
         '''                
 
-        def __init__(self,*args, **kwargs):
-            self.COMPLEX_REQUESTVARS += ['_request','_response', '_session']            
+        statusMessages = { 
+            200 : "OK",
+            206 : 'Partial Content',
+            301 : "Moved Permanently", 
+            302 : "Moved Temporarily",
+            304 : "Not Modified",
+            400 : 'Bad Request',
+            401 : 'Unauthorized',
+            403 : 'Forbidden',
+            404 : 'Not Found',
+            426 : 'Upgrade Required',
+            500 : 'Internal Server Error',
+            501 : 'Not Implemented',
+            503 : 'Service Unavailable',
+        }
+        
+        defaultGlobalVars = RequestProcessor.defaultGlobalVars + ['_environ',      
+                '_uri',
+                '_baseUri',
+                '_responseCookies',
+                '_requestCookies',
+                '_responseHeaders',
+        ]
 
+        def __init__(self,*args, **kwargs):
+            mimetypes.types_map['.ico']='image/x-icon'
+            mimetypes.types_map['.htc']='text/x-component' 
+            
             super(HTTPRequestProcessor,self).__init__(*args, **kwargs)                
 
-        def handleHTTPRequest(self, name, kw):
-            if self.requestsRecord is not None:
-                self.requestsRecord.append([ name, kw ])
-
-            request = kw['_request']
+        def handleHTTPRequest(self, kw):
+                if self.requestsRecord is not None:
+                self.requestsRecord.append(kw)
             
-            #cgi: REQUEST_METHOD [http[s]://] HTTP_HOST : SERVER_PORT REQUEST_URI ? QUERY_STRING            
-            #cherrypy:
-            #request.base = http[s]:// + request.headerMap['host'] + [:port]
-            #request.browserUrl = request.base + / + [request uri]
-            #request.path = [path w/no leading or trailing slash]
-            #name = urllib.unquote(request.path) or _usevdomain logic
-
-            request.browserBase = request.base + '/'
-            
-            #the operative part of the url
-            #(browserUrl = browserBase + browserPath + '?' + browserQuery)
-            path = request.browserUrl[len(request.browserBase):]
-            if path.find('?') > -1:
-                request.browserPath, request.browserQuery = path.split('?', 1)
-            else:
-                request.browserPath, request.browserQuery = path, ''
-
-            appBaseLength = len(self.appBase)
-            if appBaseLength > 1: #appBase always starts with /
-                name = name[appBaseLength:] 
-            if not name or name == '/':
-                name = self.defaultPageName
-            kw['_name'] = name
-            #import pprint; pprint.pprint(kw)
-
             #if the request name has an extension try to set
             #a default mimetype before executing the request
+            name = kw['_name']
             i=name.rfind('.')
             if i!=-1:
                 ext=name[i:]      
                 contentType=mimetypes.types_map.get(ext)
                 if contentType:
-                    kw['_response'].headerMap['content-type']=contentType
+                    kw['_responseHeaders']['content-type']=contentType
 
             try:                
                 rc = {}
                 #requestContext is used by all Requestor objects
                 #in the current thread 
-                rc['_session']=kw['_session']
-                rc['_request']=kw['_request']
+                #rc['_environ']=kw['_environ']
+                #rc['_responseHeaders'] = kw['_responseHeaders']
+                #rc['_session']=kw['_session']
                 self.requestContext.append(rc)
                 
                 self.validateExternalRequest(kw)
+                
                 result = self.runActions('http-request', kw)
-                if result is not None: #'cause '' is OK
-                    if hasattr(result, 'read'):
-                        #we don't yet support streams
-                        result = result.read()
-                    else:
-                        #an http request must return a string
-                        #(not unicode, for example)
-                        result = str(result) 
-
+                if result is not None: 
                     if (self.defaultExpiresIn and
-                        'expires' not in kw['_response'].headerMap):
+                        'expires' not in kw['_responseHeaders']):
                         if self.defaultExpiresIn == -1:
                             expires = '-1'
                         else:                             
                             expires = time.strftime("%a, %d %b %Y %H:%M:%S GMT",
                                             time.gmtime(time.time() + self.defaultExpiresIn))
-                        kw['_response'].headerMap['expires'] = expires
+                        kw['_responseHeaders']['expires'] = expires
                     
                     #if mimetype is not set, make another attempt
-                    if not kw['_response'].headerMap.get('content-type'):
+                    if 'content-type' not in kw['_responseHeaders']:
                         contentType = self.guessMimeTypeFromContent(result)
                         if contentType:
-                            kw['_response'].headerMap['content-type']=contentType
-                    #todo:
-                    #if isinstance(kw['_response'].headerMap.get('status'), (float, int)):
-                    #    kw['_response'].headerMap['status'] = self.stdStatusMessages[
-                    #                              kw['_response'].headerMap['status']]
+                            kw['_responseHeaders']['content-type']=contentType
+
+                    status = kw['_responseHeaders']['_status']
+                    if isinstance(status, (float, int)):
+                       msg = self.statusMessages.get(status, '')
+                       kw['_responseHeaders']['_status'] = '%d %s' % (status, msg)
+                    
+                    #XXX this etag stuff should be an action
                     if self.useEtags:
-                        resultHash = kw['_response'].headerMap.get('etag')
+                        resultHash = kw['_responseHeaders'].get('etag')
                         #if the app already set the etag use that value instead
-                        if resultHash is None:
+                        if resultHash is None and isinstance(result, str):
                             import md5                                
                             resultHash = '"' + md5.new(result).hexdigest() + '"'
-                            kw['_response'].headerMap['etag'] = resultHash
-                        etags = kw['_request'].headerMap.get('if-none-match')
+                            kw['_responseHeaders']['etag'] = resultHash
+                        etags = kw['_environ'].get('HTTP_IF_NONE_MATCH')
                         if etags and resultHash in [x.strip() for x in etags.split(',')]:
-                            kw['_response'].headerMap['status'] = "304 Not Modified"
+                            kw['_status'] = "304 Not Modified"
                             return ''
 
-                    #todo: we don't support if-modified-since header but we set this so
-                    #pages can check if they've load from the browser cache
-                    #or not using document.lastModified javascript
-                    #if self.setLastModified:
-                    #   kw['_response'].headerMap['last-modified'] = time.strftime(
-                    #        "%a, %d %b %Y %H:%M:%S GMT", time.gmtime(time.time()))
                     return result
             finally:
                 self.requestContext.pop()
                     
             return self.default_not_found(kw)
 
+        def wsgi_app(self, environ, start_response):
+            """
+            Converts an HTTP request into these kws:
+            
+            _environ
+            _params
+            _uri
+            _baseUri
+            _name        
+            _responseheaders
+            _responsecookies
+            _requestcookies
+            """
+            import Cookie, wsgiref.util
+            _name = environ['PATH_INFO'].strip('/')        
+            if not _name:
+                _name = self.defaultPageName
+            
+            _responseCookies = Cookie.SimpleCookie()
+            _responseHeaders = dict(_status="200 OK") #include response code pseudo-header  
+            kw = dict(_environ=environ,      
+                _uri = wsgiref.util.request_uri(environ),
+                _baseUri = wsgiref.util.application_uri(environ),
+                _responseCookies = _responseCookies,
+                _requestCookies = Cookie.SimpleCookie(environ.get('HTTP_COOKIE', '')),
+                _responseHeaders= _responseHeaders,
+                _name=_name,
+            )
+            paramsdict = get_http_params(environ)
+            kw.update(paramsdict)        
+            response = self.handleHTTPRequest(kw) 
+            
+            status = _responseHeaders.pop('_status')
+            headerlist = _responseHeaders.items()
+            if len(_responseCookies):
+                headerlist += [('Set-Cookie', m.OutputString() ) 
+                                for m in _responseCookies.values()]             
+                
+            start_response(status, headerlist)
+            if hasattr(response, 'read'): #its a file not a string
+                block_size = 8192
+                if 'wsgi.file_wrapper' in environ:
+                    return environ['wsgi.file_wrapper'](filelike, block_size)
+                else:
+                    return iter(lambda: filelike.read(block_size), '')
+            else:        
+                return [response]
+
         def guessMimeTypeFromContent(self, result):
             #obviously this could be improved,
             #e.g. detect encoding in xml header or html meta tag
             #or handle the BOM mark in front of the <?xml 
             #detect binary vs. text, etc.
-            test = result[:30].strip().lower()
+            if isinstance(result, (str, unicode)):                
+                test = result[:30].strip().lower()
+            else:
+                test = ''
             if test.startswith("<html") or result.startswith("<!doctype html"):
                 return "text/html"
             elif test.startswith("<?xml") or test[2:].startswith("<?xml"): 
@@ -872,8 +901,8 @@ the Action is run (default is False).
                 return None
 
         def default_not_found(self, kw):            
-            kw['_response'].headerMap["content-type"]="text/html"
-            kw['_response'].headerMap['status'] = "404 Not Found"
+            kw['_responseHeaders']["content-type"]="text/html"
+            kw['_responseHeaders']['_status'] = "404 Not Found"
             return '''<html><head><title>Error 404</title>
 <meta name="robots" content="noindex" />
 </head><body>
@@ -884,12 +913,75 @@ Please check the URL to ensure that the path is correct.</p>
 <p>Please contact the server's administrator if this problem persists.</p>
 </body></html>'''
 
-        def saveRequestHistory(self):
+        def saveRequestHistory(self): 
             if self.requestsRecord:
                 requestRecordFile = file(self.requestRecordPath, 'wb')
                 pickle.dump(self.requestsRecord, requestRecordFile)
                 requestRecordFile.close()       
 
+    class UploadFile(object):
+
+        def __init__(field):
+            self._field = field
+            
+        filename = property(lambda self: self._field.filename)
+        file = property(lambda self: self._field.file)
+        contents = property(lambda self: self._field.value)
+        
+    def get_http_params(environ):        
+        '''build _params (and maybe _postContent)'''
+        import cgi
+        
+        _params = {}
+        _postContent = None
+        getparams = {}
+        postparams = {}
+        
+        if environ.get('QUERY_STRING'):
+            forms = cgi.FieldStorage(environ=environ, keep_blank_values=1)
+            for key in forms.keys():
+                valueList = forms[key]
+                if isinstance(valueList, list):# Check if it's a list or not
+                    getparams[key]= [item.value for item in valueList]
+                else:
+                    getparams[key] = valueList.value
+     
+        if environ['REQUEST_METHOD'] == 'POST':
+            _forms = cgi.FieldStorage(fp=environ.get('wsgi.input'), 
+                                    environ=environ, keep_blank_values=1)
+            if _forms.list is None:
+                assert _forms.file is not None
+                _postContent = _forms.file.read() 
+            else:      
+                for key in forms.keys():
+                    valueList = forms[key]
+                    if isinstance(valueList, list):# Check if it's a list or not
+                        postparams[key]= [item.value for item in valueList]
+                    else:                
+                        # In case it's a file being uploaded, we save the filename in a map (user might need it)
+                        if not valueList.filename:
+                            postparams[_key] = valueList.value
+                        else:
+                            postparams[_key] = UploadFile(valueList)
+
+        if getparams and postparams:
+            #merge the dicts together
+            for k,v in getparams.items():
+                if k in postparams:
+                    if not isinstance(v, list):
+                        v = [v]    
+                    pv = postparams[k]     
+                    if isinstance(pv, list):
+                        v.extend(pv)
+                    else:
+                        v.append(pv)
+                postparams[k] = v
+            _params = postparams
+        else:
+            _params = getparams or postparams
+        
+        return dict(_params=_params, _postContent=_postContent)
+    
     #################################################
     ##command line handling
     #################################################
@@ -952,10 +1044,7 @@ Please check the URL to ensure that the path is correct.</p>
                         raise ValueError
                 except (IndexError, ValueError):
                     logConfig = 'log.config'        
-                if sys.version_info < (2, 3):
-                    import logging22.config as log_config
-                else:
-                    import logging.config as log_config
+                import logging.config as log_config
                 if not os.path.exists(logConfig):
                     raise CmdArgError("%s not found" % logConfig)
                 log_config.fileConfig(logConfig)
@@ -999,23 +1088,27 @@ Please check the URL to ensure that the path is correct.</p>
                 rpr.maxdict = 20 
                 rpr.maxlevel = 2
                 for i, request in enumerate(requests):
-                    verb = getattr( request[1].get('_request'),'method', 'request')
-                    login = request[1].get('_session',{}).get('login','')
-                    print>>out, i, verb, request[0], 'login:', login
+                    verb = request['_environ']['REQUEST_METHOD']
+                    login = request.get('_session',{}).get('login','')
+                    print>>out, i, verb, request['_name'], 'login:', login
                     #print form variables
-                    print>>out, rpr.repr(dict([(k, v) for k, v in request[1].items()
+                    print>>out, rpr.repr(dict([(k, v) for k, v in request.items()
                                         if isinstance(v, (unicode, str, list))]))
 
-                    root.handleHTTPRequest(request[0], request[1])
+                    root.handleHTTPRequest(request)
             elif '-x' not in mainArgs:
                 #if -x (execute cmdline and exit) we're done
-                sys.argv = mainArgs #hack for Server
-                from rx import Server
                 if '-r' in mainArgs:
                     root.requestsRecord = []                    
                     root.requestRecordPath = 'debug-wiki.pkl' 
                 #print 'starting server!'
-                Server.start_server(root) #kicks off the whole process
+                from wsgiref.simple_server import make_server
+                httpd = make_server('', 8000, root.wsgi_app) #XXX configurable port 
+                print>>out, "Serving HTTP on port 8000..."
+                try:
+                    httpd.serve_forever()                
+                finally:
+                    root.saveRequestHistory()
                 #print 'dying!'
         except (CmdArgError), e:
             print>>out, e
@@ -1026,5 +1119,3 @@ Please check the URL to ensure that the path is correct.</p>
             print>>out, 'usage:'
             print>>out, cmd_line
             print>>out, cmd_usage
-
-            
