@@ -14,7 +14,8 @@ def RDFDoc(model, nsMap):
     from rx import RxPathGraph
     graphManager = RxPathGraph.NamedGraphManager(model, None,None)
     graphManager.createCtxResource = False
-    return createDOM(model, nsMap, graphManager=graphManager)
+    return createDOM(model, nsMap, schemaClass=RDFSSchema, 
+                                    graphManager=graphManager)
 
 import difflib, time
 from rx.RxPathUtils import _parseTriples as parseTriples

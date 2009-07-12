@@ -86,7 +86,7 @@ class BasicDomStore(DomStore):
         '''
         self.modelFactory = modelFactory
         self.versionModelFactory = versionModelFactory or modelFactory
-        self.schemaFactory = schemaFactory
+        self.schemaFactory = schemaFactory 
         self.APPLICATION_MODEL = APPLICATION_MODEL        
         self.STORAGE_PATH = STORAGE_PATH        
         self.VERSION_STORAGE_PATH = VERSION_STORAGE_PATH
@@ -151,6 +151,13 @@ class BasicDomStore(DomStore):
         
         self.graphManager = graphManager
         self.model = model
+
+        self.schema = self.schemaFactory(model)
+        #XXX need for graphManager?:
+        #self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
+        if isinstance(self.schema, RxPath.Model):
+            self.model = self.schema
+        
 
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    

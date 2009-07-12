@@ -137,6 +137,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         autocommit = model.autocommit
         self.autocommit = True #disable _beginTxn() during init
         self.addToSchema(self.rdfsSchema)    
+        #XXX completely unscalable!:
         self.addToSchema( model.getStatements() )
         self.autocommit = autocommit
 
@@ -575,4 +576,4 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         self.model.removeStatement(stmt)
         self.entailments.removeStatement(stmt)
 
-defaultSchemaClass = RDFSSchema        
+defaultSchemaClass = BaseSchema #RDFSSchema
