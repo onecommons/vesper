@@ -187,7 +187,7 @@ class RDFDomTestCase(unittest.TestCase):
             writeTriples( [Statement(BNODE_BASE+'foobar', 'http://foo', 
                 'http://foo bar',OBJECT_TYPE_RESOURCE)], out) )
 
-    def testSerializeJson(self):
+    def testSerialize(self):
         model = r'''<urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#Contents> .
 <urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#sha1-digest> "ndKxl8RGTmr3u/omnJxVdGnWgXuA=" .
 <urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#hasContent> " llll"@en-US .
@@ -197,13 +197,22 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
 '''
         model = self.loadModel(cStringIO.StringIO(model), 'nt')
         stmts = model.getStatements()
-        json = serializeRDF(stmts, 'json')
-        newstmts = parseRDFFromString(json,'', 'json')
-        stmts.sort()
-        newstmts.sort()
-        #print stmts
-        #print newstmts
-        self.failUnless(stmts == newstmts)
+        for stype in ['ntriples', 'json', 'ntjson', 'sjson']:
+            #print 'stype', stype
+            json = serializeRDF(stmts, stype)
+            #print 'json'
+            #print json
+            if stype == 'sjson':
+                options = dict(addOrderInfo=False)
+            else:
+                options = {}
+            newstmts = list(parseRDFFromString(json,'', stype, options=options))
+            stmts.sort()
+            newstmts.sort()
+            #print stmts
+            #print 'newstmts'            
+            #print newstmts
+            self.failUnless(stmts == newstmts)
         
     def testDiff(self):
         self.rdfDom = self.getModel("about.rx.nt")

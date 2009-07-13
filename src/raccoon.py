@@ -226,7 +226,7 @@ def action(kw, retVal) where:
         log = log        
 
         defaultGlobalVars = ['_name', '_noErrorHandling',
-                '__current-transaction','__store', '_APP_BASE', '__readOnly'
+                '__current-transaction', '__readOnly'
                 '__requestor__', '__server__',
                 '_prevkw', '__argv__', '_errorInfo'                
                 ]

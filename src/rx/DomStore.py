@@ -62,7 +62,7 @@ class DomStore(transactions.TransactionParticipant):
             self.log.warning('no model path given and STORAGE_PATH'
                              ' is not set -- model is read-only.')            
         elif not os.path.isabs(source):
-            #todo its possible for source to not be file path
+            #XXX its possible for source to not be file path
             #     -- this will break that
             source = os.path.join( requestProcessor.baseDir, source)
         return source
@@ -75,7 +75,7 @@ class BasicDomStore(DomStore):
                  STORAGE_TEMPLATE='',
                  APPLICATION_MODEL='',
                  transactionLog = '',
-                 saveHistory = True,
+                 saveHistory = False,
                  VERSION_STORAGE_PATH='',
                  versionModelFactory=None, **kw):
         '''
@@ -90,25 +90,75 @@ class BasicDomStore(DomStore):
         self.APPLICATION_MODEL = APPLICATION_MODEL        
         self.STORAGE_PATH = STORAGE_PATH        
         self.VERSION_STORAGE_PATH = VERSION_STORAGE_PATH
-        self.defaultTripleStream = StringIO.StringIO(STORAGE_TEMPLATE)
+        self.STORAGE_TEMPLATE = STORAGE_TEMPLATE
         self.transactionLog = transactionLog
-        self.saveHistory = False #saveHistory
+        self.saveHistory = saveHistory
             
     def loadDom(self, requestProcessor):        
         self.log = logging.getLogger("domstore." + requestProcessor.appName)
 
         normalizeSource = getattr(self.modelFactory, 'normalizeSource',
-                                  DomStore._normalizeSource)
-        source = normalizeSource(self, requestProcessor,self.STORAGE_PATH)
+                                                DomStore._normalizeSource)
+        #source is the data source for the store, usually a file path
+        source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
+        
+        model, defaultStmts, historyModel, lastScope = self.setupHistory(
+                                                    requestProcessor, source)
+        if not model:
+            #setupHistory didn't initialize the store, so do it now
+            #modelFactory will load the store specified by `source` or create
+            #new one at that location and initializing it with `defaultStmts`
+            model = self.modelFactory(source=source, 
+                                            defaultStatements=defaultStmts)
+
+        #if there's application data (data tied to the current revision
+        #of your app's implementation) include that in the model
+        if self.APPLICATION_MODEL:
+            from rx.RxPathGraph import APPCTX #'context:application:'
+            stmtGen = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
+                requestProcessor.MODEL_RESOURCE_URI, scope=APPCTX) 
+                                        
+            appmodel = RxPath.MemModel(stmtGen)
+            #XXX MultiModel is not very scalable -- better would be to store 
+            #the application data in the model and update it if its difference 
+            #from what's stored (of course this requires a context-aware store)
+            model = RxPath.MultiModel(model, appmodel)
+        
+        #turn on update logging if a log file is specified, which can be used to 
+        #re-create the change history of the store
+        if self.transactionLog:
+            model = RxPath.MirrorModel(model, RxPath.IncrementalNTriplesFileModel(
+                self.transactionLog, []) )
+
+        self.model = model
 
         if self.saveHistory:
+            self.graphManager = RxPathGraph.NamedGraphManager(model, historyModel,lastScope)
+        else:
+            self.graphManager = None
+        
+        #set the schema (default is no-op)
+        self.schema = self.schemaFactory(model)
+        #XXX need for graphManager?:
+        #self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
+        if isinstance(self.schema, RxPath.Model):
+            self.model = self.schema
+
+    def setupHistory(self, requestProcessor, source):
+        if self.saveHistory:
+            #if we're going to be recording history we need a starting context uri
             from rx import RxPathGraph
             initCtxUri = RxPathGraph.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
         else:
             initCtxUri = ''
-        initCtxUri = ''
-        defaultStmts = RxPath.NTriples2Statements(self.defaultTripleStream, initCtxUri)
-
+        
+        #data used to initialize a new store
+        defaultStmts = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
+                        requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri) 
+                
+        #if we're using a separate store to hold the change history, load it now
+        #(it's called delmodel because it only stores removals as the history 
+        #is recorded soley as adds and removes)
         if self.VERSION_STORAGE_PATH:
             normalizeSource = getattr(self.versionModelFactory, 
                     'normalizeSource', DomStore._normalizeSource)
@@ -119,8 +169,13 @@ class BasicDomStore(DomStore):
         else:
             delmodel = None
 
+        #open or create the model (the datastore)
+        #if savehistory is on and we are loading a store that has the entire 
+        #change history (e.g. we're loading the transaction log) we also load 
+        #the history into a separate model
+        #
         #note: to override loadNtriplesIncrementally, set this attribute
-        #on your custom modelFactory function
+        #on your custom modelFactory
         if self.saveHistory and getattr(
                 self.modelFactory, 'loadNtriplesIncrementally', False):
             if not delmodel:
@@ -128,36 +183,12 @@ class BasicDomStore(DomStore):
             dmc = RxPathGraph.DeletionModelCreator(delmodel)            
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
-            lastScope = dmc.lastScope
+            lastScope = dmc.lastScope        
         else:
-            model = self.modelFactory(source=source,
-                    defaultStatements=defaultStmts)
+            model = None
             lastScope = None
-                
-        if self.APPLICATION_MODEL:
-            appTriples = StringIO.StringIO(self.APPLICATION_MODEL)
-            stmtGen = RxPath.NTriples2Statements(appTriples, 'context:application:')#RxPathGraph.APPCTX)
-            appmodel = RxPath.MemModel(stmtGen)
-            model = RxPath.MultiModel(model, appmodel)
             
-        if self.transactionLog:
-            model = RxPath.MirrorModel(model, RxPath.IncrementalNTriplesFileModel(
-                self.transactionLog, []) )
-
-        if self.saveHistory:
-            graphManager = RxPathGraph.NamedGraphManager(model, delmodel,lastScope)
-        else:
-            graphManager = None
-        
-        self.graphManager = graphManager
-        self.model = model
-
-        self.schema = self.schemaFactory(model)
-        #XXX need for graphManager?:
-        #self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
-        if isinstance(self.schema, RxPath.Model):
-            self.model = self.schema
-        
+        return model, defaultStmts, delmodel, lastScope
 
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    

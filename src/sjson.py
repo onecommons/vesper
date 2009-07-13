@@ -105,6 +105,7 @@ except ImportError:
 
 from rx import RxPath    
 from rx.RxPath import Statement, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
+from rx.RxPathUtils import _encodeStmtObject
 import re
 
 RESOURCE_REGEX = re.compile(r'^[\w:/\.\?&\$\-_\+#\@]+$') #XXX
@@ -122,8 +123,7 @@ def _expandqname(qname, nsmap):
             return ns+suffix
     return qname
 
-class sjson(object):
-    
+class sjson(object):    
     nsmap=[(JSON_BASE,'')]
     
     bnodecounter = 0
@@ -132,18 +132,48 @@ class sjson(object):
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
 
+    def __init__(self, addOrderInfo=True, generateBnode=None):
+        self._genBNode = generateBnode
+        self.addOrderInfo = addOrderInfo
+        
     def lookslikeUriOrQname(self, s):
         #XXX think about customization, e.g. if number were ids
         if not isinstance(s, (str,unicode)):        
             return False
         m = RESOURCE_REGEX.match(s)
         return m is not None
-        
+ 
+    def deduceObjectType(self, item):    
+        if isinstance(item, list):
+            return item, None
+        if isinstance(item, dict):
+            if 'value' not in item or len(item) != 3:
+                return item, None
+            value = item['value']
+            objectType = item.get('datatype')
+            if not objectType:
+                objectType = item.get('xml:lang')
+            if not objectType:                
+                return item, None
+            else:
+                return value, objectType 
+        elif self.lookslikeUriOrQname(item):
+            return item, OBJECT_TYPE_RESOURCE
+        else:
+            return item, OBJECT_TYPE_LITERAL
+
     def _value(self, node):
-        #XXX: handle datatype
+        from rx import RxPathDom
+        if isinstance(node.parentNode, RxPathDom.BasePredicate):
+            stmt = node.parentNode.stmt
+            if len(stmt.objectType) > 1:
+                #XXX: handle datatypes, especially numbers
+                return _encodeStmtObject(stmt)
         return node.data
 
     def _blank(self):
+        if self._genBNode:
+            return self._genBNode()
         self.bnodecounter+=1
         return self.bnodeprefix + str(self.bnodecounter)
     
@@ -332,8 +362,7 @@ class sjson(object):
         results = self._to_sjson(root, depth)
         return json.dumps(results) #a list
 
-    def to_rdf(self, json):
-        scope = ''
+    def to_rdf(self, json, scope = ''):        
         m = RxPath.MemModel()
         
         if isinstance(json, (str,unicode)):
@@ -375,7 +404,7 @@ class sjson(object):
                 if prop == idprop:                    
                     continue
                 prop = _expandqname(prop, nsmap)
-                
+                val, objecttype = self.deduceObjectType(val)
                 if isinstance(val, dict):
                     objid, idprop = getorsetid(val) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
@@ -384,44 +413,38 @@ class sjson(object):
                     #dont build a PROPSEQTYPE if prop in rdf:_ rdf:first rdfs:member                
                     specialprop = prop.startswith(RDF_MS_BASE+'_') or prop in [
                                   RDF_MS_BASE+'first', RDF_SCHEMA_BASE+'member']
+                    addOrderInfo = not specialprop and self.addOrderInfo
                     #XXX special handling for prop == PROPSEQ ?
-                    if not specialprop:
-                        if not val:
-                            m.addStatement( Statement(id, prop, RDF_MS_BASE+'nil', 
-                                OBJECT_TYPE_RESOURCE, scope) )
-                        else:  
-                            seq = self._blank() 
-                            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
-                                RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
-                            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
-                                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
-                            m.addStatement( Statement(seq, PROPBAG, prop, 
-                                OBJECT_TYPE_RESOURCE, scope) )
-                            m.addStatement( Statement(id, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
+                    if not val:
+                        m.addStatement( Statement(id, prop, RDF_MS_BASE+'nil', 
+                                                OBJECT_TYPE_RESOURCE, scope) )
+                    elif addOrderInfo:
+                        seq = self._blank() 
+                        m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+                            RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
+                        m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+                            PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
+                        m.addStatement( Statement(seq, PROPBAG, prop, 
+                            OBJECT_TYPE_RESOURCE, scope) )
+                        m.addStatement( Statement(id, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
+                    
                     for i, item in enumerate(val):
+                        item, objecttype = self.deduceObjectType(item)
                         if isinstance(item, dict):
                             itemid, idprop = getorsetid(val) #XXX
                             m.addStatement( Statement(id, prop, itemid, OBJECT_TYPE_RESOURCE, scope) )  
-                            if not specialprop:
+                            if addOrderInfo:
                                 m.addStatement( Statement(seq, 
                                     RDF_MS_BASE+'_'+str(i+1), id, OBJECT_TYPE_RESOURCE, scope) )
                             todo.push(val)
                         elif isinstance(item, list):                        
                             pass #XXX nested lists: add JSONSEQ
                         else:
-                            #simple type
-                            if self.lookslikeUriOrQname(item):
-                                objecttype = OBJECT_TYPE_RESOURCE
-                            else:
-                                objecttype = OBJECT_TYPE_LITERAL
+                            #simple type                            
                             m.addStatement( Statement(id, prop, item, objecttype, scope) )
-                            if not specialprop:
+                            if addOrderInfo:
                                 m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
                 else: #simple type
-                    if self.lookslikeUriOrQname(val):
-                        objecttype = OBJECT_TYPE_RESOURCE
-                    else:
-                        objecttype = OBJECT_TYPE_LITERAL
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )                    
 
         return m.getStatements()

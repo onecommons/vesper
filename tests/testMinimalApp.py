@@ -1,6 +1,12 @@
 @Action
 def testaction(kw, retval):
-    #XXX: query = jql.execute( "[rdfs:comment where(rdfs:label=?_name)]", kw)
+    import jql
+    #query = "[rdfs:comment where(rdfs:label='%s')]" % kw['_name'] #XXX bug in parser 
+    #query = "{rdfs:comment, where(rdfs:label='%s')}" % kw['_name'] #XXX this bad syntax but need better error reporting
+    query = "{rdfs:comment:*, where(rdfs:label='%s')}" % kw['_name']
+    res = jql.runQuery(query, kw['__server__'].domStore.model)
+    #print list(res) #XXX fails
+    
     if kw.get('_name') == 'foo':
         query = ['page content.']
     else:
@@ -16,6 +22,7 @@ def testaction(kw, retval):
 actions = { 'http-request' : [testaction] 
         }
 
-APPLICATION_MODEL='''<http://rx4rdf.sf.net/test/resource> <http://www.w3.org/2000/01/rdf-schema#label> "foo" .
-<http://rx4rdf.sf.net/test/resource> <http://www.w3.org/2000/01/rdf-schema#comment> "page content." .
-'''
+APPLICATION_MODEL = [{ 'id' : 'a_resource', 
+                      'rdfs:label' : 'foo', 
+                       'rdfs:comment' : 'page content'
+                    }]

@@ -14,6 +14,10 @@ except ImportError:
     import StringIO
 
 from rx import utils
+try:
+    import json
+except ImportError:
+    import simplejson as json
 
 #try:
 #    from Ft.Rdf import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL    
@@ -187,14 +191,13 @@ def _parseSPARQLResults(json, defaultScope=None):
             *_decodeJsonRDFValue(stmt['o'])+(defaultScope,)  ))
     return stmts
 
-def _parseRDFJSON(json, defaultScope=None):
+def _parseRDFJSON(jsonstring, defaultScope=None):
     '''
     Parses JSON that followes the format described in _encodeRDFAsJson
     Returns a list of RDF Statements
     '''
-    import simplejson
     stmts = []
-    jsonDict = simplejson.loads(json)
+    jsonDict = json.loads(jsonstring)
     if 'quads' in jsonDict:
         del jsonDict['quads']
         items = jsonDict.iteritems()
@@ -238,7 +241,7 @@ def _decodeJsonRDFValue(object):
         raise ParseException('unexpected object type', objectType)
     return value, objectType
 
-def _encodeStmtObject(stmt, iscompound):
+def _encodeStmtObject(stmt, iscompound=False):
     '''
     return a string encoding the object in one of these ways: 
     (from http://www.w3.org/TR/2006/NOTE-rdf-sparql-json-res-20061004/)
@@ -246,31 +249,32 @@ def _encodeStmtObject(stmt, iscompound):
     {"type":"typed-literal", "datatype":" D ", "value":" S "},
     {"type":"uri|bnode", "value":"U"", "hint":"compound"} ] },
     '''
-    import simplejson
     type = stmt.objectType
+    jsonobj = {}    
     if type == OBJECT_TYPE_RESOURCE:
-        if iscompound:
-            hint = ',"hint":"compound"';
-        else:
-            hint = ''
-
-        if stmt.subject.startswith(BNODE_BASE):
+        if stmt.object.startswith(BNODE_BASE):
             bnode = stmt.object[BNODE_BASE_LEN:]
-            return '{"type":"bnode","value":"%s"%s}' % (bnode, hint)
+            jsonobj['type'] = 'bnode'
+            jsonobj['value'] = bnode
         else:
-            return '{"type":"uri","value":"%s"%s}' % (stmt.object, hint)
-    else:
-        literal = simplejson.dumps(stmt.object)
+            jsonobj['type'] = 'uri'
+            jsonobj['value'] = stmt.object
+        
+        if iscompound:
+            jsonobj['hint'] = 'compound'
+    else:        
         if type.find(':') > -1:
-            #datatype is the datatype uri
-            return '{"type":"typed-literal","datatype":"%s","value":%s}'%(
-                                                                type,literal)
+            jsonobj['type'] = "typed-literal"
+            jsonobj["datatype"] = type
+            jsonobj['value'] = stmt.object
         else:
-            if type == OBJECT_TYPE_LITERAL:
-                lang = ''
-            else: #datatype is the lang
-                lang = ',"xml:lang":"%s"' % type
-            return '{"type":"literal","value":%s%s}' % (literal,lang)
+            jsonobj['type'] = "literal"            
+            if type != OBJECT_TYPE_LITERAL:
+                #datatype is the lang
+                jsonobj["xml:lang"] = type                    
+            jsonobj['value'] = stmt.object
+
+    return jsonobj
 
 def _encodeRDFAsJson(nodes):    
     '''
@@ -305,7 +309,7 @@ Encode a nodeset of RxPath resource nodes as JSON, using this format:
         for pred in res.childNodes:
             if lastpred == pred.stmt.predicate:                
                 isCompound = False #todo: pred.childNodes[0].isCompound()
-                out += ", " + _encodeStmtObject(pred.stmt, isCompound)
+                out += ", " + json.dumps(_encodeStmtObject(pred.stmt, isCompound))
                 if isCompound:
                     compoundResources.append(pred.childNodes[0])
             else:
@@ -314,7 +318,7 @@ Encode a nodeset of RxPath resource nodes as JSON, using this format:
                 lastpred = pred.stmt.predicate
                 out +=  '"' + lastpred + '" : ['
                 isCompound = False #todo: pred.childNodes[0].isCompound()
-                out += _encodeStmtObject(pred.stmt, isCompound)
+                out += json.dumps(_encodeStmtObject(pred.stmt, isCompound))
         if lastpred:
             out += ']\n'
         out += '}\n'
@@ -325,31 +329,53 @@ Encode a nodeset of RxPath resource nodes as JSON, using this format:
     return out
     
 def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
-                       incrementHook=None):
+                       options=None):
     '''
     returns an iterator of Statements
     
     type can be anyone of the following:
-        "rdfxml", "ntriples", "rxml_xml", "rxml_zml" and "unknown"
+        "rdfxml", "ntriples", "sjson" and "unknown"
     If Redland is installed "turtle" and "rss-tag-soup" will also work.
 
     baseuri is the base URI to be used for relative URIs in the RDF source
     '''
     from rx import RxPath
     if scope is None: scope = ''  #workaround 4suite bug
+    options = options or {}
 
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
         type = type.split('-', 1)[1]
         
     if isinstance(contents, unicode):
         contents = contents.encode('utf8')
+            
     try:
-        if type == 'unknown':
-            if contents[:256].lstrip().startswith('#?zml'):
+        while type == 'unknown':
+            if isinstance(contents, (list, tuple)):
+                if not contents:
+                    return contents
+                if isinstance(contents[0], (tuple, BaseStatement)):
+                    return contents #looks like already a list of statements
+                #otherwise assume sjson
+                type='sjson' 
+                break
+            elif isinstance(contents, dict):
+                type='sjson' #assume sjson
+                break
+            
+            startcontents = contents[:256].lstrip()
+            if not startcontents: #empty
+                return []
+                
+            if startcontents[0] in '{[':
+                type='sjson' #assume sjson
+                break
+            elif startcontents.startswith('#?zml'):
                 from rx import zml
-                xml = zml.zmlString2xml(contents, mixed=False, URIAdjust=True)        
+                xml = zml.zmlString2xml(contents, mixed=False, URIAdjust=True)
             try:
-                ns, prefix, local = utils.getRootElementName(contents)
+                import htmlfilter
+                ns, prefix, local = htmlfilter.getRootElementName(contents)
                 if ns == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#':
                     type = 'rdfxml'
                 elif local == 'rx':
@@ -365,16 +391,16 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                     #convert generator to list to force parsing now 
                     return list(NTriples2Statements(
                                 StringIO.StringIO(contents), scope,
-                                baseuri, incrementHook=incrementHook))
+                                baseuri, **options))
                 except:
                     #maybe its n3 or turtle, but we can't detect that
                     #but we'll try rxml_zml
                     type = 'rxml_zml'
                     
-        if type == 'ntriples':
+        if type in ['ntriples', 'ntjson']:
             #use our parser
             return NTriples2Statements(StringIO.StringIO(contents), scope,
-                                       baseuri, incrementHook=incrementHook)    
+                                       baseuri, **options)    
         elif type == 'rxml_xml' or type == 'rxml_zml':
             if type == 'rxml_zml':
                 from rx import zml
@@ -434,13 +460,28 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                         raise ParseException("no RDF/XML parser installed")
         elif type == 'json':            
             return _parseRDFJSON(contents, scope)
+        elif type == 'sjson':
+            import sjson
+            if isinstance(contents, str):
+                contents = json.loads(contents)
+
+            #XXX generateBnode doesn't detect collisions, maybe gen UUID instead
+            if 'generateBnode' not in options:
+                options['generateBnode']=generateBnode
+            sjson = sjson.sjson(**options)
+            return sjson.to_rdf( {
+                'results' : contents
+                }, scope)
+        else:
+            raise ParseException('unsupported type: ' + type)
     except:
         #import traceback; traceback.print_exc()
         raise ParseException()
 
 def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
-                    incrementHook=None):
+                    options=None):
     'returns an iterator of Statements'
+    options = options or {}
     if not modelbaseuri:
         modelbaseuri = uri
     if type == 'unknown':
@@ -453,7 +494,7 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream = urllib2.urlopen(uri)
     contents = stream.read()
     stream.close()
-    return parseRDFFromString(contents, modelbaseuri, type, scope, incrementHook=incrementHook)
+    return parseRDFFromString(contents, modelbaseuri, type, scope, options)
      
 def RxPathDOMFromStatements(statements, uri2prefixMap, uri=None,schemaClass=None):    
     from rx import RxPath, RxPathSchema
@@ -465,31 +506,14 @@ def RxPathDOMFromStatements(statements, uri2prefixMap, uri=None,schemaClass=None
 def serializeRDF(statements, type, uri2prefixMap=None,
                          fixUp=None, fixUpPredicate=None):
     '''    
-    type can be anyone of the following:
-        "rdfxml", "ntriples", "rxml_xml", "rxml_zml"
+    type can be one of the following:
+        "rdfxml", "ntriples", "ntjson", "json", or "sjson"
     '''
     from rx import RxPath
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
         type = type.split('-', 1)[1]
 
-    if type.startswith('rxml_'):
-        uri2prefixMap = uri2prefixMap or {}
-
-        from rx import rxml, zml
-        nsMap = dict( [(x[1], x[0]) for x in uri2prefixMap.items()] )
-        rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
-        #unlike the other RDF formats, RxML will show resources that are
-        #not the subject of any statements, so don't include them
-        #also skip list resources, they will displayed as objects
-        subjects = [s.subject for s in statements]
-        nodes = [node for node in rdfDom.childNodes
-                     if node.uri in subjects and not node.isCompound()]
-        contents = rxml.getRXAsZMLFromNode(nodes, nsMap,
-                                fixUp=fixUp, fixUpPredicate=fixUpPredicate)
-        if type == 'rxml_xml':
-            content = zml.zmlString2xml(contents, mixed=False, URIAdjust = True)
-        return contents
-    elif type == 'rdfxml':
+    if type == 'rdfxml':
         try:
             #if rdflib is installed
             import rdflib.TripleStore
@@ -536,6 +560,14 @@ def serializeRDF(statements, type, uri2prefixMap=None,
         stringIO = StringIO.StringIO()
         writeTriples(statements, stringIO)
         return stringIO.getvalue()
+    elif type == 'ntjson':
+        stringIO = StringIO.StringIO()
+        writeTriples(statements, stringIO, writejson=True)
+        return stringIO.getvalue()
+    elif type == 'sjson':
+        import sjson 
+        #XXX use uri2prefixMap
+        return json.dumps( sjson.sjson()._to_sjson( statements) )
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]
@@ -552,13 +584,17 @@ def _parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
     remove = False
     graph = None
     lineCounter = 0
+    assumeJson = False
     for line in lines:
         lineCounter += 1
         line = line.strip()
         if not line: #trailing whitespace
             break;
         if not isinstance(line, unicode):
-           line = line.decode(charencoding)            
+           line = line.decode(charencoding)
+        if line.startswith("#!json"):
+            assumeJson = True
+            continue
         if line.startswith('#!remove'):
             #this extension to NTriples allows us to incrementally update
             #a model using NTriples
@@ -583,53 +619,20 @@ def _parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
             if yieldcomments:
                 yield (Comment, line[1:])
             continue
-        subject, predicate, object = line.split(None,2)
-        if subject.startswith('_:'):
-            subject = subject[2:] #bNode
-            subject = bNodeToURI(subject)
+        
+        if assumeJson:
+            jsondict = json.loads(line)
+            for k, v in jsondict.items():
+                if k == 'id':
+                    subject = v
+                    if subject.startswith('_:'): #bNode
+                        subject = bNodeToURI(subject[2:])
+                else:
+                    predicate = k
+                    object, objectType = _decodeJsonRDFValue(v)
         else:
-            subject = subject[1:-1] #uri
-            if not subject: #<> refers to the baseuri
-                if baseuri is None:
-                    raise RuntimeError("Unable to parse NTriples on line %i:" 
-            "it contains a '<>' but no baseuri was specified." % lineCounter)
-                subject = baseuri
-            
-        if predicate.startswith('_:'):
-            predicate = predicate[2:] #bNode
-            predicate = bNodeToURI(predicate)
-        else:
-            assert predicate[0] == '<' and predicate[-1] == '>', 'malformed predicate: %s' % predicate
-            predicate = predicate[1:-1] #uri
-            
-        object = object.strip()        
-        if object[0] == '<': #if uri
-            object = object[1:object.find('>')]
-            objectType = OBJECT_TYPE_RESOURCE
-            if not object: #<> refers to the baseuri
-                if baseuri is None:
-                    raise RuntimeError("Unable to parse NTriples on line %i:" 
-            "it contains a '<>' but no baseuri was specified." % lineCounter)
-                object = baseuri
-        elif object.startswith('_:'):
-            object = object[2:object.rfind('.')].strip()
-            object = bNodeToURI(object)
-            objectType = OBJECT_TYPE_RESOURCE
-        else:                        
-            quote = object[0] 
-            endquote = object.rfind(quote)
-            literal = object[1:endquote]
-            if literal.find('\\') != -1:
-                literal = re.sub(r'(\\[tnr"\\])|(\\u[\dA-F]{4})|(\\U[\dA-F]{8})', 
-                     lambda m: str(m.group(0)).decode('unicode_escape'), literal)
-            if object[endquote+1]=='@':
-                lang = object[endquote+2:object.rfind('.')].strip()
-                objectType = lang
-            elif object[endquote+1]=='^':                
-                objectType = object[endquote+3:object.rfind('.')].strip()
-            else:    
-                objectType = OBJECT_TYPE_LITERAL
-            object = literal
+            subject, predicate, object, objectType = _parseNTriplesLine(
+                                                    line, baseuri, bNodeToURI)
 
         if remove:
             remove = False
@@ -637,8 +640,59 @@ def _parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
         else:
             yield (subject, predicate, object, objectType, graph)
         graph = None
+
+def _parseNTriplesLine(line, baseuri, bNodeToURI):
+    subject, predicate, object = line.split(None,2)
+    if subject.startswith('_:'):
+        subject = subject[2:] #bNode
+        subject = bNodeToURI(subject)
+    else:
+        subject = subject[1:-1] #uri
+        if not subject: #<> refers to the baseuri
+            if baseuri is None:
+                raise RuntimeError("Unable to parse NTriples on line %i:" 
+        "it contains a '<>' but no baseuri was specified." % lineCounter)
+            subject = baseuri
+        
+    if predicate.startswith('_:'):
+        predicate = predicate[2:] #bNode
+        predicate = bNodeToURI(predicate)
+    else:
+        assert predicate[0] == '<' and predicate[-1] == '>', 'malformed predicate: %s' % predicate
+        predicate = predicate[1:-1] #uri
+        
+    object = object.strip()        
+    if object[0] == '<': #if uri
+        object = object[1:object.find('>')]
+        objectType = OBJECT_TYPE_RESOURCE
+        if not object: #<> refers to the baseuri
+            if baseuri is None:
+                raise RuntimeError("Unable to parse NTriples on line %i:" 
+        "it contains a '<>' but no baseuri was specified." % lineCounter)
+            object = baseuri
+    elif object.startswith('_:'):
+        object = object[2:object.rfind('.')].strip()
+        object = bNodeToURI(object)
+        objectType = OBJECT_TYPE_RESOURCE
+    else:                        
+        quote = object[0] 
+        endquote = object.rfind(quote)
+        literal = object[1:endquote]
+        if literal.find('\\') != -1:
+            literal = re.sub(r'(\\[tnr"\\])|(\\u[\dA-F]{4})|(\\U[\dA-F]{8})', 
+                 lambda m: str(m.group(0)).decode('unicode_escape'), literal)
+        if object[endquote+1]=='@':
+            lang = object[endquote+2:object.rfind('.')].strip()
+            objectType = lang
+        elif object[endquote+1]=='^':                
+            objectType = object[endquote+3:object.rfind('.')].strip()
+        else:    
+            objectType = OBJECT_TYPE_LITERAL
+        object = literal
+
+    return subject, predicate, object, objectType
                    
-def writeTriples(stmts, stream, enc='utf8'):
+def writeTriples(stmts, stream, enc='utf8', writejson=False):
     r'''
     stmts is an iterable of statements (or the equivalent tuples)
 
@@ -650,6 +704,9 @@ def writeTriples(stmts, stream, enc='utf8'):
     object = 2
     objectType = 3
     scope = 4
+    
+    if writejson:
+        stream.write("#!json\n")
     
     import re
     wspcProg = re.compile(r'\s')
@@ -674,7 +731,11 @@ def writeTriples(stmts, stream, enc='utf8'):
                       
         if stmt[scope]: 
             stream.write("#!graph "+stmt[scope].encode(enc)+"\n")
-                
+        
+        if writejson:
+            stream.write(stmt2json(stmt)+'\n')
+            continue                   
+            
         if stmt[subject].startswith(BNODE_BASE):
             stream.write('_:' + stmt[subject][BNODE_BASE_LEN:].encode(enc) ) 
         else:
@@ -1237,3 +1298,12 @@ def addDOM(sourceDom, updateDOM, authorize=None):
     #note: additions should contained by stmts, so we don't need to return them
     return newStmts, reordered.keys() 
 
+def stmt2json(stmt):
+    '''
+    { "id" : "http://uri", "predicate" : "json-encoded literal" }
+    '''
+    uri = stmt[0]
+    if uri.startswith(BNODE_BASE):
+        uri = '_:' + uri[BNODE_BASE_LEN:]
+        
+    return json.dumps({ "id" : uri, stmt[1] : _encodeStmtObject(stmt) })
