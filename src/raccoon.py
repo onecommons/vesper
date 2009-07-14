@@ -872,7 +872,7 @@ Please check the URL to ensure that the path is correct.</p>
 
     DEFAULT_LOGLEVEL = logging.INFO
 
-    def main(argv, out=sys.stdout):
+    def main(argv=sys.argv[1:], out=sys.stdout):
         root = None
         try:
             eatNext = False

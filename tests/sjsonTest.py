@@ -26,7 +26,11 @@ def assert_stmts_and_back_match(stmts, expectedobj = None):
     result_stmts = sjson().to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
-
+import unittest
+class SjsonTestCase(unittest.TestCase):
+    def testAll(self):
+        test()
+        
 def test():
               
     dc = 'http://purl.org/dc/elements/1.1/'

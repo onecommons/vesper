@@ -260,7 +260,7 @@ class JoinConditionOp(QueryOp):
         self.setJoinPredicate(position)
         self.join = join
         if isinstance(self.position, int):
-            assert isinstance(op, Filter)
+            assert isinstance(op, Filter), 'pos %i but not a Filter: %s' % (self.position, type(op))
             label = "#%d" % self.position
             op.addLabel(label, self.position)
             self.position = label
@@ -582,7 +582,7 @@ class Project(QueryOp):
 
     def __eq__(self, other):
         return (super(Project,self).__eq__(other)
-            and self.fields == other.fields and self.varref == self.varref)
+            and self.fields == other.fields and self.varref == other.varref)
 
     def __repr__(self):
         varref = ''
@@ -613,6 +613,11 @@ class ConstructProp(QueryOp):
     def appendArg(self, value):
         self.value = value #only one, replaces current if set
         value.parent = self
+
+    def __eq__(self, other):
+        return (super(ConstructProp,self).__eq__(other)
+         and self.ifEmpty == other.ifEmpty and self.ifSingle == self.ifSingle)
+         #and self.nameIsFilter == other.nameIsFilter)
 
     args = property(lambda self: (self.value,))
 
@@ -668,12 +673,12 @@ class Select(QueryOp):
             self.appendArg(where)
 
     def appendArg(self, op):
-        if (isinstance(op, Join)):
+        if (isinstance(op, ResourceSetOp)): 
             self.where = op #only one, replaces current if set
         elif (isinstance(op, Construct)):
             self.construct = op #only one, replaces current if set
         else:
-            raise QueryException('bad ast')
+            raise QueryException('bad ast: Select doesnt take %s' % type(op))
         op.parent = self
 
     args = property(lambda self: [a for a in [self.construct, self.where] if a])

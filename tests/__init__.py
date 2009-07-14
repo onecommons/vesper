@@ -5,7 +5,7 @@
 """
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
-  'sjsonTest', 'jqlTest'] #XXX these 2 aren't TestSuites
+  'sjsonTest', 'jqlTest'] 
 
 import unittest
 class TestProgram(unittest.TestProgram):

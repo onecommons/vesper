@@ -34,7 +34,7 @@ querypartfunc(expression) # groupby | orderby | limit | offset
 
 from jqlAST import *
 import logging
-logging.basicConfig() #XXX only if logging hasn't already been set
+#logging.basicConfig() #XXX only if logging hasn't already been set
 errorlog = logging.getLogger('parser')
 
 class JQLParseException(Exception):
@@ -1129,50 +1129,6 @@ def makeJoinExpr(expr, parseState):
     assert newexpr
     return newexpr
 
-tests = [
-"{*,}",
-#vars are just :pp
-#"{  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }",
-"{foo: {*} }", #XXX there's ambguity here: construct vs. join (wins)
-"{foo: [*]}", #XXX there's ambguity here: construct vs. forcelist (wins)
-"{*/1}", #bad
-'''{ 'ok': */1 }''',
-'''{ *, 
-    where(type=bar OR foo=*)
-    }''',
-"{ * where(type=bar or foo=*) }",
-'''
-{
-id : ?artist,
-foo : { id : ?join },
-"blah" : [ {*} ]
-where( {
-    ?id == 'http://foaf/friend' and
-    topic_interest = ?ss and
-    foaf:topic_interest = ?artist.foo.bar #Join(
-  })
-GROUPBY(foo)
-}
-'''
-]
-
 def parse(query):
     return parser.parse(query,tracking=True)#, debug=True)
 
-if __name__ == "__main__":
-  for test in tests:
-    print "Test:", test.strip()
-    try:
-        result = parse(test)
-
-    except JQLParseException, e:
-        print "error:", e
-
-    print "Result:", result
-    continue
-    try:
-        for dd in result[0]:
-            if isinstance(dd,dict):
-                print dd.items()
-    except TypeError,te:
-        pass    

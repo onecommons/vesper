@@ -192,6 +192,63 @@ t('''
  {'foo': 'bar', 'id': '2', 'parent': {'id': '1'}}]
  )
 
+syntaxtests = [
+'''{ 'ok': */1 }''',
+]
+
+#XXX fix failing queries!
+failing = [
+#parsing failing for this:
+
+#qnames not handled correctly: jql.QueryException: comment projection not found
+'''{ rdfs:comment:* where(rdfs:label='foo')}''',
+#XXX parse._joinFromConstruct() doesn't work with lists:
+'''
+[rdfs:comment where(rdfs:label='foo')]
+''',
+"{foo: {*} }", #XXX there's ambguity here: construct vs. join (wins)
+'''
+{
+id : ?artist,
+foo : { id : ?join },
+"blah" : [ {*} ]
+where( {
+    ?id == 'http://foaf/friend' and
+    topic_interest = ?ss and
+    foaf:topic_interest = ?artist.foo.bar #Join(
+  })
+GROUPBY(foo)
+}
+''',
+#jql.QueryException: only equijoin supported for now:
+"{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'}) }",
+]
+
+for s in syntaxtests:
+    t(s)
+
+#XXX test broken, AST seems wrong
+#XXX there's ambguity here: construct vs. forcelist (wins):
+skip("{'foo': [*]}", 
+ast = Select( Construct([
+  ConstructProp('foo', Project('*'),
+        PropShape.uselist, PropShape.uselist)
+      ]), Join())
+)
+
+#expect equivalent asts:
+t('{*,}', ast=jql.buildAST('{*}'))
+
+#XXX this ast looks wrong:
+t('''{ *, 
+    where(type=bar OR foo=*)
+    }''', ast=jql.buildAST("{ * where(type=bar or foo=*) }")) 
+
+#expect parse errors:
+t("{*/1}", ast='error')  
+
+#logs ERROR:parser:Syntax error at '}'
+t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
 basic = Suite()
 basic.model = [{}, {}]
 
@@ -369,16 +426,25 @@ query='''
   where ( ?foo = bar) }
 ''')
 
-from optparse import OptionParser
 
-if __name__ == "__main__":
+import unittest
+class JQLTestCase(unittest.TestCase):
+    def testAll(self):
+        main(['--quiet'])
+
+import logging
+logging.basicConfig() 
+
+def main(cmdargs=None):
+    from optparse import OptionParser
+    
     usage = "usage: %prog [options] [test name or number]"
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
-        ('printdebug', 0), ('printrows', 0)]:
+        ('printdebug', 0), ('printrows', 0), ('quiet',0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
-    (options, args) = parser.parse_args()
+    (options, args) = parser.parse_args(cmdargs)
     options.num = -1
     options.name = ''
     if args and args[0] != 'null':
@@ -411,22 +477,29 @@ if __name__ == "__main__":
             if name != options.name:
                 continue
 
-        print '*** running test:', name
-        print 'query', test.query
+        if not options.quiet:
+            print '*** running test:', name
+            print 'query', test.query
 
         if test.ast:
             if not test.skipParse:
                 testast = jql.buildAST(test.query)
                 #jql.rewriteAST(testast)
-                print 'comparing ast'
-                assert testast == test.ast, ('unexpected ast for test %d: %s \n %s'
+                if not options.quiet: print 'comparing ast'
+                if test.ast == 'error': #expect an error
+                    assert testast is None, (
+                        'not expecting an ast for test %d: %s' % (i,testast))
+                else: 
+                    assert testast == test.ast, (
+                            'unexpected ast for test %d: %s \n %s'
                             % (i, findfirstdiff(testast, test.ast), testast))
                 ast = testast
             else:
                 ast = test.ast
         else:
             ast = jql.buildAST(test.query)
-            #jql.rewriteAST(ast)
+            assert ast, "ast is None, parsing failed"
+
         if options.printast:
             print "ast:"
             pprint.pprint(ast)
@@ -434,11 +507,12 @@ if __name__ == "__main__":
         if options.printrows or test.rows is not None:
             evalAst = ast.where
             testrows = list(jql.evalAST(evalAst, test.model))            
+        if options.printrows:
             print 'labels', evalAst.labels
             print 'rows:'
-            pprint.pprint(testrows)
-            if test.rows is not None:
-                assert test.rows== testrows,  ('unexpected rows for test %d' % i)
+            pprint.pprint(testrows)        
+        if test.rows is not None:
+            assert test.rows== testrows,  ('unexpected rows for test %d' % i)
 
         if options.explain:
             print "explain plan:"
@@ -446,11 +520,19 @@ if __name__ == "__main__":
         else:
             explain = None
 
-        print "construct " + (options.printdebug and '(with debug)' or '')
-        testresults = list(jql.evalAST(ast, test.model, explain=explain,debug=options.printdebug))
-        print "Construct Results:"
-        pprint.pprint(testresults)
+        if not options.quiet: print "construct " + (options.printdebug and '(with debug)' or '')
+        if ast:
+            testresults = list(jql.evalAST(ast, test.model, explain=explain,
+                                                    debug=options.printdebug))
+        else:
+            testresults = None
+        if not options.quiet:        
+            print "Construct Results:"
+            pprint.pprint(testresults)
         if test.results is not None:
             assert test.results == testresults,  ('unexpected results for test %d' % i)
 
     print '***** %d tests passed, %d skipped' % (count, skipped)
+
+if __name__ == "__main__":
+    main()

@@ -850,8 +850,12 @@ class SimpleQueryEngine(object):
 
     def evalExcept(self, op, context):
         #Note: actually an antijoin not except: doesn't compare whole row,
-        #just join key
+        #just join key        
         return self._evalJoin(op, context, 'a')
+
+    def evalUnion(self, op, context):
+        #semi-join
+        return self._evalJoin(op, context, 's') 
  
     def _evalJoin(self, op, context, jointype):
         #XXX context.currentTupleset isn't set when returned
@@ -885,6 +889,9 @@ class SimpleQueryEngine(object):
             #print 'groupby col', current.columns
             if previous:
                 def bindjoinFunc(jointype, current):
+                    '''
+                    jointypes: inner, outer, semi- and anti-
+                    '''
                     #need this func to create new local bindings inside iteration
                     if jointype=='o':
                         nullrows = [None] * len(current.columns)
