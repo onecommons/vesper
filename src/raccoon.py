@@ -421,6 +421,9 @@ def action(kw, retVal) where:
                                     
         def _doActionsBare(self, sequence, kw, retVal):
             try:
+                if not isinstance(sequence, (list, tuple)):
+                    sequence = sequence(kw)
+
                 for action in sequence:
                     retResult = Result(retVal)                   
                     #try to retrieve action result from cache
@@ -572,10 +575,7 @@ def action(kw, retVal) where:
                 elif k != '_metadatachanges':
                     prevkw[k] = v
             templatekw['_prevkw'] = prevkw
-            if hasattr(retVal, 'read'):
-                #XXXX delay doing this until $_contents is required
-                retVal = retVal.read()            
-            templatekw['_contents'] = retVal
+            templatekw['_contents'] = Result(retVal)
             
             return self.doActions(actions, templatekw,
                 errorSequence=errorSequence, newTransaction=newTransaction)             
