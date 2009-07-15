@@ -9,6 +9,16 @@ from rx import RxPath, transactions
 import StringIO, os, os.path
 import logging
 
+def _toStatements(contents):
+    import sjson
+    if not contents:
+        return [], None
+    if isinstance(contents, (list, tuple)):
+        if isinstance(contents, (tuple, BaseStatement)):
+            return contents, None #looks like a list of statements
+    #assume sjson:
+    sjson.tostatements(contents), contents
+
 class DomStore(transactions.TransactionParticipant):
     '''
     Abstract interface for DomStores
@@ -217,38 +227,45 @@ class BasicDomStore(DomStore):
 
     def getTransactionContext(self):
         if self.graphManager:
-            return self.dom.graphManager.getTxnContext() #return a contextUri
+            return self.graphManager.getTxnContext() #return a contextUri
         return None
-
-    def update(statements):    
+        
+    def update(self, updates):
+        '''
+        Takes a list of either statements or sjson conforming dicts
+        '''
+        stmts, jsonrep = _toStatements(updates)
         resources = set()
-        for s in statements:
+        newresources = []
+        for s in stmts:
             if self.newResourceTrigger:
                 subject = s[0]
                 if subject not in resources:
                     resource.update(subject)
-                    if not model.findUri(subject): #XXX
-                        self.newResourceTrigger(subject)
+                    if not model.filter(subject=subject, hints=dict(limit=1)): 
+                        newresources.append(subject)
 
-            try:
-                if self.graphManager:
-                    self.graphManager.addTrigger(s)
-                elif self.addTrigger:
-                    self.addTrigger(s)
-                if self.graphManager:
-                    self.graphManager.add(s)
-                else:
-                    self.model.addStatement(s)
-            except IndexError:
-                #thrown by _orderedInsert: statement already exists in the model
-                log.debug('statement %s already exists for %s' % (typeName, uri))
-            
-    def remove(statements):    
-        for s in statements:
-            if self.removeTrigger:
-                self.removeTrigger(s)
+        if self.newResourceTrigger and newresources:  
+            self.newResourceTrigger(newresources)
+        if self.addTrigger and stmts:
+            self.addTrigger(stmts, jsonrep)
 
-            if self.ownerDocument.graphManager:
-                self.ownerDocument.graphManager.remove(s)
+        for s in stmts:    
+            if self.graphManager:
+                self.graphManager.add(s)
             else:
-                self.ownerDocument.model.removeStatement(s)
+                self.model.addStatement(s)
+        
+    def remove(self, removals):    
+        '''
+        Takes a list of either statements or sjson conforming dicts
+        '''
+        stmts, jsonrep = _toStatements(removals)
+        if self.removeTrigger and stmts:
+            self.removeTrigger(stmts, jsonrep)
+
+        for s in stmts:
+            if self.graphManager:
+                self.graphManager.remove(s)
+            else:
+                self.model.removeStatement(s)

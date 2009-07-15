@@ -126,6 +126,7 @@ class Model(Tupleset):
             labels = ('subject', 'predicate','object', 'objecttype','context')
             for key, value in conditions.iteritems():
                 kw[labels[key] ] = value
+        kw['hints'] = hints
         for stmt in self.getStatements(**kw):
             yield stmt
 
@@ -145,7 +146,7 @@ class Model(Tupleset):
     ### Operations ###
                        
     def getStatements(self, subject = None, predicate = None, object=None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject, predicate or object can be None, and any None slot is
         treated as a wildcard that matches any value in the model.
@@ -193,7 +194,8 @@ def getReifiedStatements(stmts):
         #else: log.warning('incomplete reified statement')
     return reifiedDict
 
-def removeDupStatementsFromSortedList(aList, asQuad=False, pred=None):
+def removeDupStatementsFromSortedList(aList, asQuad=False, pred=None, 
+                                                limit=None, offset=None):
     def removeDups(x, y):
         if pred and not pred(y):
             return x
@@ -201,8 +203,13 @@ def removeDupStatementsFromSortedList(aList, asQuad=False, pred=None):
             or (not asQuad and x[-1] != y)): 
             x.append(y)
         return x
-    return reduce(removeDups, aList, [])
-    
+    aList = reduce(removeDups, aList, [])
+    if 'offset' is not None:
+        aList = aList[offset:]
+    if 'limit' is not None:
+        aList = aList[:limit]
+    return aList
+
 class MemModel(Model):
     '''
     simple in-memory module
@@ -220,7 +227,7 @@ class MemModel(Model):
         return len(self.by_s)
             
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         ''' 
         Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
@@ -231,7 +238,10 @@ class MemModel(Model):
         fo = object is not None
         fot = objecttype is not None
         fc = context is not None
-
+        hints = hints or {}
+        limit=hints.get('limit')
+        offset=hints.get('offset')
+        
         if not fc:
             if fs:                
                 stmts = self.by_s.get(subject,[])            
@@ -247,7 +257,8 @@ class MemModel(Model):
                 else:
                     stmts = list(stmts)
                 stmts.sort()
-                return removeDupStatementsFromSortedList(stmts,asQuad)
+                return removeDupStatementsFromSortedList(stmts,asQuad,
+                                                    limit=limit,offset=offset)
         else:            
             by_cAnds = self.by_c.get(context)
             if not by_cAnds:
@@ -264,7 +275,9 @@ class MemModel(Model):
                     and (not fot or s.objectType == objecttype)
                     and (not fc or s.scope == context)]
         stmts.sort()
-        return removeDupStatementsFromSortedList(stmts, asQuad)
+        stmts = removeDupStatementsFromSortedList(stmts, asQuad, 
+                                            limit=limit, offset=offset)
+        return stmts
                      
     def addStatement(self, stmt ):
         '''add the specified statement to the model'''            
@@ -319,7 +332,7 @@ class MultiModel(Model):
         self.models[0].rollback()        
                     
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.'''
@@ -333,7 +346,7 @@ class MultiModel(Model):
                 statements.extend(moreStatements)
         if changed > 1:        
             statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad)
+            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
         else:
             return statements            
                      
@@ -369,7 +382,7 @@ class MirrorModel(Model):
             model.rollback()
                             
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         return self.models[0].getStatements(subject, predicate, object,
                                             objecttype,context, asQuad)
                      
@@ -397,7 +410,7 @@ class ViewModel(MirrorModel):
         MirrorModel.__init__(self, subset, model)
 
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):        
+                      objecttype=None,context=None, asQuad=False, hints=None):        
         return self.models[0].getStatements(subject, predicate, object,
                                             objecttype,context,asQuad)
 
@@ -456,12 +469,12 @@ class TransactionModel(object):
         return True
         
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated asj a wildcard that matches any value in the model.'''
         statements = super(TransactionModel, self).getStatements(subject,
-                                predicate, object,objecttype,context, asQuad)
+                                predicate, object,objecttype,context, asQuad,hints)
         if not self.queue: 
             return statements
 
@@ -490,7 +503,7 @@ class TransactionModel(object):
 
         if changed:        
             statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad)
+            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
         else:
             return statements
 
@@ -694,7 +707,7 @@ try:
             pass
                     
         def getStatements(self, subject=None, predicate=None, object=None,
-                          objecttype=None,context=None, asQuad=False):
+                          objecttype=None,context=None, asQuad=False, hints=None):
             ''' Return all the statements in the model that match the given arguments.
             Any combination of subject and predicate can be None, and any None slot is
             treated as a wildcard that matches any value in the model.'''
@@ -738,7 +751,7 @@ try:
                                          for rstmts in redlandStmts]) )
             #statements = list( redland2Statements(redlandStmts, defaultContext))
             statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad)
+            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
                          
         def addStatement(self, statement):
             '''add the specified statement to the model'''
@@ -865,7 +878,7 @@ try:
             pass
                     
         def getStatements(self, subject = None, predicate = None, object=None,
-                          objecttype=None, asQuad=False):
+                          objecttype=None, asQuad=False, hints=None):
             ''' Return all the statements in the model that match the given arguments.
             Any combination of subject and predicate can be None, and any None slot is
             treated as a wildcard that matches any value in the model.'''
@@ -877,7 +890,7 @@ try:
                 object = object2node(object, objectType)
             statements = list( rdflib2Statements( self.model.triples((subject, predicate, object)) ) )
             statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad)
+            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
                          
         def addStatement(self, statement ):
             '''add the specified statement to the model'''            

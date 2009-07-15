@@ -61,7 +61,7 @@ class FtModel(Model):
         self.model._driver.rollback()        
                 
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False):
+                      objecttype=None,context=None, asQuad=False, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.'''
@@ -74,7 +74,7 @@ class FtModel(Model):
             pred = lambda stmt: stmt.objectType == objecttype
         else:
             pred = None
-        return removeDupStatementsFromSortedList(statements, asQuad, pred)
+        return removeDupStatementsFromSortedList(statements, asQuad, pred, **(hints or {}))
                      
     def addStatement(self, statement ):
         '''add the specified statement to the model'''

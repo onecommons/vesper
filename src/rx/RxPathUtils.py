@@ -465,13 +465,12 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             if isinstance(contents, str):
                 contents = json.loads(contents)
 
-            #XXX generateBnode doesn't detect collisions, maybe gen UUID instead
+            options['scope'] = scope
+            #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
                 options['generateBnode']=generateBnode
-            sjson = sjson.sjson(**options)
-            return sjson.to_rdf( {
-                'results' : contents
-                }, scope)
+            
+            return sjson.tostatements(contents, options)
         else:
             raise ParseException('unsupported type: ' + type)
     except:
@@ -567,7 +566,7 @@ def serializeRDF(statements, type, uri2prefixMap=None,
     elif type == 'sjson':
         import sjson 
         #XXX use uri2prefixMap
-        return json.dumps( sjson.sjson()._to_sjson( statements) )
+        return json.dumps( sjson.tojson(statements) )
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]

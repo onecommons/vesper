@@ -132,9 +132,10 @@ class sjson(object):
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
 
-    def __init__(self, addOrderInfo=True, generateBnode=None):
+    def __init__(self, addOrderInfo=True, generateBnode=None, scope = ''):
         self._genBNode = generateBnode
         self.addOrderInfo = addOrderInfo
+        self.scope = scope
         
     def lookslikeUriOrQname(self, s):
         #XXX think about customization, e.g. if number were ids
@@ -362,8 +363,10 @@ class sjson(object):
         results = self._to_sjson(root, depth)
         return json.dumps(results) #a list
 
-    def to_rdf(self, json, scope = ''):        
+    def to_rdf(self, json, scope = None):        
         m = RxPath.MemModel()
+        if scope is None:
+            scope = self.scope
         
         if isinstance(json, (str,unicode)):
             todo = json = json.loads(json)            
@@ -448,3 +451,13 @@ class sjson(object):
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )                    
 
         return m.getStatements()
+
+def tojson(statements, options=None):
+    options = options or {}
+    return sjson(**options)._to_sjson(statements)
+
+def tostatements(contents, options=None):
+    options = options or {}
+    return sjson(**options).to_rdf( {
+        'results' : contents
+        })

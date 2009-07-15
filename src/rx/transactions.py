@@ -8,6 +8,7 @@ import time
 import os, os.path
 from rx import utils
 import logging
+import sjson
 
 class TransactionError(Exception):
     '''Base transaction error'''
@@ -273,53 +274,57 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         self.initThreadLocals(state=RaccoonTransactionState())
         super(RaccoonTransactionService, self).__init__(server.log.name)
 
-    def newResourceHook(self, uri):
+    def newResourceHook(self, uris):
         '''
         This is intended to be set as the DOMStore's newResourceTrigger
         '''
         if self.isActive() and self.state.safeToJoin:
-            self.state.newResources.append(uri)
-            self._runActions('before-new', {'_newResources' : [uri]})
+            self.state.newResources.extend(uri)
+            self._runActions('before-new', {'_newResources' : uris})
 
-    def addHook(self, stmt):
+    def addHook(self, stmts, jsonrep=None):
         '''
         This is intended to be set as the DOMStore's addTrigger
         '''
         if self.isActive() and self.state.safeToJoin:            
-            self.state.additions.append(stmt)
-            isnew = stmt.SUBJECT in self.state.newResources
-            kw = {'_added' : [stmt], '_isnew' : isnew,
-                  '_newResources': self.state.newResources}
-            self._runActions('before-add', kw)
+            self.state.additions.extends(stmts)
+            if 'before-remove' in self.server.actions:
+                if jsonrep is None:
+                    jsorep = sjson.tojson(stmts)
+                kw = {'_added' : jsorep }
+                #new resource detection is optional since it can be expensive
+                if self.server.newResourceTrigger:
+                    kw['_newResources'] = state.newResources
+                self._runActions('before-add', kw)
 
-    def removeHook(self, node):
+    def removeHook(self, stmts, jsonrep=None):
         '''
         This is intended to be set as the DOMStore's removeTrigger
         '''
         if self.isActive() and self.state.safeToJoin:
-            from rx import RxPath
-            state = self.state            
-            if not isinstance(node, RxPath.BaseStatement):
-                #assume it's a resource being removed and node is a list of all its statements
-                assert len(set([s.SUBJECT for s in node])) == 1, 'all subjects should be the same'
-                state.removals.extend(node)
-                isnew = node[0].SUBJECT in state.newResources                
-            else:
-                state.removals.append(node)
-                isnew = node.SUBJECT in state.newResources
-            kw = {'_removed' : [node], '_isnew' : isnew,
-                  '_newResources': state.newResources}
-            self._runActions('before-remove', kw)
-                
+            state.removals.extend(stmts)
+            if 'before-remove' in self.server.actions:
+                if jsonrep is None:
+                    jsorep = sjson.tojson(stmts)
+                kw = {'_removed' : jsorep }
+                #new resource detection is optional since it can be expensive
+                if self.server.newResourceTrigger:
+                    kw['_newResources'] = state.newResources                                             
+                self._runActions('before-remove', kw)
+    
     def _runActions(self, trigger, morekw=None):      
        actions = self.server.actions.get(trigger)       
        if actions:
             state = self.state
             kw = state.kw.copy()
-            if morekw is None: 
-                morekw = { '_added' : state.additions,
-                           '_removed' : state.removals,
-                           '_newResources': state.newResources}
+            if morekw is None:                
+                morekw = { '_added' : sjson.tojson(state.additions),
+                           '_removed' : sjson.tojson(state.removals)
+                         }
+                #new resource detection is optional since it can be expensive
+                if self.server.newResourceTrigger:
+                    morekw['_newResources'] = state.newResources            
+
             kw.update(morekw)
             errorSequence= self.server.actions.get(trigger+'-error')
             self.server.callActions(actions, kw, state.retVal,
