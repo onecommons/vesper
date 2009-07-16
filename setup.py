@@ -18,7 +18,9 @@ if pyver < (2,6):
 setup(
     name = PACKAGE_NAME,
     version = "0.0.1",
-    packages = ['rx', 'jql'],
+    package_dir = {'': 'src'},
+    packages = find_packages('src'),
+    py_modules = ['sjson', 'raccoon', 'htmlfilter'],
     install_requires = install_requires,
 
    XXXentry_points = {
