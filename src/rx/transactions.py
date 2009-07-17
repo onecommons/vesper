@@ -2,6 +2,9 @@
 Most of the code here is based on PEAK's transactions.py, specifically:
 http://cvs.eby-sarna.com/PEAK/src/peak/storage/transactions.py?rev=1.33
 (also available at http://svn.eby-sarna.com/*checkout*/PEAK/src/peak/storage/transactions.py?rev=1573 )
+Copyright (C) 1996-2004 by Phillip J. Eby and Tyler C. Sarna.
+All rights reserved.  This software may be used under the same terms
+as Zope or Python.  THERE ARE ABSOLUTELY NO WARRANTIES OF ANY KIND.
 '''
 
 import time

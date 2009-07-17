@@ -250,11 +250,11 @@ class BasicDomStore(DomStore):
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
 
-        for s in stmts:    
-            if self.graphManager:
-                self.graphManager.add(s)
-            else:
-                self.model.addStatement(s)
+        #for s in stmts:    
+        #    if self.graphManager:
+        #        self.graphManager.add(s)
+        #    else:
+        self.model.addStatements(stmts)
         
     def remove(self, removals):    
         '''
@@ -264,8 +264,13 @@ class BasicDomStore(DomStore):
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
 
-        for s in stmts:
-            if self.graphManager:
-                self.graphManager.remove(s)
-            else:
-                self.model.removeStatement(s)
+        #for s in stmts:
+        #    if self.graphManager:
+        #        self.graphManager.remove(s)
+        #    else:
+        self.model.removeStatements(stmts)
+
+    def query(self, query):
+        import jql
+        return jql.runQuery(query, self.model)
+        

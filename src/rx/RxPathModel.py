@@ -160,12 +160,22 @@ class Model(Tupleset):
     def addStatement(self, statement ):
         '''add the specified statement to the model'''
         raise NotImplementedError 
+
+    def addStatements(self, statements):
+        '''add the specified statements to the model'''
+        for s in statements:
+            self.addStatement(s)
         
     def removeStatement(self, statement ):
         '''Removes the statement. If 'scope' isn't specified, the statement
            will be removed from all contexts it appears in.
         '''
         raise NotImplementedError 
+
+    def removeStatements(self, statements):
+        '''removes the statements'''
+        for s in statements:
+            self.removeStatement(s)
 
     reifiedIDs = None
     def findStatementIDs(self, stmt):        
