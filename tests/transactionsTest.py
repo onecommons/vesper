@@ -86,6 +86,7 @@ class LogParticipant(TransactionParticipant):
         self.log.append(("abort", txnService))
 
     def finishTransaction(self, txnService, committed):
+        super(LogParticipant, self).finishTransaction(txnService, committed)
         self.log.append(("finish", txnService, committed))
 
 class UnreadyParticipant(LogParticipant):
@@ -123,8 +124,8 @@ class VotingTest(unittest.TestCase):
 
         self.assertRaises(NotReadyError, ts.commit)
 
-        # just a lot of ready-to-vote attempts
-        assert self.log == [('readyToVote',ts)]*len(self.log)
+        # just a lot of ready-to-vote attempts (followed by 3 aborts and 3 finishes)
+        assert self.log[:-6] == [('readyToVote',ts)]* (len(self.log)-6)
 
 
     def testMixed(self):

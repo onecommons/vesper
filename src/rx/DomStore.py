@@ -143,12 +143,13 @@ class BasicDomStore(DomStore):
         self.model = model
 
         if self.saveHistory:
-            self.graphManager = RxPathGraph.NamedGraphManager(model, historyModel,lastScope)
+            self.model = self.graphManager = RxPathGraph.NamedGraphManager(model, 
+                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope)
         else:
             self.graphManager = None
         
         #set the schema (default is no-op)
-        self.schema = self.schemaFactory(model)
+        self.schema = self.schemaFactory(self.model)
         #XXX need for graphManager?:
         #self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
         if isinstance(self.schema, RxPath.Model):
@@ -205,10 +206,7 @@ class BasicDomStore(DomStore):
         return txnService.state.additions or txnService.state.removals
         
     def commitTransaction(self, txnService):
-        if self.graphManager:
-            self.graphManager.commit(txnService.getInfo())
-        else:
-            self.model.commit(**txnService.getInfo())
+        self.model.commit(**txnService.getInfo())
 
     def abortTransaction(self, txnService):        
         if not self.isDirty(txnService):
@@ -218,9 +216,7 @@ class BasicDomStore(DomStore):
         #key = self.dom.getKey()
 
         self.model.rollback()
-        if self.graphManager:
-            self.graphManager.rollback()        
-                
+                        
         #if isinstance(key, MRUCache.InvalidationKey):
         #    if txnService.server.actionCache:
         #        txnService.server.actionCache.invalidate(key)
@@ -229,11 +225,14 @@ class BasicDomStore(DomStore):
         if self.graphManager:
             return self.graphManager.getTxnContext() #return a contextUri
         return None
-        
-    def update(self, updates):
+    
+    #XXX consolidate transaction state and model's transaction otherwise there 
+    #isn't isolation between requests 
+    def update(self, requestProcessor, updates):
         '''
         Takes a list of either statements or sjson conforming dicts
         '''
+        self.join(requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(updates)
         resources = set()
         newresources = []
@@ -250,24 +249,19 @@ class BasicDomStore(DomStore):
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
 
-        #for s in stmts:    
-        #    if self.graphManager:
-        #        self.graphManager.add(s)
-        #    else:
         self.model.addStatements(stmts)
         
-    def remove(self, removals):    
+    def remove(self, requestProcessor, removals):    
         '''
         Takes a list of either statements or sjson conforming dicts
         '''
+        #XXX to remove an object you have to explicitly list all the properties to remove 
+        #do we need a ways to remove an object just specifying id
+        self.join(requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(removals)
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
 
-        #for s in stmts:
-        #    if self.graphManager:
-        #        self.graphManager.remove(s)
-        #    else:
         self.model.removeStatements(stmts)
 
     def query(self, query):

@@ -699,10 +699,7 @@ class Subject(Resource):
                     previousRestListStmt = RxPath.Statement(previousListId,
                         RDF_MS_BASE+'rest', listID,
                         objectType=OBJECT_TYPE_RESOURCE)
-                    if self.ownerDocument.graphManager:
-                        self.ownerDocument.graphManager.add(previousRestListStmt)
-                    else:
-                        self.ownerDocument.model.addStatement(previousRestListStmt)
+                    self.ownerDocument.model.addStatement(previousRestListStmt)
                 else: #this statement is the first item in the list, so our subject will be head list resource
                     assert not listID or listID == self.uri, `listID` + '==' + `self.uri`
                     listID  = self.uri
@@ -720,10 +717,7 @@ class Subject(Resource):
                                                 previousListId, RDF_MS_BASE+'rest',RDF_MS_BASE+'nil')
                         assert len(oldPreviousRestStmts) == 1
                         for oldNilStmt in oldPreviousRestStmts:                            
-                            if self.ownerDocument.graphManager:
-                                self.ownerDocument.graphManager.remove(oldNilStmt)
-                            else:
-                                self.ownerDocument.model.removeStatement( oldNilStmt )
+                            self.ownerDocument.model.removeStatement( oldNilStmt )
                             
                     predicateNode = Predicate(stmt, self, None, self.lastChild,
                                                                   listID=listID)
@@ -734,17 +728,10 @@ class Subject(Resource):
                     #terminate the list
                     restListStmt = RxPath.Statement(listID, RDF_MS_BASE+'rest',
                         RDF_MS_BASE+'nil', objectType=OBJECT_TYPE_RESOURCE)
-
-                    if self.ownerDocument.graphManager:
-                        self.ownerDocument.graphManager.add(restListStmt)
-                    else:
-                        self.ownerDocument.model.addStatement(restListStmt)             
+                    self.ownerDocument.model.addStatement(restListStmt)
                 #update statement with the real subject, the listID                
                 stmt = RxPath.Statement(listID,*stmt[1:])
-                if self.ownerDocument.graphManager:
-                    self.ownerDocument.graphManager.add(stmt,predicateNode)
-                else:
-                    self.ownerDocument.model.addStatement(stmt)
+                self.ownerDocument.model.addStatement(stmt)
             elif stmt.predicate == RDF_SCHEMA_BASE+'member':                
                 if refChild:
                     raise NotSupportedErr("inserting items into lists not "
@@ -788,10 +775,7 @@ class Subject(Resource):
                                 
                 #update statement with the real predicate, the listID
                 stmt = RxPath.Statement(stmt[0], listID, *stmt[2:])
-                if self.ownerDocument.graphManager:                    
-                    self.ownerDocument.graphManager.add(stmt,predicateNode)
-                else:
-                    self.ownerDocument.model.addStatement(stmt)                
+                self.ownerDocument.model.addStatement(stmt)                
             else: #regular statement
                 if self.childNodes and self.childNodes[-1].stmt.predicate in [
                    RDF_MS_BASE + 'first', RDF_SCHEMA_BASE + 'member' ]:
@@ -809,10 +793,7 @@ class Subject(Resource):
                 predicateNode = self._orderedInsert(stmt, Predicate,
                                 lambda x, y: cmp(x.stmt, y), hi = hi,
                                 notify=self.ownerDocument._invokeAddTrigger)
-                if self.ownerDocument.graphManager:
-                    self.ownerDocument.graphManager.add(stmt,predicateNode)
-                else:
-                    self.ownerDocument.model.addStatement(stmt)
+                self.ownerDocument.model.addStatement(stmt)
 
             self.revision += 1        
             self.ownerDocument.revision += 1
@@ -832,12 +813,6 @@ class Subject(Resource):
             If the predicate is rdf:first then previous and next list item statements are adjusted.
             (Note: In the case of rdfs:member, sibling rdf:_n statements are not adjusted.)            
         '''
-        #if we are trying to remove this node in a specific context
-        #it might only be necessary to remove it from the ContextDoc not this doc
-        if (self.ownerDocument.graphManager and
-            not self.ownerDocument.graphManager.isRemoveNecessary(oldChild)):
-            return
-
         if not removingResource and self.ownerDocument.removeTrigger:
            self.ownerDocument.removeTrigger(oldChild)
         
@@ -865,28 +840,19 @@ class Subject(Resource):
                 previousRestListStmt = RxPath.Statement(
                         previousListItem.listID, RDF_MS_BASE+'rest',
                         oldChild.listID, objectType=OBJECT_TYPE_RESOURCE)                
-                if self.ownerDocument.graphManager:
-                    self.ownerDocument.graphManager.remove(previousRestListStmt)
-                else:
-                    self.ownerDocument.model.removeStatement( previousRestListStmt )
+                self.ownerDocument.model.removeStatement( previousRestListStmt )
                     
             #remove the rdf:rest triple for this item
             oldRestListStmt = RxPath.Statement(oldChild.listID,
                 RDF_MS_BASE+'rest', restObject, objectType=OBJECT_TYPE_RESOURCE)            
-            if self.ownerDocument.graphManager:
-                self.ownerDocument.graphManager.remove(oldRestListStmt)
-            else:
-                self.ownerDocument.model.removeStatement( oldRestListStmt )
+            self.ownerDocument.model.removeStatement( oldRestListStmt )
             
             if previousListItem:                
                 #add a statement that linking the previous item
                 #with the following item or with rdf:nill
                 newRestListStmt = RxPath.Statement(previousListItem.listID,
                     RDF_MS_BASE+'rest', restObject, objectType=OBJECT_TYPE_RESOURCE)
-                if self.ownerDocument.graphManager:
-                    self.ownerDocument.graphManager.add(newRestListStmt)
-                else:
-                    self.ownerDocument.model.addStatement(newRestListStmt)
+                self.ownerDocument.model.addStatement(newRestListStmt)
             #else: no previous item.
             #      it looks like according to the rdf syntax spec sect. 7.2.19
             #      that we should remove this resource and replace it with
@@ -908,10 +874,7 @@ class Subject(Resource):
             oldStmt = oldChild.stmt
             
         oldStmt = RxPath.Statement(*oldStmt) #must be read-only 
-        if self.ownerDocument.graphManager:
-            self.ownerDocument.graphManager.remove(oldStmt)
-        else:
-            self.ownerDocument.model.removeStatement(oldStmt) #handle exception here?
+        self.ownerDocument.model.removeStatement(oldStmt) #handle exception here?
 
         self._doRemoveChild(self._childNodes, oldChild)        
         self.revision += 1
@@ -1532,10 +1495,11 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
             self.stringValue =self.modelUri=RxPath.generateBnode()
 
         self.revision = 0
+        
+        self.graphManager = graphManager
         if graphManager:
-            graphManager.setDoc(self)
-        else:
-            self.graphManager = None
+            assert isinstance(graphManager, RxPath.Model)
+            self.model = graphManager
                     
         self.schemaClass = schemaClass
         #we need to set the schema up now so that the schema from the model isn't
@@ -1583,9 +1547,7 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
     lastChild = property(_get_lastChild)
 
     def _invokeAddTrigger(self, node):
-        if self.graphManager:
-            self.graphManager.addTrigger(node)
-        elif self.addTrigger and isinstance(node, Node):
+        if self.addTrigger and isinstance(node, Node):
             self.addTrigger(node)
 
     def _toSubjectNodes(self):                
@@ -1688,9 +1650,6 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
         (Don't use this option if more than one statement refer to the list.)
         '''
         #todo: what if the resource is reference by an object? -- model should throw an exception?        
-        if self.graphManager and not self.graphManager.isRemoveNecessary(oldChild):
-            return
-
         if self.removeTrigger:
            self.removeTrigger(oldChild)
 
@@ -1756,10 +1715,7 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
             try:
                 predicateNode = subjectNode._orderedInsert(typeStmt, Predicate,
                     lambda x, y: cmp(x.stmt, y), notify=self._invokeAddTrigger)
-                if self.graphManager:
-                    self.graphManager.add(typeStmt,predicateNode)
-                else:
-                    self.model.addStatement(typeStmt)
+                self.model.addStatement(typeStmt)
                 self.revision += 1
             except IndexError:
                 #thrown by _orderedInsert: statement already exists in the model
@@ -1821,15 +1777,10 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
             return (id(self),  self.revision)
 
     def commit(self, **kw):
-        if self.graphManager:
-            self.graphManager.commit(kw)
-        else:
-            self.model.commit(**kw)
+        self.model.commit(**kw)
 
     def rollback(self):        
         self.model.rollback()
-        if self.graphManager:
-            self.graphManager.rollback()        
             
         #to remove the changes we need to rollback we just force the
         #DOM's nodes to be regenerated from the model by null-ing out
@@ -1862,25 +1813,9 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
         
     def _entailmentChange(self, stmt, add):
         if self._childNodes is not None: #already created them
-            if self.graphManager:
-                try:
-                    #pushContext() in case we're in a context because
-                    #ContextNamedGraphManager will add a statement to the model
-                    #todo: ideally we'd add the node to the context doc too
-                    self.pushContext(None)
-                    subjectNode = self.findSubject(stmt.subject)
-                    if not subjectNode or subjectNode._childNodes is not None:
-                        #propagateAdd/Remove will update the DOM but not the model
-                        if add:               
-                            self.graphManager.propagateAdd(self, stmt) 
-                        else:
-                            self.graphManager.propagateRemove(self, stmt) 
-                finally:
-                    self.popContext()
-            else:
-                self._childNodes = None
-                self.subjectDict = {}  
-                #todo: handle this case more efficiently
+            self._childNodes = None
+            self.subjectDict = {}  
+            #todo: handle this case more efficiently
 
 class DocumentFragment(DomTree.DocumentFragment, Node):
     pass

@@ -12,9 +12,10 @@ from pprint import *
 from rx.RxPath import *
 def RDFDoc(model, nsMap):
     from rx import RxPathGraph
-    graphManager = RxPathGraph.NamedGraphManager(model, None,None)
+    modelUri =generateBnode()
+    graphManager = RxPathGraph.NamedGraphManager(model, None, modelUri)
     graphManager.createCtxResource = False
-    return createDOM(model, nsMap, schemaClass=RDFSSchema, 
+    return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 
 import difflib, time

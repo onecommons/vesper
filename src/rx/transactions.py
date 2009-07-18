@@ -97,7 +97,10 @@ class TransactionService(object):
         elif self.state.safeToJoin:
             if participant not in self.state.participants:
                 self.state.participants.append(participant)
-                participant.inTransaction = True
+                assert not participant.inTransaction
+                participant.inTransaction = self
+            else:
+                assert participant.inTransaction == self
         else:
             raise TransactionInProgress
 
@@ -158,10 +161,13 @@ class TransactionService(object):
 
         if self.state.cantCommit:
             raise BrokenTransaction
-
-        self._prepareToVote()
-        self._vote()
-        #bug? vote failed will raise the participant's error and _cleanup will never get called
+        
+        try:
+            self._prepareToVote()
+            self._vote()
+        except:
+            self.abort()
+            raise
         
         try:
             self.state.inCommit = True 
@@ -172,7 +178,7 @@ class TransactionService(object):
                     self.errorHandler.commitFailed(self,p)
         finally:
             self.state.inCommit = False 
-            
+        
         self._cleanup(True)
 
     def fail(self):
@@ -241,6 +247,9 @@ class TransactionParticipant(object):
     def isDirty(self,txnService):
         '''return True if this transaction participant was modified'''    
         return True #default to True if we don't know one way or the other
+
+    def join(self, txnService):
+        return txnService.join(self)
     
     def readyToVote(self, txnService):
         return True
@@ -276,7 +285,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         #and one thread; therefore we need one transaction context per thread
         self.initThreadLocals(state=RaccoonTransactionState())
         super(RaccoonTransactionService, self).__init__(server.log.name)
-
+        
     def newResourceHook(self, uris):
         '''
         This is intended to be set as the DOMStore's newResourceTrigger
@@ -289,8 +298,9 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         '''
         This is intended to be set as the DOMStore's addTrigger
         '''
-        if self.isActive() and self.state.safeToJoin:            
-            self.state.additions.extends(stmts)
+        state = self.state
+        if self.isActive() and state.safeToJoin:            
+            state.additions.extends(stmts)
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
                     jsorep = sjson.tojson(stmts)
@@ -304,7 +314,8 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         '''
         This is intended to be set as the DOMStore's removeTrigger
         '''
-        if self.isActive() and self.state.safeToJoin:
+        state = self.state
+        if self.isActive() and state.safeToJoin:
             state.removals.extend(stmts)
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
