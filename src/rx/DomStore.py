@@ -226,8 +226,6 @@ class BasicDomStore(DomStore):
             return self.graphManager.getTxnContext() #return a contextUri
         return None
     
-    #XXX consolidate transaction state and model's transaction otherwise there 
-    #isn't isolation between requests 
     def update(self, requestProcessor, updates):
         '''
         Takes a list of either statements or sjson conforming dicts
@@ -241,7 +239,7 @@ class BasicDomStore(DomStore):
                 subject = s[0]
                 if subject not in resources:
                     resource.update(subject)
-                    if not model.filter(subject=subject, hints=dict(limit=1)): 
+                    if not self.model.filter(subject=subject, hints=dict(limit=1)): 
                         newresources.append(subject)
 
         if self.newResourceTrigger and newresources:  

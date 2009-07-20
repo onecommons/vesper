@@ -57,6 +57,8 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
     inTransaction = False
     
+    findCompabilityStatements = True
+    
     addEntailmentCallBack = None
     removeEntailmentCallBack = None
 
@@ -231,10 +233,11 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         self.entailments.removeStatement(stmt)
         if self.removeEntailmentCallBack:
             self.removeEntailmentCallBack(stmt)
-           
+    
+    debug = 0
     def addToSchema(self, stmts):
         self._beginTxn()
-        
+
         propsChanged = False
         typesChanged = False
 
@@ -242,7 +245,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         #but it will only take effect in the next call to addToSchema
         #also they can not be removed consistently
         #thus they should be declared in the initial schemas
-        for stmt in stmts:
+        for stmt in stmts:            
             #handle "rdf1" entailment rule in the RDF Semantics spec
             self._addEntailment(Statement(stmt.predicate, RDF_MS_BASE+u'type', 
                                 RDF_MS_BASE+u'Property',OBJECT_TYPE_RESOURCE))
@@ -283,8 +286,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             #the subclass and subproperty rules ("rdfs5" - "rdfs11") are handled dynamically
             #except for "rdfs8": uuu rdf:type rdfs:Class -> uuu rdfs:subClassOf rdfs:Resource
             #which isn't needed
-
-            if stmt.predicate in self.subPropPreds:
+            if stmt.predicate in self.subPropPreds:                
                 self.currentSubProperties.setdefault(stmt.object, [stmt.object]).append(stmt.subject)
                 #add this subproperty if this is the only reference to it so far
                 self.currentSubProperties.setdefault(stmt.subject, [stmt.subject])
@@ -549,7 +551,6 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
     def rollback(self):
         super(RDFSSchema, self).rollback()
         self.entailments.rollback()
-        
         self.currentSubProperties = self.subproperties
         self.currentSubTypes = self.subtypes
         self.currentSuperProperties = self.superproperties
@@ -562,7 +563,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
         self.inTransaction = False
 
-    ### Operations ###                   
+    ### Model Operations ###                   
     def addStatement(self, stmt ):
         '''add the specified statement to the model'''
         self.addToSchema( (stmt,) )
@@ -575,5 +576,41 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         self.removeFromSchema( (stmt,) )
         self.model.removeStatement(stmt)
         self.entailments.removeStatement(stmt)
+
+    def getStatements(self, subject = None, predicate = None, object = None,
+                      objecttype=None,context=None, asQuad=False, hints=None):
+        
+        if not self.findCompabilityStatements:
+            return super(RDFSSchema, self).getStatements(subject,
+                        predicate,object,objecttype,context, asQuad, hints)
+        
+        if predicate in self.typePreds:
+            submap = self.currentSubTypes
+            test = object
+            pos = 3
+        else:
+            submap = self.currentSubProperties
+            test = predicate
+            pos = 2
+        
+        statements = []     
+        changed = 0           
+        for compatible in submap.get(test, [test]):
+            if pos == 2:
+                predicate = compatible
+            elif pos == 3:
+                object = compatible
+            #XXX handle hints intelligently, see super() implementation
+            moreStatements = super(RDFSSchema, self).getStatements(subject,
+                                predicate,object,objecttype,context, asQuad)
+            if moreStatements:
+                changed += 1
+                statements.extend(moreStatements)
+
+        if changed > 1 or hints:        
+            statements.sort()
+            return RxPathModel.removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
+        else:
+            return statements            
 
 defaultSchemaClass = BaseSchema #RDFSSchema

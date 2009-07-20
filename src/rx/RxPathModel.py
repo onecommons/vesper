@@ -340,7 +340,24 @@ class MultiModel(Model):
 
     def rollback(self):
         self.models[0].rollback()        
-                    
+
+    def _handleHints(self, hints, currentcount):
+        return {}
+        #XXX we can do this if know order isn't important       
+        if not hints:
+            return hints
+        limit = hints.get('limit')
+        if limit is not None:
+            limit -= currentcount
+            if limit < 1:
+                return 'done'
+            hints['limit'] = limit
+
+        offset = hints.get('offset')
+        if offset is not None:
+            offset -= currentcount
+            hints['offset'] = offset
+    
     def getStatements(self, subject = None, predicate = None, object = None,
                       objecttype=None,context=None, asQuad=False, hints=None):
         ''' Return all the statements in the model that match the given arguments.
@@ -348,15 +365,22 @@ class MultiModel(Model):
         treated as a wildcard that matches any value in the model.'''
         statements = []
         changed = 0
+        _hints = hints and hints.copy() or {}
         for model in self.models:
+            _hints = self._handleHints(_hints, len(statements))
+            if _hints == 'done':
+                break
+            
             moreStatements = model.getStatements(subject, predicate,object,
-                                              objecttype,context, asQuad)
+                                              objecttype,context, asQuad, _hints)
             if moreStatements:
                 changed += 1
                 statements.extend(moreStatements)
-        if changed > 1:        
+
+        if changed > 1 or hints:        
             statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
+            return removeDupStatementsFromSortedList(statements, asQuad, 
+                                                            **(hints or {}))
         else:
             return statements            
                      

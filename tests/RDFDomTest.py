@@ -214,6 +214,73 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
             #print 'newstmts'            
             #print newstmts
             self.failUnless(stmts == newstmts)
+
+    def testSubtype(self):        
+        model = '''_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.
+_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:F.
+_:B <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.
+_:B <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:E.
+_:A <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:B.
+_:A <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:C.
+_:O1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:C.
+_:O2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:B.
+_:O2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:F.
+_:O3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:B.
+_:O4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:A.
+_:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
+'''
+        rdfDom = self.getModel(cStringIO.StringIO(model) )
+        def getcount(obj):
+            stmts = rdfDom.model.getStatements(
+                predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+                object=obj)
+            return len(set(s[0] for s in stmts))
+
+        self.failUnless(getcount('bnode:A') == 1)        
+        self.failUnless(getcount('bnode:D') == 4)
+        self.failUnless(getcount('bnode:F') == 3)
+
+    def testSubproperty(self):        
+        model = '''<http://rx4rdf.sf.net/ns/archive#C> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#D>.
+<http://rx4rdf.sf.net/ns/archive#C> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#F>.
+<http://rx4rdf.sf.net/ns/archive#B> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#D>.
+<http://rx4rdf.sf.net/ns/archive#B> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#E>.
+<http://rx4rdf.sf.net/ns/archive#A> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#B>.
+<http://rx4rdf.sf.net/ns/archive#A> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#C>.
+_:O1 <http://rx4rdf.sf.net/ns/archive#C> "".
+_:O2 <http://rx4rdf.sf.net/ns/archive#B> "".
+_:O2 <http://rx4rdf.sf.net/ns/archive#F> "".
+_:O3 <http://rx4rdf.sf.net/ns/archive#B> "".
+_:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
+'''
+        rdfDom = self.getModel(cStringIO.StringIO(model) )
+        def getcount(pred):
+            stmts = rdfDom.model.getStatements(predicate=pred)
+            return len(stmts)
+        
+        a='http://rx4rdf.sf.net/ns/archive#'
+        self.failUnless(getcount(a+'A') == 1)        
+        self.failUnless(getcount(a+'D') == 4)
+        self.failUnless(getcount(a+'F') == 3)
+
+        #modify the DOM and make sure the schema is updated properly
+        rdfDom.commit()
+        #remove the statement that A is a subproperty of 
+        rdfDom.model.removeStatement(
+            Statement('http://rx4rdf.sf.net/ns/archive#A', 'http://www.w3.org/2000/01/rdf-schema#subPropertyOf', 
+                    'http://rx4rdf.sf.net/ns/archive#C', OBJECT_TYPE_RESOURCE))
+        
+        self.failUnless(getcount(a+'F') == 2)
+        
+        stmt = Statement("http://rx4rdf.sf.net/ns/archive#E", "http://www.w3.org/2000/01/rdf-schema#subPropertyOf",
+                         "http://rx4rdf.sf.net/ns/archive#F", objectType=OBJECT_TYPE_RESOURCE)
+        addStatements(rdfDom, [stmt])
+        self.failUnless(getcount(a+'F') == 5)
+        
+        #now let rollback those changes and redo the queries --
+        #the results should now be the same as the first time we ran them
+        rdfDom.rollback()
+        self.failUnless(getcount(a+'F') == 3)
         
     def testDiff(self):
         self.rdfDom = self.getModel("about.rx.nt")

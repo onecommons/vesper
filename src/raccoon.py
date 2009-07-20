@@ -334,8 +334,10 @@ def action(kw, retVal) where:
             domStoreFactory = kw.get('domStoreFactory', DomStore.BasicDomStore)
             self.domStore = domStoreFactory(**kw)                        
             self.domStore.addTrigger = self.txnSvc.addHook
-            self.domStore.removeTrigger = self.txnSvc.removeHook
-            self.domStore.newResourceTrigger = self.txnSvc.newResourceHook
+            self.domStore.removeTrigger = self.txnSvc.removeHook            
+            if 'before-new' in self.actions:
+                #newResourceHook is optional since it's expensive
+                self.domStore.newResourceTrigger = self.txnSvc.newResourceHook
             
             self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
             initConstants( ['globalRequestVars'], [])

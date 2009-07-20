@@ -1508,6 +1508,7 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
         self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
         if isinstance(self.schema, RxPath.Model):
             self.model = self.schema
+            self.findCompabilityStatements = False
         
     def __cmp__(self, other):
         if self is other:

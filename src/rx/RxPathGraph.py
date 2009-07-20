@@ -140,8 +140,15 @@ def contextUriForPrimaryStore(contexturi):
     return False
 
 class NamedGraphManager(RxPath.Model):
-    createCtxResource = True #XXX this is always true, should it be?
+    #: set this to false to suppress the graph manager from adding statements to the store (useful for testing)
+    createCtxResource = True 
     markLatest = True    
+
+    autocommit = property(lambda self: self.managedModel.autocommit,
+                 lambda self, set: 
+                   setattr(self.managedModel, 'autocommit', set) or
+                   setattr(self.delmodel, 'autocommit', set)
+                 )
     
     def __init__(self, addmodel, delmodel, modelUri, lastScope=None):        
         if not delmodel:
@@ -190,14 +197,14 @@ class NamedGraphManager(RxPath.Model):
             #otherwise, query the model but filter out statements 
             #that wouldn't be part of the main store
             
-            #XXX offset and limit will be wrong
+            #XXX handle offset and limit hints more efficiently
             #add order_by so that we only need to store once and can use a generator
             #for offset and limit (but that still not accurate)?
             result = self.managedModel.getStatements(subject, predicate, object,
-                                            objecttype,context,True, **hints)
+                                            objecttype,context,True)
             statements = filter(lambda s: contextUriForPrimaryStore(s.scope), result)
                           
-            if not asQuad:
+            if not asQuad or hints:
                 return RxPath.removeDupStatementsFromSortedList(statements, asQuad, **hints)
             else:
                 return statements
@@ -407,7 +414,7 @@ class NamedGraphManager(RxPath.Model):
         #XXX skip schema and entailment triggers            
         self._doRemove(self.managedModel, stmt, currentDelContext, currentTxn)
         
-    def commit(self, kw):
+    def commit(self, **kw):
         if self.delmodel != self.managedModel:
             self.delmodel.commit(**kw)
          
