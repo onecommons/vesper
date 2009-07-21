@@ -154,11 +154,8 @@ class RDFDomTestCase(unittest.TestCase):
             data = parseRDFFromString(source.read(),'test:', type)
 
         model = TransactionTyrantModel('localhost')
-        for x in data:
-            print x
-            model.addStatements(Statement(*x))
+        model.addStatements(data)
         return model
-
 
     def getModel(self, source, type='nt'):
         model = self.loadModel(source, type)
@@ -235,7 +232,8 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
             #print stmts
             #print 'newstmts'            
             #print newstmts
-            self.failUnless(stmts == newstmts)
+            d = difflib.SequenceMatcher(None, stmts, newstmts )
+            self.failUnless(stmts == newstmts, 'statements differ for %s: %s' % (stype, d.get_opcodes()) )
 
     def testSubtype(self):        
         model = '''_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.
@@ -278,7 +276,6 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         rdfDom = self.getModel(cStringIO.StringIO(model) )
         def getcount(pred):
             stmts = rdfDom.model.getStatements(predicate=pred)
-            print stmts
             return len(stmts)
         
         a='http://rx4rdf.sf.net/ns/archive#'
@@ -385,7 +382,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
             ['http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2'])
         self.failUnless( not statements and not nodesToRemove )
                         
-DRIVER = 'Tyrant'
+DRIVER = 'Mem'
 
 if DRIVER == '4Suite':
     from Ft.Rdf import Util
