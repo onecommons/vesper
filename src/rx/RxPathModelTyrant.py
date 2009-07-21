@@ -10,11 +10,23 @@
 '''
 from rx.RxPathModel import *
 
+try:
+    from hashlib import md5 # python 2.5 or greater
+except ImportError:
+    from md5 import new as md5
+
 # requires version from http://github.com/ericflo/pytyrant/tree/master
 import pytyrant
 
 def make_statement(d):
     return Statement(d['subj'], d['pred'],  d['obj'], OBJECT_TYPE_LITERAL, '')
+
+def make_key(s):
+    if not isinstance(s, tuple):
+        s = tuple(s)
+    m = md5()
+    m.update(str(s))
+    return m.hexdigest()
 
 class TyrantModel(Model):
     def __init__(self, host, port=1978):
@@ -57,14 +69,16 @@ class TyrantModel(Model):
     def addStatement(self, statement):
         '''add the specified statement to the model'''
         #print "adding:", statement
-        assert statement.subject
-        self.tyrant[statement.subject] = {'subj':statement.subject,
-                                          'pred':statement.predicate,
-                                          'obj':statement.object}
+        key = make_key(statement)
+        self.tyrant[key] = {'subj':statement.subject,
+                            'pred':statement.predicate,
+                            'obj':statement.object}
 
     def removeStatement(self, statement):
         '''removes the statement'''
-        del self.tyrant[statement.subject]
+        #print "removing:", statement
+        key = make_key(statement)
+        del self.tyrant[key]
 
 class TransactionTyrantModel(TransactionModel, TyrantModel):
     '''

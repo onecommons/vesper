@@ -82,6 +82,23 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         x = model.getStatements(subject=name)
         self.assertEqual(len(x), 0) # object is gone
 
+    def testSetBehavior(self):
+        model = self.getTyrantModel()
+
+        s1 = Statement("sky", "is", "blue")
+        s2 = Statement("sky", "has", "clouds")
+        s3 = Statement("ocean", "is", "blue")
+
+        self.assertEqual(len(model.getStatements()), 0)
+        model.addStatement(s1)
+        self.assertEqual(len(model.getStatements()), 1)
+        model.addStatement(s1)
+        self.assertEqual(len(model.getStatements()), 1)
+        model.addStatement(s2) # new statement with same subject
+        self.assertEqual(len(model.getStatements()), 2)
+        model.addStatement(s3) # new statement with same predicate & object
+        self.assertEqual(len(model.getStatements()), 3)
+
     """
     def testReturnsStatements(self):
         # XXX todo
