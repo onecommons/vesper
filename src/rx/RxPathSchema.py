@@ -177,19 +177,19 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             subTypes = map.get(wantType, [wantType])            
             return testType in subTypes
             
-    def _makeClosure(self, map):
+    def _makeClosure(self, aMap):
         #for each sub class, get its subclasses and append them
         def close(done, super, subs):
-            done[super] = dict([(x,1) for x in subs]) #a set really
+            done[super] = set(subs) 
             for sub in subs:                
                 if not sub in done:                    
-                    close(done, sub, map[sub])                
+                    close(done, sub, aMap[sub])                
                 done[super].update(done[sub])
 
         closure = {}           
-        for key, value in map.items():
+        for key, value in aMap.items():
             close(closure, key, value)
-        return dict([(x, y.keys()) for x, y in closure.items()])
+        return dict([(x, list(y)) for x, y in closure.items()])
 
     def _addTypeStatement(self, stmt, addStmt=True):    
         if addStmt:
@@ -381,6 +381,8 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
         if typesChanged:
             self.currentSubTypes = self._makeClosure(self.currentSubTypes)
+            #XXX if self.saveSubtypes: 
+            #    self.saveSubtypes()   XXX                
             if self.autocommit:
                 self.subtypes = self.currentSubTypes
             
@@ -524,6 +526,36 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             self.subPropPreds  = self.currentSubProperties[self.SUBPROPOF]
             self.typePreds     = self.currentSubProperties[RDF_MS_BASE+u'type']        
         
+
+    def saveSubtypes(self):
+        #XXX make this work  
+        adds, removes = diff(self.supertypes, self.currentSubTypes)
+        
+        for supertype, subtypes in adds.items():
+            resources = set(stmt[0] for stmt in 
+                        self.model.getstatements(predicate=supertype))
+            for res in resources:
+                
+                for subtype in subtypes:
+                    if subtype == supertype:
+                        continue
+                    typeStmt = Statement(res,
+                            RDF_MS_BASE+u'type', subtype,
+                            OBJECT_TYPE_RESOURCE)
+                    self._addEntailment(typeStmt)                        
+
+        for supertype, subtypes in removals.items():
+            resources = set(stmt[0] for stmt in 
+                        self.entailments.getstatements(predicate=supertype))
+
+            for res in resources:                
+                for subtype in subtypes:
+                    if subtype == supertype:
+                        continue
+                    typeStmt = Statement(res,
+                            RDF_MS_BASE+u'type', subtype,
+                            OBJECT_TYPE_RESOURCE)
+                    self._removeEntailment(typeStmt)                        
     
     def _beginTxn(self): 
         if not self.autocommit and not self.inTransaction:

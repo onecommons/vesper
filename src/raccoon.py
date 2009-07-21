@@ -332,7 +332,7 @@ def action(kw, retVal) where:
 
             self.txnSvc = transactions.RaccoonTransactionService(self)
             domStoreFactory = kw.get('domStoreFactory', DomStore.BasicDomStore)
-            self.domStore = domStoreFactory(**kw)                        
+            self.domStore = domStoreFactory(self, **kw)                        
             self.domStore.addTrigger = self.txnSvc.addHook
             self.domStore.removeTrigger = self.txnSvc.removeHook            
             if 'before-new' in self.actions:
@@ -396,7 +396,7 @@ def action(kw, retVal) where:
                 self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
                                                      digestKey=True)
                 
-                self.domStore.loadDom(self)
+                self.domStore.loadDom()
             finally:
                 lock.release()
             self.runActions('load-model')

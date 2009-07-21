@@ -32,10 +32,10 @@ class DomStore(transactions.TransactionParticipant):
     removeTrigger = None
     newResourceTrigger = None
 
-    def __init__(**kw):
+    def __init__(requestProcessor, **kw):
         pass
     
-    def loadDom(self,requestProcessor, location, defaultDOM):
+    def loadDom(self, location, defaultDOM):
         ''' 
         Load the DOM located at location (a filepath).
         If location does not exist create a new DOM that is a copy of 
@@ -79,7 +79,7 @@ class DomStore(transactions.TransactionParticipant):
             
 class BasicDomStore(DomStore):
 
-    def __init__(self, modelFactory=RxPath.IncrementalNTriplesFileModel,
+    def __init__(self, requestProcessor, modelFactory=RxPath.IncrementalNTriplesFileModel,
                  schemaFactory=RxPath.defaultSchemaClass,                 
                  STORAGE_PATH ='',
                  STORAGE_TEMPLATE='',
@@ -94,6 +94,7 @@ class BasicDomStore(DomStore):
           a location (usually a local file path) and iterator of Statements
           to initialize the model if it needs to be created
         '''
+        self.requestProcessor = requestProcessor
         self.modelFactory = modelFactory
         self.versionModelFactory = versionModelFactory or modelFactory
         self.schemaFactory = schemaFactory 
@@ -104,7 +105,8 @@ class BasicDomStore(DomStore):
         self.transactionLog = transactionLog
         self.saveHistory = saveHistory
             
-    def loadDom(self, requestProcessor):        
+    def loadDom(self):        
+        requestProcessor = self.requestProcessor
         self.log = logging.getLogger("domstore." + requestProcessor.appName)
 
         normalizeSource = getattr(self.modelFactory, 'normalizeSource',
@@ -112,8 +114,7 @@ class BasicDomStore(DomStore):
         #source is the data source for the store, usually a file path
         source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
         
-        model, defaultStmts, historyModel, lastScope = self.setupHistory(
-                                                    requestProcessor, source)
+        model, defaultStmts, historyModel, lastScope = self.setupHistory(source)
         if not model:
             #setupHistory didn't initialize the store, so do it now
             #modelFactory will load the store specified by `source` or create
@@ -155,7 +156,8 @@ class BasicDomStore(DomStore):
         if isinstance(self.schema, RxPath.Model):
             self.model = self.schema
 
-    def setupHistory(self, requestProcessor, source):
+    def setupHistory(self, source):
+        requestProcessor = self.requestProcessor
         if self.saveHistory:
             #if we're going to be recording history we need a starting context uri
             from rx import RxPathGraph
@@ -225,12 +227,12 @@ class BasicDomStore(DomStore):
         if self.graphManager:
             return self.graphManager.getTxnContext() #return a contextUri
         return None
-    
-    def update(self, requestProcessor, updates):
+        
+    def add(self, updates):
         '''
         Takes a list of either statements or sjson conforming dicts
         '''
-        self.join(requestProcessor.txnSvc)
+        self.join(self.requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(updates)
         resources = set()
         newresources = []
@@ -249,19 +251,39 @@ class BasicDomStore(DomStore):
 
         self.model.addStatements(stmts)
         
-    def remove(self, requestProcessor, removals):    
+    def remove(self, removals):    
         '''
         Takes a list of either statements or sjson conforming dicts
         '''
         #XXX to remove an object you have to explicitly list all the properties to remove 
         #do we need a ways to remove an object just specifying id
-        self.join(requestProcessor.txnSvc)
+        self.join(self.requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(removals)
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
 
         self.model.removeStatements(stmts)
 
+    def update(self, replacements, removedresources, deleteprops=False):
+        '''
+        `deleteprops`: either bool
+        ''' 
+        deletepropstest = True               
+        try:
+            '' in deleteprops
+        except TypeError:
+            deletepropstest = False
+        
+        removals = []
+        for res in replacements:
+            if (deletepropstest and res in deleteprops) or deleteprops:
+               removals.extend( list(self.model.getStatements(res)) )
+            else:
+                #xxx what about lists?
+                for prop in res:
+                    removals.extend( list(self.model.getStatements(res, prop)) )
+        
+        
     def query(self, query):
         import jql
         return jql.runQuery(query, self.model)
