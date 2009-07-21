@@ -87,6 +87,8 @@ class RDFDomTestCase(unittest.TestCase):
             self.loadModel = self.loadRedlandModel
         elif DRIVER == 'Mem':
             self.loadModel = self.loadMemModel
+        elif DRIVER == 'Tyrant':
+            self.loadModel = self.loadTyrantModel
         else:
             raise "unrecognized driver: " + DRIVER
         #from rx import RxPath
@@ -137,7 +139,27 @@ class RDFDomTestCase(unittest.TestCase):
             return TransactionMemModel(parseRDFFromURI('file:'+source,type))
         else:
             return TransactionMemModel(parseRDFFromString(source.read(),'test:', type))
+
+    def loadTyrantModel(self, source, type='nt'):
+        from rx.RxPathModelTyrant import TransactionTyrantModel
         
+        if type == 'nt':
+            type = 'ntriples'
+        elif type == 'rdf':
+            type = 'rdfxml'
+
+        if isinstance(source, (str, unicode)):
+            data = parseRDFFromURI('file:'+source,type)
+        else:
+            data = parseRDFFromString(source.read(),'test:', type)
+
+        model = TransactionTyrantModel('localhost')
+        for x in data:
+            print x
+            model.addStatements(Statement(*x))
+        return model
+
+
     def getModel(self, source, type='nt'):
         model = self.loadModel(source, type)
         self.nsMap = {u'http://rx4rdf.sf.net/ns/archive#':u'arc',
@@ -256,6 +278,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         rdfDom = self.getModel(cStringIO.StringIO(model) )
         def getcount(pred):
             stmts = rdfDom.model.getStatements(predicate=pred)
+            print stmts
             return len(stmts)
         
         a='http://rx4rdf.sf.net/ns/archive#'
@@ -362,7 +385,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
             ['http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2'])
         self.failUnless( not statements and not nodesToRemove )
                         
-DRIVER = 'Mem'
+DRIVER = 'Tyrant'
 
 if DRIVER == '4Suite':
     from Ft.Rdf import Util
