@@ -19,7 +19,7 @@ except ImportError:
 import pytyrant
 
 def make_statement(d):
-    return Statement(d['subj'], d['pred'],  d['obj'], OBJECT_TYPE_LITERAL, '')
+    return Statement(d['subj'], d['pred'],  d['obj'], d['type'], d['scope'])
 
 def make_key(s):
     if not isinstance(s, tuple):
@@ -47,9 +47,6 @@ class TyrantModel(Model):
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.
         """
-        #assert not asQuad
-        #assert not context
-
         q = {}
         if subject != None:
             q['subj__streq'] = subject
@@ -57,9 +54,17 @@ class TyrantModel(Model):
             q['pred__streq'] = predicate
         if object != None:
             q['obj__streq'] = object
+        if objecttype != None:
+            q['type__streq'] = objecttype
+        if context != None:
+            q['context_streq'] = context
 
         try:
-            return [make_statement(x) for x in self.tyrant.search.filter(**q).items()]
+            tmp = [make_statement(x) for x in self.tyrant.search.filter(**q).items()]
+            tmp.sort() # XXX make tokyo tyrant do this
+            return removeDupStatementsFromSortedList(tmp, asQuad, **(hints or {}))
+            #return tmp
+
         except Exception, e:
             # XXX items() throws an exception on empty results from filter
             #print "exception!"
@@ -72,7 +77,9 @@ class TyrantModel(Model):
         key = make_key(statement)
         self.tyrant[key] = {'subj':statement.subject,
                             'pred':statement.predicate,
-                            'obj':statement.object}
+                            'obj':statement.object,
+                            'type':statement.objectType,
+                            'scope':statement.scope}
 
     def removeStatement(self, statement):
         '''removes the statement'''

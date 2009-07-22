@@ -55,6 +55,7 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         self.stopTyrantServer()
 
     def testStore(self):
+        "basic storage test"
         model = self.getTyrantModel()
 
         name = random_name(12)
@@ -68,6 +69,7 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         self.assertEqual(len(x), 1) # object is there now
 
     def testRemove(self):
+        "basic removal test"
         model = self.getTyrantModel()
 
         name = random_name(12)
@@ -83,6 +85,7 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         self.assertEqual(len(x), 0) # object is gone
 
     def testSetBehavior(self):
+        "confirm model behaves as a set"
         model = self.getTyrantModel()
 
         s1 = Statement("sky", "is", "blue")
@@ -98,6 +101,17 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         self.assertEqual(len(model.getStatements()), 2)
         model.addStatement(s3) # new statement with same predicate & object
         self.assertEqual(len(model.getStatements()), 3)
+
+    def testQuads(self):
+        model = self.getTyrantModel()
+
+        model.addStatements([Statement("one", "two", "three", "fake", "100"),
+                             Statement("one", "two", "three", "fake", "101"),
+                             Statement("one", "two", "three", "fake", "102")])
+
+        self.assertEqual(len(model.getStatements(asQuad=True)), 3)
+        self.assertEqual(len(model.getStatements(asQuad=False)), 1)
+
 
     """
     def testReturnsStatements(self):
