@@ -58,31 +58,36 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         "basic storage test"
         model = self.getTyrantModel()
 
-        name = random_name(12)
-        x = model.getStatements(subject=name)
-        self.assertEqual(len(x), 0) # object does not exist
+        # confirm a randomly created subject does not exist
+        subj = random_name(12)
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set())
 
-        stmt = Statement(name, 'pred', "obj")
-        model.addStatement(stmt)
+        # add a new statement and confirm the search succeeds
+        s1 = Statement(subj, 'pred', "obj")
+        model.addStatement(s1)
 
-        x = model.getStatements(subject=name)
-        self.assertEqual(len(x), 1) # object is there now
+        r2 = model.getStatements(subject=subj)
+        self.assertEqual(set(r2), set([s1]))
 
     def testRemove(self):
         "basic removal test"
         model = self.getTyrantModel()
 
-        name = random_name(12)
-        stmt = Statement(name, random_name(24), random_name(12))
-        model.addStatement(stmt)
+        # set up the model with one randomly named statement
+        subj = random_name(12)
+        s1 = Statement(subj, random_name(24), random_name(12))
+        model.addStatement(s1)
 
-        x = model.getStatements(subject=name)
-        self.assertEqual(len(x), 1) # object exists
+        # confirm a search for the subject finds it
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1])) # object exists
 
-        model.removeStatement(stmt)
+        # remove the statement and confirm that it's gone
+        model.removeStatement(s1)
 
-        x = model.getStatements(subject=name)
-        self.assertEqual(len(x), 0) # object is gone
+        r2 = model.getStatements(subject=subj)
+        self.assertEqual(set(r2), set()) # object is gone
 
     def testSetBehavior(self):
         "confirm model behaves as a set"
@@ -92,25 +97,53 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         s2 = Statement("sky", "has", "clouds")
         s3 = Statement("ocean", "is", "blue")
 
-        self.assertEqual(len(model.getStatements()), 0)
+        # before adding anything db should be empty
+        r1 = model.getStatements()
+        self.assertEqual(set(r1), set())
+
+        # add a single statement and confirm it is returned
         model.addStatement(s1)
-        self.assertEqual(len(model.getStatements()), 1)
+
+        r2 = model.getStatements()
+        self.assertEqual(set(r2), set([s1]))
+
+        # add the same statement again & the set should be unchanged
         model.addStatement(s1)
-        self.assertEqual(len(model.getStatements()), 1)
-        model.addStatement(s2) # new statement with same subject
-        self.assertEqual(len(model.getStatements()), 2)
-        model.addStatement(s3) # new statement with same predicate & object
-        self.assertEqual(len(model.getStatements()), 3)
+        
+        r3 = model.getStatements()
+        self.assertEqual(set(r3), set([s1]))
+        
+        # add a second statement with the same subject as s1
+        model.addStatement(s2)
+        
+        r4 = model.getStatements()
+        self.assertEqual(set(r4), set([s1, s2]))
+
+        # add a third statement with same predicate & object as s1
+        model.addStatement(s3)
+
+        r5 = model.getStatements()
+        self.assertEqual(set(r5), set([s1,s2,s3]))
 
     def testQuads(self):
+        "test (somewhat confusing) quad behavior"
         model = self.getTyrantModel()
 
-        model.addStatements([Statement("one", "two", "three", "fake", "100"),
-                             Statement("one", "two", "three", "fake", "101"),
-                             Statement("one", "two", "three", "fake", "102")])
+        # add 3 identical statements with differing contexts
+        statements = [Statement("one", "two", "three", "fake", "100"),
+                      Statement("one", "two", "three", "fake", "101"),
+                      Statement("one", "two", "three", "fake", "102")]
+        model.addStatements(statements)
 
-        self.assertEqual(len(model.getStatements(asQuad=True)), 3)
-        self.assertEqual(len(model.getStatements(asQuad=False)), 1)
+        # asQuad=True should return all 3 statements
+        r1 = model.getStatements(asQuad=True)
+        self.assertEqual(set(r1), set(statements))
+
+        # asQuad=False (the default) should only return the oldest
+        expected = set()
+        expected.add(statements[0])
+        r2 = model.getStatements(asQuad=False)
+        self.assertEqual(set(r2), expected)
 
 
     """
