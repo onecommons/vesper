@@ -32,14 +32,6 @@ class TyrantModel(Model):
     def __init__(self, host, port=1978):
         self.tyrant = pytyrant.PyTableTyrant.open(host, port)
 
-    def commit(self, **kw):
-        # XXX tyrant protocol support for this?
-        pass
-
-    def rollback(self):
-        # XXX tyrant protocol support for this?
-        pass
-                
     def getStatements(self, subject=None, predicate=None, object=None,
                       objecttype=None,context=None, asQuad=False, hints=None):
         """

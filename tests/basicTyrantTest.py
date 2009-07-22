@@ -10,7 +10,7 @@ import subprocess, tempfile, os
 import string, random, shutil, time
 
 from rx.RxPath import *
-from rx.RxPathModelTyrant import TyrantModel
+from rx.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
 
 def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
@@ -47,6 +47,9 @@ class BasicTyrantModelTestCase(unittest.TestCase):
 
     def getTyrantModel(self):
         return TyrantModel('127.0.0.1', self.port)
+
+    def getTransactionTyrantModel(self):
+        return TransactionTyrantModel('127.0.0.1', self.port)
 
     def setUp(self):
         self.startTyrantServer()
@@ -145,16 +148,84 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         r2 = model.getStatements(asQuad=False)
         self.assertEqual(set(r2), expected)
 
+    def testTransactionCommitAndRollback(self):
+        "test simple commit and rollback on a single model instance"
+        model = self.getTransactionTyrantModel()
 
-    """
-    def testReturnsStatements(self):
-        # XXX todo
-        pass
+        s1 = Statement("sky", "is", "blue")
+        s2 = Statement("sky", "has", "clouds")
 
-    def testSearch(self):
-        # XXX todo
-        pass
-    """
+        # confirm that database is initially empty
+        r1 = model.getStatements()
+        self.assertEqual(set(r1), set())
+
+        # add first statement and commit, confirm it's there
+        model.addStatement(s1)
+        model.commit()
+        r2 = model.getStatements()
+        self.assertEqual(set(r2), set([s1]))
+
+        # add second statement and rollback, confirm it's not there
+        model.addStatement(s2)
+        model.rollback()
+        r3 = model.getStatements()
+        self.assertEqual(set(r3), set([s1]))
+
+
+    def testTransactionIsolationCommit(self):
+        "test commit transaction isolation across 2 models"
+        modelA = self.getTransactionTyrantModel()
+        modelB = self.getTransactionTyrantModel()
+
+        statements = [Statement("one", "equals", "one"),
+                      Statement("two", "equals", "two"),
+                      Statement("three", "equals", "three")]
+
+        # confirm models are empty
+        r1a = modelA.getStatements()
+        r1b = modelB.getStatements()
+        self.assertEqual(set(), set(r1a), set(r1b))
+
+        # add statements and confirm A sees them and B doesn't
+        modelA.addStatements(statements)
+        r2a = modelA.getStatements()
+        self.assertEqual(set(r2a), set(statements))
+        r2b = modelB.getStatements()
+        self.assertEqual(set(r2b), set())
+
+        # commit A and confirm both models see the statements
+        modelA.commit()
+        r3a = modelA.getStatements()
+        r3b = modelB.getStatements()
+        self.assertEqual(set(statements), set(r3a), set(r3b))
+
+    def testTransactionIsolationRollback(self):
+        "test rollback transaction isolation across 2 models"
+        modelA = self.getTransactionTyrantModel()
+        modelB = self.getTransactionTyrantModel()
+
+        statements = [Statement("one", "equals", "one"),
+                      Statement("two", "equals", "two"),
+                      Statement("three", "equals", "three")]
+
+        # confirm models are empty
+        r1a = modelA.getStatements()
+        r1b = modelB.getStatements()
+        self.assertEqual(set(), set(r1a), set(r1b))
+
+        # add statements and confirm A sees them and B doesn't
+        modelA.addStatements(statements)
+        r2a = modelA.getStatements()
+        self.assertEqual(set(r2a), set(statements))
+        r2b = modelB.getStatements()
+        self.assertEqual(set(r2b), set())
+
+        # rollback A and confirm both models see nothing
+        modelA.rollback()
+        r3a = modelA.getStatements()
+        r3b = modelB.getStatements()
+        self.assertEqual(set(), set(r3a), set(r3b))
+
 
 if __name__ == '__main__':
     unittest.main()
