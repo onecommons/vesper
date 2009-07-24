@@ -115,12 +115,6 @@ class CurrentTxN:
     def recordAdd(self, stmt, model, newstmt):
         self.adds.setdefault((stmt,stmt.scope),[]).append(
                                 (model, newstmt) )
-        #for s in model.getStatements(*stmt[:4]):
-        #    if contextUriForPrimaryStore(s.scope):
-        #        #stmt is already in model, don't re-add
-        #        return
-        #XXX if the model is only a triplestore, 
-        ##add the statement with scope to the version history store
         model.addStatement(newstmt)        
 
     def recordRemoves(self, stmt, model, add, newstmt):
@@ -211,7 +205,6 @@ class NamedGraphManager(RxPath.Model):
         else:
             self.lastVersion = -1 #so the 1st version # will be 0
         self._currentTxn = None
-        self.specificContexts = [None]
         
     def getStatements(self, subject = None, predicate = None, object = None,
                       objecttype=None,context=None, asQuad=False, hints=None):      
@@ -219,8 +212,6 @@ class NamedGraphManager(RxPath.Model):
         
         if self.delmodel is not self.managedModel:
             #history is in separate store so no need to filter results
-            if not context and self.specificContexts[-1]:
-                context = self.specificContexts[-1]
             if contextUriForPrimaryStore(context):
                 model = self.managedModel
             else:
@@ -228,8 +219,6 @@ class NamedGraphManager(RxPath.Model):
             return model.getStatements(subject, predicate, object,
                                             objecttype,context,asQuad, **hints)
         else:
-            if not context and self.specificContexts[-1]:
-                context = self.specificContexts[-1]
             if not contextUriForPrimaryStore(context):
                 #no need for filtering, just select by this context
                 return self.managedModel.getStatements(subject, predicate, object,
@@ -276,10 +265,8 @@ class NamedGraphManager(RxPath.Model):
         return getTxnContextUri(self.modelUri, self.lastVersion)        
 
     def addStatement(self, stmt):
-        specificContext = self.specificContexts[-1]
-        
-        if specificContext:
-            return self.addStatementToContext(stmt, specificContext)
+        if stmt.scope:
+            return self.addStatementToContext(stmt)
         else:
             #make sure no scope is set
             stmt = Statement(scope='', *stmt[:4])
@@ -290,10 +277,8 @@ class NamedGraphManager(RxPath.Model):
     
     def addStatementToContext(self, stmt, specificContext):
         #see contextgm.add()
-        currentTxn = self.currentTxn
-        
-        #force stmt to the right scope
-        stmt = Statement(scope=specificContext, *stmt[:4])
+        currentTxn = self.currentTxn        
+        specificContext = stmt.scope
         
         revert = self.revertRemoveIfNecessary(stmt,currentTxn)
         if not revert:
@@ -328,9 +313,8 @@ class NamedGraphManager(RxPath.Model):
             currentTxn.recordAdd(stmt, self.delmodel,stmt)
         
     def removeStatement(self, srcstmt):
-        specificContext = self.specificContexts[-1]        
-        if specificContext:
-            return self.removeStatementFromContext(stmt, specificContext)
+        if srcstmt.scope:
+            return self.removeStatementFromContext(srcstmt)
         
         srcstmt = Statement(scope='', *srcstmt[:4]) #make sure no scope is set
         if self.revertAddIfNecessary(srcstmt,self.currentTxn):
@@ -386,15 +370,14 @@ class NamedGraphManager(RxPath.Model):
         self._doRemove(self.managedModel, srcstmt, currentDelContext,
                        self.currentTxn)
 
-    def removeStatementFromContext(self, stmt, sourceContext):
+    def removeStatementFromContext(self, stmt):
         '''
-        Remove from the current specific context only:
+        Remove from the specific context:
         * remove the statement 
         * Add the stmt to the current del4 context    
         '''
         currentTxn = self.currentTxn
-        #force stmt to the right scope
-        stmt = Statement(scope=sourceContext, *stmt[:4])
+        sourceContext = stmt.scope
 
         if self.revertAddIfNecessary(stmt,currentTxn):
             return
@@ -462,7 +445,6 @@ class NamedGraphManager(RxPath.Model):
         #commit the transaction
         self.managedModel.commit(**kw)
         self._currentTxn = None
-        self.specificContexts = [None]
 
     def initializeTxn(self):
         #increment version and set new transaction and context
@@ -492,39 +474,13 @@ class NamedGraphManager(RxPath.Model):
             self.managedModel.addStatement(stmt)
 
     def rollback(self):
-        self.specificContexts = [None]
         self.managedModel.rollback()
         if self.delmodel != self.managedModel:
             self.delmodel.rollback()
         self._currentTxn = None
-        self.specificContexts = [None]
         #note: we might still have cache 
         #keys referencing this version (transaction id)  
  
-    def pushContext(self,baseContext):
-        '''
-        Any future changes will be specific to this context
-        '''
-        if not baseContext:
-            self.specificContexts.append(None)
-            return
-        
-        assert not self.specificContexts[-1], ("pushContext() only"
-        " allowed inside a transaction context, not " +
-                              self.specificContexts[-1])
-
-        if baseContext.startswith(ORGCTX):
-            #special case to allow history to be changed
-            #this is used so we can efficiently store deltas
-            assert 0 #todo!        
-        
-        self.specificContexts.append(baseContext)
-            
-    def popContext(self):
-        lastContext = self.specificContexts.pop()
-        if not self.specificContexts:
-            self.specificContexts.append(None)
-
     def revertRemoveIfNecessary(self, stmt, currentTxn):
         #XXX visible flag is now unused and should be removed
         if (stmt,stmt.scope) in currentTxn.removes:

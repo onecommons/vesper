@@ -37,9 +37,6 @@ import logging
 #logging.basicConfig() #XXX only if logging hasn't already been set
 errorlog = logging.getLogger('parser')
 
-class JQLParseException(Exception):
-    pass
-
 class Tag(tuple):
     __slots__ = ()
 
@@ -218,7 +215,7 @@ class _ParseState(object):
     def addLabeledJoin(self, name, join):
         if join.name:
             if join.name != name:
-                raise JQLException(
+                raise QueryException(
                    "can't assign id %s, join already labeled %s"
                     % (name, join.name))
         else:
@@ -1099,7 +1096,7 @@ def makeJoinExpr(expr, parseState):
                         else:
                             #XXX ?a = ?b
                             #XXX foo = (?a or ?b) handle boolean
-                            raise JQLException('expressions like ?a = ?b not yet supported')
+                            raise QueryException('expressions like ?a = ?b not yet supported')
                     labelreference = labelname
                     child.__class__ = Constant #hack so label is treated as independant
                     if root.isIndependent():

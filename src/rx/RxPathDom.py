@@ -1798,14 +1798,6 @@ class Document(DomTree.Document, Node): #Note: DomTree.Node will always be invok
         self.subjectDict = {}
         self.revision += 1 #note that revision is also used as part of cache keys
 
-    def pushContext(self,uri):
-        if self.graphManager:
-            self.graphManager.pushContext(uri)
-
-    def popContext(self):
-        if self.graphManager:
-            self.graphManager.popContext()        
-
     def _entailmentAdd(self, stmt):
         self._entailmentChange(stmt, True)
 
