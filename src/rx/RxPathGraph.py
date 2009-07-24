@@ -115,6 +115,12 @@ class CurrentTxN:
     def recordAdd(self, stmt, model, newstmt):
         self.adds.setdefault((stmt,stmt.scope),[]).append(
                                 (model, newstmt) )
+        #for s in model.getStatements(*stmt[:4]):
+        #    if contextUriForPrimaryStore(s.scope):
+        #        #stmt is already in model, don't re-add
+        #        return
+        #XXX if the model is only a triplestore, 
+        ##add the statement with scope to the version history store
         model.addStatement(newstmt)        
 
     def recordRemoves(self, stmt, model, add, newstmt):
@@ -140,6 +146,41 @@ def contextUriForPrimaryStore(contexturi):
     return False
 
 class NamedGraphManager(RxPath.Model):
+    '''
+    operations with no context specified:
+    =======  =================                ===========
+    op       one store                        split store
+    =======  =================                ============    
+    get      filter results                   get from primary store
+             by txn context and
+             strip context from result  
+    add      add with TXN context             add unchanged to primary and      
+                                              add with TXN context to second
+    remove   1) find matches across contexts, same as one store, with step 1 
+             for each matching statement,     on second, step 2 on primary 
+             add statement using              and step 3 on second
+             ORG*context*DEL3 
+             2) remove given statement  
+             3) remove all matching statements 
+
+    operations with context specified:
+    =======  =================       ===========
+    op       one store               split store
+    =======  =================       ============    
+    get      get from store          get from second store
+    add      add unchanged and       primary: add without context 
+             add with ADD context    second: add unchanged and add with ADD context
+    remove   
+    
+    find matches with ADD*context, remove them from primary 
+    if none found find matches with ORG+ADD context in second and extract the ADD context    
+    add the statement with ORG+ADD context+DEL4 to second
+    add the statement with DEL4*context to second
+    XXX remove orginal statement from first
+    
+    XXX context resource should only be written to delmodel    
+    '''
+    
     #: set this to false to suppress the graph manager from adding statements to the store (useful for testing)
     createCtxResource = True 
     markLatest = True    
@@ -485,6 +526,7 @@ class NamedGraphManager(RxPath.Model):
             self.specificContexts.append(None)
 
     def revertRemoveIfNecessary(self, stmt, currentTxn):
+        #XXX visible flag is now unused and should be removed
         if (stmt,stmt.scope) in currentTxn.removes:
             newstmts, visible = currentTxn.removes[(stmt,stmt.scope)]
             for add, model, newstmt in newstmts:
