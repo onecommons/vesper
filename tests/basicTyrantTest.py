@@ -12,50 +12,54 @@ import string, random, shutil, time
 from rx.RxPath import *
 from rx.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
 
+def start_tyrant_server():
+    "start a local tyrant server, return a dict needed to stop & clean up"
+    # tmpdir for the datafile
+    tmpdir = tempfile.mkdtemp(dir='/tmp', prefix="rhizometest")
+    tmpfile = os.path.join(tmpdir, 'test.tct') # extension makes it a table db
+
+    port = random.randrange(9000,9999)
+    cmd = "ttserver -port %d %s" % (port, tmpfile)
+    #print cmd
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(1) # give ttserver time to start up
+    if (proc.poll() > 0): # see if the process started up correctly
+        print "error starting tyrant server:"
+        print proc.stderr.read()
+        return False
+    else:
+        #print "ttserver started as pid %d on port %d" % (proc.pid, port)
+        return {'tmpdir':tmpdir, 'port':port, 'proc':proc, }
+
+def stop_tyrant_server(data):
+    proc = data['proc']
+    if not proc.poll(): # process still alive
+        #print "waiting for tyrant server to die..."
+        proc.terminate()
+        proc.wait()
+        #print "tyrant server exited"
+    shutil.rmtree(data['tmpdir'])
+
 def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
 
 class BasicTyrantModelTestCase(unittest.TestCase):
     "Tests basic features of the tyrant model class"
 
-    def startTyrantServer(self):
-        # tmpdir for the datafile
-        self.tmpdir = tempfile.mkdtemp(dir='/tmp', prefix="rhizometest")
-        tmpfile = os.path.join(self.tmpdir, 'test.tct') # extension makes it a table db
-
-        self.port = random.randrange(9000,9999)
-        cmd = "ttserver -port %d %s" % (self.port, tmpfile)
-        #print cmd
-        self.proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(1) # give ttserver time to start up
-        if (self.proc.poll() > 0): # see if the process started up correctly
-            print "error starting tyrant server:"
-            print self.proc.stderr.read()
-            return False
-        else:
-            #print "ttserver started as pid %d on port %d" % (self.proc.pid, self.port)
-            return True
-
-    def stopTyrantServer(self):
-        if not self.proc.poll(): # process still alive
-            #print "waiting for tyrant server to die..."
-            self.proc.terminate()
-            self.proc.wait()
-            #print "tyrant server exited"
-        self.proc = None
-        shutil.rmtree(self.tmpdir)
-
     def getTyrantModel(self):
-        return TyrantModel('127.0.0.1', self.port)
+        port = self.tyrant['port']
+        return TyrantModel('127.0.0.1', port)
 
     def getTransactionTyrantModel(self):
-        return TransactionTyrantModel('127.0.0.1', self.port)
+        port = self.tyrant['port']
+        return TransactionTyrantModel('127.0.0.1', port)
 
     def setUp(self):
-        self.startTyrantServer()
+        self.tyrant = start_tyrant_server()
 
     def tearDown(self):
-        self.stopTyrantServer()
+        stop_tyrant_server(self.tyrant)
+        self.tyrant = None
 
     def testStore(self):
         "basic storage test"
