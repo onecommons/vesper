@@ -140,7 +140,18 @@ def contextUriForPrimaryStore(contexturi):
     return False
 
 class NamedGraphManager(RxPath.Model):
-    '''
+    '''           
+    split store mode:
+    
+    primary: store containing current state of data unmodified     
+    only needs to support data as used by application 
+    (e.g. only needs to be a triple-store if the application 
+    doesn't use contexts)
+        
+    secondary: contains version history, must support arbitrary quads
+    
+    single store: 
+    
     operations with no context specified:
     =======  =================                ===========
     op       one store                        split store
@@ -158,20 +169,20 @@ class NamedGraphManager(RxPath.Model):
              3) remove all matching statements 
 
     operations with context specified:
-    =======  =================       ===========
-    op       one store               split store
-    =======  =================       ============    
-    get      get from store          get from second store
-    add      add unchanged and       primary: add without context 
-             add with ADD context    second: add unchanged and add with ADD context
-    remove   
+    =======  =================               ===========
+    op       one store                       split store
+    =======  =================               ===========    
+    get      get from store                  get from second store
+    add      add with ADD*context            primary: add unchanged
+                                             second: add with ADD*context
+    remove   remove with ADD*context         primary: remove unchanged              
+             --------------------------------------------
+             for both, but in second store if split:
+             find ADD*context (extract from ORG+ADD if necessary)
+             add the statement w/ORG+ADD*context+DEL4
+             add the statement w/DEL4*context
     
-    find matches with ADD*context, remove them from primary 
-    if none found find matches with ORG+ADD context in second and extract the ADD context    
-    add the statement with ORG+ADD context+DEL4 to second
-    add the statement with DEL4*context to second
-    XXX remove orginal statement from first
-    
+    XXX remove orginal statement from first    
     XXX context resource should only be written to delmodel    
     '''
     
@@ -558,6 +569,159 @@ class NamedGraphManager(RxPath.Model):
         currentTxn.recordRemoves(stmt, self.delmodel, True,
             Statement(stmt[0],stmt[1],stmt[2],stmt[3], currentDelContext))
 
+    ###### revision querying methods #############
+    
+    def _getRevisions(graphManager, resourceuri):    
+        stmts = graphManager.managedModel.getStatements(subject=resourceuri, asQuad=True)        
+        delstmts = graphManager.delmodel.getStatements(
+                                                subject=resourceuri,asQuad=True)
+        #get a unique set of transaction context uris, sorted by revision order
+        import itertools
+        contexts = set([getTransactionContext(s.scope)
+                    for s in itertools.chain(stmts, delstmts)
+                    if getTransactionContext(s.scope)]) #XXX: what about s.scope == ''?
+        contexts = list(contexts)
+        contexts.sort(comparecontextversion)
+        return contexts, [s for s in stmts if s.scope], delstmts
+    
+    def isModifiedAfter(graphManager, contextUri, resources, excludeCurrent = True):
+        '''
+        return a list of resources that were modified after the given context.
+        '''    
+        currentContextUri = graphManager.getTxnContext()
+        contexts = [] 
+        for resUri in resources:
+            rescontexts = graphManager._getRevisions(resUri)[0]
+            if rescontexts:
+                latestContext = rescontexts.pop()
+                if excludeCurrent:              
+                    #don't include the current context in the comparison
+                    cmpcurrent = comparecontextversion(currentContextUri, 
+                    latestContext)
+                    assert cmpcurrent >= 0, 'context created after current context!?'
+                    if cmpcurrent == 0:
+                        if not rescontexts:
+                            continue
+                        latestContext = rescontexts.pop()
+                contexts.append((latestContext, resUri))
+        if not contexts:
+            return []
+        contexts.sort(lambda x, y: comparecontextversion(x[0],y[0]))
+        #include resources that were modified after the given context
+        return [resUri for latestContext, resUri in contexts
+                  if comparecontextversion(contextUri, latestContext) < 0]
+              
+    def getRevisionContexts(graphManager, resuri):
+        '''
+        return a list of transaction contexts that modified the given resource
+        '''
+        contexts, addstmts, removestmts = graphManager._getRevisions(resuri)
+        contexts.sort(cmp=comparecontextversion)
+        return contexts  
+        
+    def getRevisionStmts(graphManager, subjectUri, revision):
+        '''
+        Return the statements visible at the given revision 
+        for the specified resource.
+        
+        revision: 0-based revision number
+        '''
+        contexts, addstmts, removestmts = graphManager._getRevisions(subjectUri)        
+    
+        rev2Context = dict( [ (x[1],x[0]) for x in enumerate(contexts)] )
+    
+        #include every add stmt whose context <= revision    
+        stmts = [s for s in addstmts 
+                    if rev2Context[getTransactionContext(s.scope)] <= revision]    
+        
+        #include every deleted stmt whose original context <= revision 
+        #and whose deletion context > revision        
+        stmts.extend([s for s in removestmts if s.scope.startswith(ORGCTX)                                
+            and rev2Context[
+                getTransactionContext(s.scope)
+                ] <= revision 
+            and rev2Context[
+                s.scope[len(ORGCTX):].split(';;')[-1][len(DELCTX):]
+                ] > revision])
+    
+        return stmts
+    
+    def _getContextRevisions(graphManager, srcContext):
+        model = graphManager.managedModel
+        delmodel = graphManager.delmodel
+    
+        #find the txn contexts with changes to the srcContext
+        addchangecontexts = [s.subject for s in model.getStatements(
+            object=srcContext,
+            predicate='http://rx4rdf.sf.net/ns/archive#applies-to',asQuad=True)]
+        #todo: this is redundent if model and delmodel are the same:    
+        delchangecontexts = [s.subject for s in delmodel.getStatements(
+            object=srcContext,
+            predicate='http://rx4rdf.sf.net/ns/archive#applies-to',asQuad=True)]
+        del3changecontexts = [s.subject for s in delmodel.getStatements(
+            object=srcContext,
+            predicate='http://rx4rdf.sf.net/ns/archive#applies-to-all-including',
+            asQuad=True)]
+    
+        #get a unique set of transaction context uris, sorted by revision order
+        txns = {}
+        for ctx in addchangecontexts:
+            txns.setdefault(getTransactionContext(ctx), []).append(ctx)
+        for ctx in delchangecontexts:
+            txns.setdefault(getTransactionContext(ctx), []).append(ctx)
+        for ctx in del3changecontexts:
+            txns.setdefault(getTransactionContext(ctx), []).append(ctx)
+        txncontexts = txns.keys()
+        txncontexts.sort(comparecontextversion)
+        return txncontexts, txns
+      
+    def showContextRevision(graphManager, srcContextUri, revision):
+        '''
+        Return the statements visible at the given revision 
+        for the specified context.
+        
+        revision: 0-based revision number
+        '''
+        model = graphManager.managedModel
+        delmodel = graphManager.delmodel
+        
+        txncontexts, txns = graphManager._getContextRevisions(srcContextUri)
+    
+        stmts = set()
+        delstmts = set()
+        for rev, txnctx in enumerate(txncontexts):
+            if rev > revision:
+                break
+            for ctx in txns[txnctx]:
+                if ctx.startswith(ADDCTX):
+                    addstmts = set([s for s in model.getStatements(context=ctx) 
+                        if s.subject != ctx])
+                    stmts += addstmts
+                    delstmts -= addstmts
+                elif ctx.startswith(DELCTX):
+                    globaldelstmts = set([s for s in 
+                        delmodel.getStatements(context=ctx) if s.subject != ctx])
+                    #re-add these if not also removed by del4
+                    globaldelstmts -= delstmts
+                    stmts += globaldelstmts
+                elif ctx.startswith(DEL4CTX):
+                    delstmts = set([s for s in 
+                        delmodel.getStatements(context=ctx) if s.subject != ctx])
+                    stmts -= delstmts
+                else:
+                    assert 0, 'unrecognized context type: ' + ctx
+                
+        return list(stmts)
+    
+    def getRevisionContextsForContext(graphManager, srcContextUri):    
+        '''
+        return a list of transaction contexts that modified the given context
+        '''
+        contexts, txns = graphManager._getContextRevisions(srcContextUri)    
+    
+        contexts.sort(cmp=comparecontextversion)
+        return contexts
+
 class DeletionModelCreator(object):
     '''
     This reconstructs the delmodel from add and remove events generated by
@@ -670,78 +834,7 @@ def getTransactionContext(contexturi):
     if index < 0:
         return '' #not a txn context (e.g. empty or context:application, etc.)
     return txnpart[index:]
-    
-def _getRevisions(graphManager, resourceuri):    
-    stmts = graphManager.model.getStatements(subject=resourceuri, asQuad=True)        
-    delstmts = graphManager.delmodel.getStatements(
-                                            subject=resourceuri,asQuad=True)
-    #get a unique set of transaction context uris, sorted by revision order
-    import itertools
-    contexts = set([getTransactionContext(s.scope)
-                for s in itertools.chain(stmts, delstmts)
-                if getTransactionContext(s.scope)]) #XXX: what about s.scope == ''?
-    contexts = list(contexts)
-    contexts.sort(comparecontextversion)
-    return contexts, [s for s in stmts if s.scope], delstmts
-
-def isModifiedAfter(graphManager, contextUri, resources, excludeCurrent = True):
-    '''
-    returns nodeset of resources that were modified after the given context.
-    '''    
-    currentContextUri = graphManager.getTxnContext()
-    contexts = [] 
-    for resUri in resources:
-        rescontexts = _getRevisions(graphManager, resUri)[0]
-        if rescontexts:
-            latestContext = rescontexts.pop()
-            if excludeCurrent:              
-                #don't include the current context in the comparison
-                cmpcurrent = comparecontextversion(currentContextUri, 
-                latestContext)
-                assert cmpcurrent >= 0, 'context created after current context!?'
-                if cmpcurrent == 0:
-                    if not rescontexts:
-                        continue
-                    latestContext = rescontexts.pop()
-            contexts.append((latestContext, resUri))
-    if not contexts:
-        return []
-    contexts.sort(lambda x, y: comparecontextversion(x[0],y[0]))
-    #include resources that were modified after the given context
-    return [resUri for latestContext, resUri in contexts
-              if comparecontextversion(contextUri, latestContext) < 0]
-          
-def getRevisionContexts(graphManager, resuri):    
-    contexts, addstmts, removestmts = _getRevisions(graphManager, resuri)
-    contexts.sort(cmp=comparecontextversion)
-    return contexts  
-    
-def _showRevision(contexts, addstmts, removestmts, revision):
-    '''revision is 0 based'''
-    #print contexts, addstmts, removestmts, revision
-    rev2Context = dict( [ (x[1],x[0]) for x in enumerate(contexts)] )
-
-    #include every add stmt whose context <= revision    
-    stmts = [s for s in addstmts 
-                if rev2Context[getTransactionContext(s.scope)] <= revision]    
-    
-    #include every deleted stmt whose original context <= revision 
-    #and whose deletion context > revision        
-    stmts.extend([s for s in removestmts if s.scope.startswith(ORGCTX)                                
-        and rev2Context[
-            getTransactionContext(s.scope)
-            ] <= revision 
-        and rev2Context[
-            s.scope[len(ORGCTX):].split(';;')[-1][len(DELCTX):]
-            ] > revision])
-    
-    return stmts
-
-def getRevisionStmts(graphManager, subjectUri, revisionNum):
-    contextsenum, addstmts, removestmts = _getRevisions(graphManager, subjectUri)        
-    stmts = _showRevision(contextsenum, addstmts, removestmts, revisionNum)
-    return stmts
-
+  
 def comparecontextversion(ctxUri1, ctxUri2):    
     assert (not ctxUri1 or ctxUri1.startswith(TXNCTX),
                     ctxUri1 + " doesn't look like a txn context URI")
@@ -766,68 +859,3 @@ def comparecontextversion(ctxUri1, ctxUri2):
 ##        if v1 != v2:
 ##            return False
 ##    return True
-
-def _getContextRevisions(model, delmodel, srcContext):
-    #find the txn contexts with changes to the srcContext
-    addchangecontexts = [s.subject for s in model.getStatements(
-        object=srcContext,
-        predicate='http://rx4rdf.sf.net/ns/archive#applies-to',asQuad=True)]
-    #todo: this is redundent if model and delmodel are the same:    
-    delchangecontexts = [s.subject for s in delmodel.getStatements(
-        object=srcContext,
-        predicate='http://rx4rdf.sf.net/ns/archive#applies-to',asQuad=True)]
-    del3changecontexts = [s.subject for s in delmodel.getStatements(
-        object=srcContext,
-        predicate='http://rx4rdf.sf.net/ns/archive#applies-to-all-including',
-        asQuad=True)]
-
-    #get a unique set of transaction context uris, sorted by revision order
-    txns = {}
-    for ctx in addchangecontexts:
-        txns.setdefault(getTransactionContext(ctx), []).append(ctx)
-    for ctx in delchangecontexts:
-        txns.setdefault(getTransactionContext(ctx), []).append(ctx)
-    for ctx in del3changecontexts:
-        txns.setdefault(getTransactionContext(ctx), []).append(ctx)
-    txncontexts = txns.keys()
-    txncontexts.sort(comparecontextversion)
-    return txncontexts, txns
-  
-def showContextRevision(graphManager, srcContextUri, revision):
-    model = graphManager.model
-    delmodel = graphManager.delmodel
-    
-    txncontexts, txns = _getContextRevisions(model, delmodel, srcContextUri)
-
-    stmts = set()
-    delstmts = set()
-    for rev, txnctx in enumerate(txncontexts):
-        if rev > revision:
-            break
-        for ctx in txns[txnctx]:
-            if ctx.startswith(ADDCTX):
-                addstmts = set([s for s in model.getStatements(context=ctx) 
-                    if s.subject != ctx])
-                stmts += addstmts
-                delstmts -= addstmts
-            elif ctx.startswith(DELCTX):
-                globaldelstmts = set([s for s in 
-                    delmodel.getStatements(context=ctx) if s.subject != ctx])
-                #re-add these if not also removed by del4
-                globaldelstmts -= delstmts
-                stmts += globaldelstmts
-            elif ctx.startswith(DEL4CTX):
-                delstmts = set([s for s in 
-                    delmodel.getStatements(context=ctx) if s.subject != ctx])
-                stmts -= delstmts
-            else:
-                assert 0, 'unrecognized context type: ' + ctx
-            
-    return list(stmts)
-
-def getRevisionContextsForContext(graphManager, srcContextUri):    
-    contexts, txns = _getContextRevisions(graphManager.model,
-                        graphManager.delmodel, srcContextUri)    
-
-    contexts.sort(cmp=comparecontextversion)
-    return contexts  
