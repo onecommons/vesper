@@ -28,6 +28,17 @@ def make_key(s):
     m.update(str(s))
     return m.hexdigest()
 
+def safe_statement(s):
+    return Statement( *(to_str(f) for f in s) )
+
+def to_str(s):
+    if isinstance(s, str):
+        return s
+    elif isinstance(s, unicode):
+        return s.encode('utf-8')
+    else:
+        return str(s)
+
 class TyrantModel(Model):
     def __init__(self, host, port=1978):
         self.tyrant = pytyrant.PyTableTyrant.open(host, port)
@@ -41,15 +52,15 @@ class TyrantModel(Model):
         """
         q = {}
         if subject != None:
-            q['subj__streq'] = subject
+            q['subj__streq'] = to_str(subject)
         if predicate != None:
-            q['pred__streq'] = predicate
+            q['pred__streq'] = to_str(predicate)
         if object != None:
-            q['obj__streq'] = object
+            q['obj__streq'] = to_str(object)
         if objecttype != None:
-            q['type__streq'] = objecttype
+            q['type__streq'] = to_str(objecttype)
         if context != None:
-            q['context_streq'] = context
+            q['context_streq'] = to_str(context)
 
         try:
             tmp = [make_statement(x) for x in self.tyrant.search.filter(**q).items()]
@@ -65,6 +76,7 @@ class TyrantModel(Model):
     
     def addStatement(self, statement):
         '''add the specified statement to the model'''
+        statement = safe_statement(statement)
         #print "adding:", statement
         key = make_key(statement)
         self.tyrant[key] = {'subj':statement.subject,
