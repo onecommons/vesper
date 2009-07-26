@@ -166,7 +166,7 @@ class BasicDomStore(DomStore):
             initCtxUri = ''
         
         #data used to initialize a new store
-        defaultStmts = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
+        defaultStmts = RxPath.parseRDFFromString(self.STORAGE_TEMPLATE, 
                         requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri) 
                 
         #if we're using a separate store to hold the change history, load it now
