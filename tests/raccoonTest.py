@@ -18,7 +18,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testMinimalApp(self):
         root = raccoon.RequestProcessor(a='testMinimalApp.py',model_uri = 'test:')
         result = root.runActions('http-request', dict(_name='foo'))
-        #print type(result), result
+        #print 'result', type(result), result
         response = "<html><body>page content.</body></html>"
         self.failUnless(response == result)
         

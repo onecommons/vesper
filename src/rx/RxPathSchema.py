@@ -610,7 +610,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         self.entailments.removeStatement(stmt)
 
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         
         if not self.findCompabilityStatements:
             return super(RDFSSchema, self).getStatements(subject,

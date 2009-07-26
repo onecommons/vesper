@@ -15,6 +15,7 @@ def RDFDoc(model, nsMap):
     modelUri =generateBnode()
     graphManager = RxPathGraph.NamedGraphManager(model, None, modelUri)
     graphManager.createCtxResource = False
+    graphManager = None
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 
@@ -175,13 +176,7 @@ class RDFDomTestCase(unittest.TestCase):
             self.tyrant = None
 
 
-    def testNtriples(self):
-        #we don't include scope as part of the Statements key
-        st1 = Statement('test:s', 'test:p', 'test:o', 'R', 'test:c')
-        st2 = Statement('test:s', 'test:p', 'test:o', 'R', '')
-        self.failUnless(st2 in [st1] and [st2].index(st1) == 0)
-        self.failUnless(st1 in {st2:1}  )
-        
+    def testNtriples(self):        
         #test character escaping 
         s1 = r'''bug: File "g:\_dev\rx4rdf\rx\Server.py", '''
         n1 = r'''_:x1f6051811c7546e0a91a09aacb664f56x142 <http://rx4rdf.sf.net/ns/archive#contents> "bug: File \"g:\\_dev\\rx4rdf\\rx\\Server.py\", ".'''
@@ -346,12 +341,39 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         return statements, nodesToRemove
 
     def testStatement(self):
+        #we do include scope as part of the Statements key        
+        st1 = Statement('test:s', 'test:p', 'test:o', 'R', 'test:c')
+        st2 = Statement('test:s', 'test:p', 'test:o', 'R', '')
+        self.failUnless(st2 not in [st1])
+        self.failUnless(st1 not in {st2:1})
+    
         self.failUnless(Statement('s', 'o', 'p') == Statement('s', 'o', 'p'))
         self.failUnless(Statement('s', 'o', 'p','L') == Statement('s', 'o', 'p'))        
-        self.failUnless(Statement('s', 'o', 'p',scope='C1') == Statement('s', 'o', 'p', scope='C2'))
-        self.failUnless(Statement('s', 'o', 'p','L','C') == Statement('s', 'o', 'p'))
-        self.failUnless(not Statement('s', 'o', 'p','L','C') != Statement('s', 'o', 'p'))
+        self.failUnless(Statement('s', 'o', 'p',scope='C1') != Statement('s', 'o', 'p', scope='C2'))
+        self.failUnless(Statement('s', 'o', 'p','L','C') != Statement('s', 'o', 'p'))
+        self.failUnless(not Statement('s', 'o', 'p','L','C') == Statement('s', 'o', 'p'))
         self.failUnless(Statement('s', 'p', 'a') < Statement('s', 'p', 'b'))
+
+    def testTriple(self):
+        #we don't include scope as part of the Triple key
+        st1 = Triple('test:s', 'test:p', 'test:o', 'R', 'test:c')
+        st2 = Triple('test:s', 'test:p', 'test:o', 'R', '')
+        self.failUnless(st2 in [st1] and [st2].index(st1) == 0)
+        self.failUnless(st1 in {st2:1}  )
+    
+        self.failUnless(Triple('s', 'o', 'p') == Statement('s', 'o', 'p'))
+        self.failUnless(Triple('s', 'o', 'p','L') == Statement('s', 'o', 'p'))        
+
+        self.failUnless(Triple('s', 'o', 'p') == Triple('s', 'o', 'p'))
+        self.failUnless(Triple('s', 'o', 'p','L') == Triple('s', 'o', 'p'))        
+
+        self.failUnless(Statement('s', 'o', 'p') == Triple('s', 'o', 'p'))
+        self.failUnless(Statement('s', 'o', 'p','L') == Triple('s', 'o', 'p'))        
+
+        self.failUnless(Triple('s', 'o', 'p',scope='C1') == Triple('s', 'o', 'p', scope='C2'))
+        self.failUnless(Triple('s', 'o', 'p','L','C') == Triple('s', 'o', 'p'))
+        self.failUnless(not Triple('s', 'o', 'p','L','C') != Triple('s', 'o', 'p'))
+        self.failUnless(Triple('s', 'p', 'a') < Triple('s', 'p', 'b'))
     
     def testMerge(self):        
         self.rdfDom = self.getModel("about.rx.nt")
@@ -375,7 +397,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         #merge in the same updateDom in again, this time there should be no changes
         statements, nodesToRemove = self._mergeAndUpdate(updateDom ,
             ['http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2'])
-
+        #pprint((statements, nodesToRemove))
         self.failUnless( not statements and not nodesToRemove )
 
         self.rdfDom = self.getModel("about.rx.nt")        

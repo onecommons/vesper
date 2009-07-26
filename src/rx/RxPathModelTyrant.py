@@ -44,7 +44,7 @@ class TyrantModel(Model):
         self.tyrant = pytyrant.PyTableTyrant.open(host, port)
 
     def getStatements(self, subject=None, predicate=None, object=None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         """
         Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is

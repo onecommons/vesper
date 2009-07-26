@@ -80,6 +80,8 @@ class Statement(tuple, BaseStatement):
     objectType = property(lambda self: self[3])
     scope =  property(lambda self: self[4])
 
+class Triple(Statement):
+
     def __hash__( self):
         #for now don't include scope
         return hash(self[:4])
@@ -119,6 +121,12 @@ class MutableStatement(list, BaseStatement):
     objectType = property(lambda self: self[3], lambda self, x: self.__setitem__(3, x))
     scope =  property(lambda self: self[4], lambda self, x: self.__setitem__(4, x))
 
+    #def append(self, o): raise TypeError("append() not allowed")
+    def extend(self, o): raise TypeError("extend() not allowed")
+    def pop(self): raise TypeError("pop() not allowed")    
+
+class MutableTriple(MutableStatement):
+
     def __eq__(self, other):
         #for now don't compare scope        
         if isinstance(other, (tuple,list)):
@@ -139,10 +147,6 @@ class MutableStatement(list, BaseStatement):
             return cmp(self[:4],other[:4])
         else:
             return False
-        
-    #def append(self, o): raise TypeError("append() not allowed")
-    def extend(self, o): raise TypeError("extend() not allowed")
-    def pop(self): raise TypeError("pop() not allowed")    
 
 class ParseException(utils.NestedException):
     def __init__(self, msg = ''):                

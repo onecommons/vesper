@@ -146,7 +146,7 @@ class Model(Tupleset):
     ### Operations ###
                        
     def getStatements(self, subject = None, predicate = None, object=None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject, predicate or object can be None, and any None slot is
         treated as a wildcard that matches any value in the model.
@@ -204,13 +204,17 @@ def getReifiedStatements(stmts):
         #else: log.warning('incomplete reified statement')
     return reifiedDict
 
-def removeDupStatementsFromSortedList(aList, asQuad=False, pred=None, 
+def removeDupStatementsFromSortedList(aList, asQuad=True, pred=None, 
                                                 limit=None, offset=None):
     def removeDups(x, y):
         if pred and not pred(y):
             return x
-        if (not x or (asQuad and x[-1][:] != y[:]) #include scope in comparison
-            or (not asQuad and x[-1] != y)): 
+        if not x:
+            x.append(y)
+        if asQuad and x[-1] != y:
+            x.append(y)
+        elif not asQuad and x[-1][:4] != y[:4]: 
+            #exclude scope from comparison
             x.append(y)
         return x
     aList = reduce(removeDups, aList, [])
@@ -237,7 +241,7 @@ class MemModel(Model):
         return len(self.by_s)
             
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         ''' 
         Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
@@ -359,7 +363,7 @@ class MultiModel(Model):
             hints['offset'] = offset
     
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.'''
@@ -416,7 +420,7 @@ class MirrorModel(Model):
             model.rollback()
                             
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         return self.models[0].getStatements(subject, predicate, object,
                                             objecttype,context, asQuad)
                      
@@ -444,7 +448,7 @@ class ViewModel(MirrorModel):
         MirrorModel.__init__(self, subset, model)
 
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):        
+                      objecttype=None,context=None, asQuad=True, hints=None):        
         return self.models[0].getStatements(subject, predicate, object,
                                             objecttype,context,asQuad)
 
@@ -503,7 +507,7 @@ class TransactionModel(object):
         return True
         
     def getStatements(self, subject = None, predicate = None, object = None,
-                      objecttype=None,context=None, asQuad=False, hints=None):
+                      objecttype=None,context=None, asQuad=True, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated asj a wildcard that matches any value in the model.'''
@@ -522,10 +526,9 @@ class TransactionModel(object):
                     try:                        
                         i = 0
                         while 1:
-                            i = statements.index(stmt, i)
-                            if not asQuad or stmt.scope == statements[i].scope:
-                                del statements[i]
-                                changed = True
+                            i = statements.index(stmt, i)                            
+                            del statements[i]
+                            changed = True
                             i+=1
                     except ValueError:
                         pass
@@ -549,13 +552,9 @@ class TransactionModel(object):
         if self.queue is None: 
             self.queue = []        
         try:
-            i = 0
-            while 1:
-                i = self.queue.index( (Removed, statement), i)
-                if self.queue[i][1].scope == statement.scope:
-                    del self.queue[i]
-                    return
-                i+=1
+            i = self.queue.index( (Removed, statement))
+            del self.queue[i]
+            return
         except ValueError:
             #print 'addingtoqueue'
             self.queue.append( (statement,) )            
@@ -567,13 +566,8 @@ class TransactionModel(object):
         if self.queue is None: 
             self.queue = []
         try:
-            i = 0
-            while 1:
-                i = self.queue.index((statement,), i)
-                if self.queue[i][0].scope == statement.scope:
-                    del self.queue[i]
-                    return
-                i+=1
+            i = self.queue.index((statement,))
+            del self.queue[i]
         except ValueError:
             self.queue.append( (Removed, statement) )
 
@@ -741,7 +735,7 @@ try:
             pass
                     
         def getStatements(self, subject=None, predicate=None, object=None,
-                          objecttype=None,context=None, asQuad=False, hints=None):
+                          objecttype=None,context=None, asQuad=True, hints=None):
             ''' Return all the statements in the model that match the given arguments.
             Any combination of subject and predicate can be None, and any None slot is
             treated as a wildcard that matches any value in the model.'''
@@ -912,7 +906,7 @@ try:
             pass
                     
         def getStatements(self, subject = None, predicate = None, object=None,
-                          objecttype=None, asQuad=False, hints=None):
+                          objecttype=None, asQuad=True, hints=None):
             ''' Return all the statements in the model that match the given arguments.
             Any combination of subject and predicate can be None, and any None slot is
             treated as a wildcard that matches any value in the model.'''

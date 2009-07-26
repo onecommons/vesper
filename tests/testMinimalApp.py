@@ -1,7 +1,7 @@
 @Action
 def testaction(kw, retval):
-    import jql
     query = "{comment:* where(label='%s')}" % kw['_name'] #XXX qnames are broken     
+    s = kw['__server__'].domStore.model
     result = list(kw['__server__'].domStore.query(query))
     #print result
         

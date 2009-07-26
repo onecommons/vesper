@@ -6,7 +6,7 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-import subprocess, tempfile, os
+import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
 from rx.RxPath import *
@@ -35,7 +35,8 @@ def stop_tyrant_server(data):
     proc = data['proc']
     if not proc.poll(): # process still alive
         #print "waiting for tyrant server to die..."
-        proc.terminate()
+        #proc.terminate() #2.6 only, so use:
+        os.kill(proc.pid, signal.SIGTERM)
         proc.wait()
         #print "tyrant server exited"
     shutil.rmtree(data['tmpdir'])
