@@ -6,10 +6,39 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-import string, random
+import subprocess, tempfile, os
+import string, random, shutil, time
 
 from rx.RxPath import *
-from rx.RxPathModelTyrant import TyrantModel
+from rx.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
+
+def start_tyrant_server():
+    "start a local tyrant server, return a dict needed to stop & clean up"
+    # tmpdir for the datafile
+    tmpdir = tempfile.mkdtemp(dir='/tmp', prefix="rhizometest")
+    tmpfile = os.path.join(tmpdir, 'test.tct') # extension makes it a table db
+
+    port = random.randrange(9000,9999)
+    cmd = "ttserver -port %d %s" % (port, tmpfile)
+    #print cmd
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    time.sleep(1) # give ttserver time to start up
+    if (proc.poll() > 0): # see if the process started up correctly
+        print "error starting tyrant server:"
+        print proc.stderr.read()
+        return False
+    else:
+        #print "ttserver started as pid %d on port %d" % (proc.pid, port)
+        return {'tmpdir':tmpdir, 'port':port, 'proc':proc, }
+
+def stop_tyrant_server(data):
+    proc = data['proc']
+    if not proc.poll(): # process still alive
+        #print "waiting for tyrant server to die..."
+        proc.terminate()
+        proc.wait()
+        #print "tyrant server exited"
+    shutil.rmtree(data['tmpdir'])
 
 def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
@@ -17,43 +46,189 @@ def random_name(length):
 class BasicTyrantModelTestCase(unittest.TestCase):
     "Tests basic features of the tyrant model class"
 
+    def getTyrantModel(self):
+        port = self.tyrant['port']
+        return TyrantModel('127.0.0.1', port)
+
+    def getTransactionTyrantModel(self):
+        port = self.tyrant['port']
+        return TransactionTyrantModel('127.0.0.1', port)
+
     def setUp(self):
-        self.tyrant = TyrantModel('127.0.0.1')
+        self.tyrant = start_tyrant_server()
 
     def tearDown(self):
-        pass
+        stop_tyrant_server(self.tyrant)
+        self.tyrant = None
 
     def testStore(self):
-        name = random_name(12)
-        x = self.tyrant.getStatements(subject=name)
-        self.assertEqual(len(x), 0) # object does not exist
+        "basic storage test"
+        model = self.getTyrantModel()
 
-        stmt = Statement(name, 'pred', "obj")
-        self.tyrant.addStatement(stmt)
+        # confirm a randomly created subject does not exist
+        subj = random_name(12)
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set())
 
-        x = self.tyrant.getStatements(subject=name)
-        self.assertEqual(len(x), 1) # object is there now
+        # add a new statement and confirm the search succeeds
+        s1 = Statement(subj, 'pred', "obj")
+        model.addStatement(s1)
+
+        r2 = model.getStatements(subject=subj)
+        self.assertEqual(set(r2), set([s1]))
 
     def testRemove(self):
-        name = random_name(12)
-        stmt = Statement(name, random_name(24), random_name(12))
-        self.tyrant.addStatement(stmt)
+        "basic removal test"
+        model = self.getTyrantModel()
 
-        x = self.tyrant.getStatements(subject=name)
-        self.assertEqual(len(x), 1) # object exists
+        # set up the model with one randomly named statement
+        subj = random_name(12)
+        s1 = Statement(subj, random_name(24), random_name(12))
+        model.addStatement(s1)
 
-        self.tyrant.removeStatement(stmt)
+        # confirm a search for the subject finds it
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1])) # object exists
 
-        x = self.tyrant.getStatements(subject=name)
-        self.assertEqual(len(x), 0) # object is gone
+        # remove the statement and confirm that it's gone
+        model.removeStatement(s1)
 
-    def testReturnsStatements(self):
-        # XXX todo
-        pass
+        r2 = model.getStatements(subject=subj)
+        self.assertEqual(set(r2), set()) # object is gone
 
-    def testSearch(self):
-        # XXX todo
-        pass
+    def testSetBehavior(self):
+        "confirm model behaves as a set"
+        model = self.getTyrantModel()
+
+        s1 = Statement("sky", "is", "blue")
+        s2 = Statement("sky", "has", "clouds")
+        s3 = Statement("ocean", "is", "blue")
+
+        # before adding anything db should be empty
+        r1 = model.getStatements()
+        self.assertEqual(set(r1), set())
+
+        # add a single statement and confirm it is returned
+        model.addStatement(s1)
+
+        r2 = model.getStatements()
+        self.assertEqual(set(r2), set([s1]))
+
+        # add the same statement again & the set should be unchanged
+        model.addStatement(s1)
+        
+        r3 = model.getStatements()
+        self.assertEqual(set(r3), set([s1]))
+        
+        # add a second statement with the same subject as s1
+        model.addStatement(s2)
+        
+        r4 = model.getStatements()
+        self.assertEqual(set(r4), set([s1, s2]))
+
+        # add a third statement with same predicate & object as s1
+        model.addStatement(s3)
+
+        r5 = model.getStatements()
+        self.assertEqual(set(r5), set([s1,s2,s3]))
+
+    def testQuads(self):
+        "test (somewhat confusing) quad behavior"
+        model = self.getTyrantModel()
+
+        # add 3 identical statements with differing contexts
+        statements = [Statement("one", "two", "three", "fake", "100"),
+                      Statement("one", "two", "three", "fake", "101"),
+                      Statement("one", "two", "three", "fake", "102")]
+        model.addStatements(statements)
+
+        # asQuad=True should return all 3 statements
+        r1 = model.getStatements(asQuad=True)
+        self.assertEqual(set(r1), set(statements))
+
+        # asQuad=False (the default) should only return the oldest
+        expected = set()
+        expected.add(statements[0])
+        r2 = model.getStatements(asQuad=False)
+        self.assertEqual(set(r2), expected)
+
+    def testTransactionCommitAndRollback(self):
+        "test simple commit and rollback on a single model instance"
+        model = self.getTransactionTyrantModel()
+
+        s1 = Statement("sky", "is", "blue")
+        s2 = Statement("sky", "has", "clouds")
+
+        # confirm that database is initially empty
+        r1 = model.getStatements()
+        self.assertEqual(set(r1), set())
+
+        # add first statement and commit, confirm it's there
+        model.addStatement(s1)
+        model.commit()
+        r2 = model.getStatements()
+        self.assertEqual(set(r2), set([s1]))
+
+        # add second statement and rollback, confirm it's not there
+        model.addStatement(s2)
+        model.rollback()
+        r3 = model.getStatements()
+        self.assertEqual(set(r3), set([s1]))
+
+
+    def testTransactionIsolationCommit(self):
+        "test commit transaction isolation across 2 models"
+        modelA = self.getTransactionTyrantModel()
+        modelB = self.getTransactionTyrantModel()
+
+        statements = [Statement("one", "equals", "one"),
+                      Statement("two", "equals", "two"),
+                      Statement("three", "equals", "three")]
+
+        # confirm models are empty
+        r1a = modelA.getStatements()
+        r1b = modelB.getStatements()
+        self.assertEqual(set(), set(r1a), set(r1b))
+
+        # add statements and confirm A sees them and B doesn't
+        modelA.addStatements(statements)
+        r2a = modelA.getStatements()
+        self.assertEqual(set(r2a), set(statements))
+        r2b = modelB.getStatements()
+        self.assertEqual(set(r2b), set())
+
+        # commit A and confirm both models see the statements
+        modelA.commit()
+        r3a = modelA.getStatements()
+        r3b = modelB.getStatements()
+        self.assertEqual(set(statements), set(r3a), set(r3b))
+
+    def testTransactionIsolationRollback(self):
+        "test rollback transaction isolation across 2 models"
+        modelA = self.getTransactionTyrantModel()
+        modelB = self.getTransactionTyrantModel()
+
+        statements = [Statement("one", "equals", "one"),
+                      Statement("two", "equals", "two"),
+                      Statement("three", "equals", "three")]
+
+        # confirm models are empty
+        r1a = modelA.getStatements()
+        r1b = modelB.getStatements()
+        self.assertEqual(set(), set(r1a), set(r1b))
+
+        # add statements and confirm A sees them and B doesn't
+        modelA.addStatements(statements)
+        r2a = modelA.getStatements()
+        self.assertEqual(set(r2a), set(statements))
+        r2b = modelB.getStatements()
+        self.assertEqual(set(r2b), set())
+
+        # rollback A and confirm both models see nothing
+        modelA.rollback()
+        r3a = modelA.getStatements()
+        r3b = modelB.getStatements()
+        self.assertEqual(set(), set(r3a), set(r3b))
 
 
 if __name__ == '__main__':

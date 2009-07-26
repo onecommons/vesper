@@ -88,6 +88,8 @@ class RDFDomTestCase(unittest.TestCase):
         elif DRIVER == 'Mem':
             self.loadModel = self.loadMemModel
         elif DRIVER == 'Tyrant':
+            from basicTyrantTest import start_tyrant_server
+            self.tyrant = start_tyrant_server()
             self.loadModel = self.loadTyrantModel
         else:
             raise "unrecognized driver: " + DRIVER
@@ -153,7 +155,8 @@ class RDFDomTestCase(unittest.TestCase):
         else:
             data = parseRDFFromString(source.read(),'test:', type)
 
-        model = TransactionTyrantModel('localhost')
+        port = self.tyrant['port']
+        model = TransactionTyrantModel('localhost', port)
         model.addStatements(data)
         return model
 
@@ -166,7 +169,11 @@ class RDFDomTestCase(unittest.TestCase):
         return RDFDoc(model, self.nsMap)
        
     def tearDown(self):
-        pass
+        if DRIVER == 'Tyrant':
+            from basicTyrantTest import stop_tyrant_server
+            stop_tyrant_server(self.tyrant)
+            self.tyrant = None
+
 
     def testNtriples(self):
         #we don't include scope as part of the Statements key
