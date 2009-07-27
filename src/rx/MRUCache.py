@@ -9,7 +9,12 @@ Use per Python Software Foundation (PSF) license.
 '''
 
 from rx import utils
-import weakref, md5, repr as Repr
+import weakref, repr as Repr
+
+try:
+    from hashlib import md5 # python 2.5 or greater
+except ImportError:
+    from md5 import new as md5
 
 _defexception = utils.DynaExceptionFactory(__name__)
 _defexception('not cacheable') #define NotCacheable
@@ -149,7 +154,7 @@ class MRUCache:
         assert not (isinstance(hkey, InvalidationKey) and hkey.exclude
                     ), 'key can not be an excluded InvalidationKey'
         if self.digestKey:                   
-            digester = md5.new()
+            digester = md5()
             _getKeyDigest(hkey, invalidateKeys, digester)
             keydigest = digester.hexdigest()
         else:
