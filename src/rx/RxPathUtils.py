@@ -80,7 +80,7 @@ class Statement(tuple, BaseStatement):
     objectType = property(lambda self: self[3])
     scope =  property(lambda self: self[4])
 
-class Triple(Statement):
+class _BaseTriple(object):
 
     def __hash__( self):
         #for now don't include scope
@@ -106,7 +106,10 @@ class Triple(Statement):
             return cmp(self[:4],other[:4])
         else:
             return False
-        
+
+class Triple(_BaseTriple, Statement):
+    pass
+
 class MutableStatement(list, BaseStatement):
     __slots__ = ()
         
@@ -125,28 +128,9 @@ class MutableStatement(list, BaseStatement):
     def extend(self, o): raise TypeError("extend() not allowed")
     def pop(self): raise TypeError("pop() not allowed")    
 
-class MutableTriple(MutableStatement):
+class MutableTriple(_BaseTriple, MutableStatement):
+    pass
 
-    def __eq__(self, other):
-        #for now don't compare scope        
-        if isinstance(other, (tuple,list)):
-            return self[:4] == other[:4]
-        else:
-            return False
-
-    def __ne__(self, other):
-        #for now don't compare scope        
-        if isinstance(other, (tuple,list)):
-            return self[:4] != other[:4]
-        else:
-            return False
-    
-    def __cmp__(self, other):
-        #for now don't compare scope
-        if isinstance(other, (tuple,list)):
-            return cmp(self[:4],other[:4])
-        else:
-            return False
 
 class ParseException(utils.NestedException):
     def __init__(self, msg = ''):                
