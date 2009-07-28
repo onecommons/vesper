@@ -109,11 +109,11 @@ class BasicDomStore(DomStore):
         requestProcessor = self.requestProcessor
         self.log = logging.getLogger("domstore." + requestProcessor.appName)
 
-        normalizeSource = getattr(self.modelFactory, 'normalizeSource',
-                                                DomStore._normalizeSource)
+        #normalizeSource = getattr(self.modelFactory, 'normalizeSource',
+        #                                        DomStore._normalizeSource)
         #source is the data source for the store, usually a file path
-        source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
-        
+        #source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
+        source = self.STORAGE_PATH
         model, defaultStmts, historyModel, lastScope = self.setupHistory(source)
         if not model:
             #setupHistory didn't initialize the store, so do it now
