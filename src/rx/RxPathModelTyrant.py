@@ -15,6 +15,9 @@ try:
 except ImportError:
     from md5 import new as md5
 
+# used to detect if defaultStatements have been run
+TYRANT_METADATA_KEY = "RHIZOME_TYRANT_STORE_METADATA"
+
 # requires version from http://github.com/ericflo/pytyrant/tree/master
 import pytyrant
 
@@ -22,6 +25,7 @@ def make_statement(d):
     return Statement(d['subj'], d['pred'],  d['obj'], d['type'], d['scope'])
 
 def make_key(s):
+    "Generate a unique hex key for a Statement"
     if not isinstance(s, tuple):
         s = tuple(s)
     m = md5()
@@ -29,9 +33,11 @@ def make_key(s):
     return m.hexdigest()
 
 def safe_statement(s):
+    "Ensure all strings in a Statement are Python 'str' objects, not 'unicode'"
     return Statement( *(to_str(f) for f in s) )
 
 def to_str(s):
+    "Convert any unicode strings to utf-8 encoded 'str' types"
     if isinstance(s, str):
         return s
     elif isinstance(s, unicode):
@@ -40,8 +46,23 @@ def to_str(s):
         return str(s)
 
 class TyrantModel(Model):
-    def __init__(self, host, port=1978):
-        self.tyrant = pytyrant.PyTableTyrant.open(host, port)
+    def __init__(self, source, port=1978, defaultStatements=None):
+        # accept a host string containing a port number
+        if ':' in source:
+            (source, port) = source.split(':')
+            port = int(port)
+        print "creating a TyrantModel for %s %d" % (source, port)
+        self.tyrant = pytyrant.PyTableTyrant.open(source, port)
+        if not TYRANT_METADATA_KEY in self.tyrant:
+            import datetime, uuid
+            print "initializing new tyrant database!"
+            self.tyrant[TYRANT_METADATA_KEY] = {
+                'version':'rhizome2 0.01',
+                'uuid':str(uuid.uuid4()),
+                'created':str(datetime.datetime.now())
+            }
+            if defaultStatements:
+                self.addStatements(defaultStatements)
 
     def getStatements(self, subject=None, predicate=None, object=None,
                       objecttype=None,context=None, asQuad=True, hints=None):
@@ -97,31 +118,3 @@ class TransactionTyrantModel(TransactionModel, TyrantModel):
     (in particular, the Memory driver).
     '''
 
-"""
-class NTriplesFtModel(FtModel):
-    def __init__(self, source='', defaultStatements=(), context='', **kw):
-        self.path, stmts, format = _loadRDFFile(source,
-                                                defaultStatements,context)
-        db = Memory.GetDb('', 'default')
-        model = Ft.Rdf.Model.Model(db)
-        stmts = [statement2Ft(stmt) for stmt in stmts]
-        model.add(stmts)
-        FtModel.__init__(self, model)    
-    
-    def commit(self, **kw):
-        self.model._driver.commit()
-        outputfile = file(self.path, "w+", -1)
-        stmts = self.model._driver._statements['default'] #get statements directly, avoid copying list
-        def mapStatements(stmts):
-            #map 4Suite's tuples to Statements
-            for stmt in stmts:                    
-                if stmt[5] == OBJECT_TYPE_UNKNOWN:
-                    objectType = OBJECT_TYPE_LITERAL
-                else:
-                    objectType = stmt[5]
-                yield (stmt[0], stmt[1], stmt[2], objectType, stmt[3])
-        writeTriples(mapStatements(stmts), outputfile)
-        outputfile.close()
-
-class IncrementalNTriplesFtModel(TransactionModel, _IncrementalNTriplesFileModelBase, NTriplesFtModel): pass
-"""
