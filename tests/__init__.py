@@ -8,13 +8,14 @@ __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest',
   'sjsonTest', 'jqlTest'] 
 
 import unittest
+_runner = unittest.TextTestRunner()
+
 class TestProgram(unittest.TestProgram):
-    def runTests(self):
-        if self.testRunner is None:
-            self.testRunner = unittest.TextTestRunner(verbosity=self.verbosity)
-        result = self.testRunner.run(self.test)                
+
+    def runTests(self):            
+        result = _runner.run(self.test)
         #sys.exit(not result.wasSuccessful()) #we don't want to exit!
-    
+
 if __name__ == '__main__':    
     for modname in __all__:
         print 'testing', modname
