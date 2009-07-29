@@ -103,7 +103,8 @@ class NamedGraphManager(RxPath.Model):
     
     #: set this to false to suppress the graph manager from adding statements to the store (useful for testing)
     createCtxResource = True 
-    markLatest = True    
+    markLatest = True
+    lastLatest = None
 
     autocommit = property(lambda self: self.managedModel.autocommit,
         lambda self, set:
@@ -153,7 +154,7 @@ class NamedGraphManager(RxPath.Model):
 
         if not context:
             stmts = self.managedModel.getStatements(subject, predicate, object,
-                objecttype, context, asQuad, ** hints)
+                objecttype, context, asQuad, **hints)
             if context is None and self.revisionModel is self.managedModel:
                 #using single model and searching across all contexts, 
                 #so we need to filter out TXN contexts  
@@ -162,7 +163,7 @@ class NamedGraphManager(RxPath.Model):
                 if not asQuad or hints:
                     stmts.sort()
                     stmts = RxPath.removeDupStatementsFromSortedList(stmts, 
-                        asQuad, ** hints)
+                        asQuad, **hints)
             return stmts
         else:
             if self.isContextForPrimaryStore(context):
@@ -176,7 +177,7 @@ class NamedGraphManager(RxPath.Model):
                     context = None
 
             return model.getStatements(subject, predicate, object,
-                objecttype, context, asQuad, ** hints)
+                objecttype, context, asQuad, **hints)
          
     @property
     def currentTxn(self):
@@ -191,13 +192,16 @@ class NamedGraphManager(RxPath.Model):
         if self.markLatest:
             oldLatest = self.getStatements(predicate=CTX_NS + 'latest')
             if oldLatest:
+                self.lastLatest = oldLatest[0]
                 lastScope = oldLatest[0].subject
                 parts = lastScope.split(';')
                 #context urls will always start with a txn context,
                 #with the version after the first ;
                 #assert int(parts[1])                
                 self.lastVersion = int(parts[1]) + 1
-                self.revisionModel.removeStatement(oldLatest[0])
+            else:
+                self.lastLatest = None
+                self.lastVersion = 0
         else:
             self.lastVersion += 1
 
@@ -227,7 +231,7 @@ class NamedGraphManager(RxPath.Model):
         scope = srcstmt.scope
         if not self.isContextForPrimaryStore(scope):
             if isTransactionContext(scope):
-                raise RuntimeError("can't directly add to context:"+scope)
+                raise RuntimeError("can't directly add scope: "+scope)
             stmt = Statement(scope='', *srcstmt[:4])
             if self.managedModel.getStatements(*stmt):
                 #already exists, so don't re-add
@@ -263,7 +267,7 @@ class NamedGraphManager(RxPath.Model):
             removeStmt = srcstmt
         else:
             if isTransactionContext(srcstmt.scope):
-                raise RuntimeError("can't directly remove from context:"+srcstmt.scope)
+                raise RuntimeError("can't directly remove with scope: "+srcstmt.scope)
             #if the scope isn't intended for the primary store
             #we assume there might be multiple statements with different scopes
             #that map to the triple in the primary store
@@ -285,7 +289,7 @@ class NamedGraphManager(RxPath.Model):
                 else:
                     if self.revisionModel is not self.managedModel:
                         #should only encounter this in single model mode 
-                        raise RuntimeException('unexpected statement: %s' % s)
+                        raise RuntimeError('unexpected statement: %s' % s)
             
             if adds == 1: #len(adds) == 1:
                 #last one in the primary model, so delete it
@@ -298,7 +302,7 @@ class NamedGraphManager(RxPath.Model):
         self.revisionModel.addStatement(delStmt)
         if removeStmt:
             self.managedModel.removeStatement(removeStmt)
-        self.currentTxn.removes[srcstmt] = (delStmt, removeStmt)
+        self.currentTxn.removes[srcstmt] = (removeStmt, delStmt)
 
     def commit(self, ** kw):
         self._finishCtxResource()
@@ -327,6 +331,8 @@ class NamedGraphManager(RxPath.Model):
                 CTX_NS + 'TransactionContext', OBJECT_TYPE_RESOURCE, txnContext)
             )
         if self.markLatest:
+            if self.lastLatest:
+                self.revisionModel.removeStatement(self.lastLatest)
             self.revisionModel.addStatement(
                 Statement(txnContext, CTX_NS + 'latest',
                     unicode(self.lastVersion), OBJECT_TYPE_LITERAL, txnContext)
@@ -486,7 +492,7 @@ class NamedGraphManager(RxPath.Model):
         
         revision: 0-based revision number
         '''
-        delmodel = self.revisionModel
+        model = self.revisionModel
         txncontexts = self.getRevisionContextsForContext(srcContextUri)
     
         stmts = set()        
@@ -495,7 +501,7 @@ class NamedGraphManager(RxPath.Model):
                 break
 
             ctxstmts = set([Triple(s) for s in
-                delmodel.getStatements(context=ctx) if s.subject != ctx])
+                model.getStatements(context=ctx) if s.subject != ctx])
 
             if ctx.startswith(ADDCTX):
                 stmts += ctxstmts
@@ -508,14 +514,14 @@ class NamedGraphManager(RxPath.Model):
 
 class DeletionModelCreator(object):
     '''
-    This reconstructs the delmodel from add and remove events generated by
+    This reconstructs the revision model from add and remove events generated by
     loading a NTriples transaction log (see NTriples2Statements)
     '''
     doUpgrade = False 
 
-    def __init__(self, delmodel):
+    def __init__(self, model):
         self.currRemovesForContext = {}
-        self.revisionModel = delmodel
+        self.revisionModel = model
         self.lastScope = None
 
     def _upgradeScope(self, scope):
