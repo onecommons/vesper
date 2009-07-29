@@ -20,6 +20,11 @@ try:
 except ImportError:
     import StringIO
 
+try:
+    from hashlib import md5 # python 2.5 or greater
+except ImportError:
+    from md5 import new as md5
+
 import logging
 DEFAULT_LOGLEVEL = logging.INFO
 
@@ -668,8 +673,7 @@ class HTTPRequestProcessor(RequestProcessor):
                     resultHash = kw['_responseHeaders'].get('etag')
                     #if the app already set the etag use that value instead
                     if resultHash is None and isinstance(result, str):
-                        import md5
-                        resultHash = '"' + md5.new(result).hexdigest() + '"'
+                        resultHash = '"' + md5(result).hexdigest() + '"'
                         kw['_responseHeaders']['etag'] = resultHash
                     etags = kw['_environ'].get('HTTP_IF_NONE_MATCH')
                     if etags and resultHash in [x.strip() for x in etags.split(',')]:
