@@ -51,14 +51,14 @@ class TyrantModel(Model):
         if ':' in source:
             (source, port) = source.split(':')
             port = int(port)
-        print "creating a TyrantModel for %s %d" % (source, port)
+        #print "creating a TyrantModel for %s %d" % (source, port)
         self.tyrant = pytyrant.PyTableTyrant.open(source, port)
         if not TYRANT_METADATA_KEY in self.tyrant:
             import datetime, uuid
-            print "initializing new tyrant database!"
+            #print "initializing new tyrant database!"
             self.tyrant[TYRANT_METADATA_KEY] = {
                 'version':'rhizome2 0.01',
-                'uuid':str(uuid.uuid4()),
+                'uuid':str(uuid.uuid4()), # XXX not python 2.4 safe!
                 'created':str(datetime.datetime.now())
             }
             if defaultStatements:
@@ -74,27 +74,45 @@ class TyrantModel(Model):
         q = {}
         if subject != None:
             q['subj__streq'] = to_str(subject)
+        else:
+            q['subj__strbw'] = ''
+        
         if predicate != None:
             q['pred__streq'] = to_str(predicate)
+        else:
+            q['pred__strbw'] = ''
+        
         if object != None:
             q['obj__streq'] = to_str(object)
+        else:
+            q['obj__strbw'] = ''
+        
         if objecttype != None:
             q['type__streq'] = to_str(objecttype)
+        else:
+            q['type__strbw'] = ''
+        
         if context != None:
-            q['context_streq'] = to_str(context)
-
-        try:
-            tmp = [make_statement(x) for x in self.tyrant.search.filter(**q).items()]
-            tmp.sort() # XXX make tokyo tyrant do this
-            return removeDupStatementsFromSortedList(tmp, asQuad, **(hints or {}))
-            #return tmp
-
-        except Exception, e:
-            # XXX items() throws an exception on empty results from filter
-            #print "exception!"
-            #print e
+            q['scope__streq'] = to_str(context)
+        else:
+            q['scope__strbw'] = ''
+            
+        results = self.tyrant.search.filter(**q)
+        if len(results) == 0:
             return []
+        else:
+            stmts = []                    
+            for x in results.items():
+                try:
+                    stmts.append(make_statement(x))
+                except Exception:
+                    #print "exception creating statement from:", x
+                    pass
+
+            stmts.sort() # XXX make tokyo tyrant do this
+            return removeDupStatementsFromSortedList(stmts, asQuad, **(hints or {}))
     
+
     def addStatement(self, statement):
         '''add the specified statement to the model'''
         statement = safe_statement(statement)
