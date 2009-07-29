@@ -13,9 +13,7 @@ from rx.RxPath import *
 def RDFDoc(model, nsMap):
     from rx import RxPathGraph
     modelUri =generateBnode()
-    graphManager = RxPathGraph.NamedGraphManager(model, None, modelUri)
-    graphManager.createCtxResource = False
-    graphManager = None
+    graphManager = RxPathGraph.NamedGraphManager(model, TransactionMemModel(), modelUri)
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 
@@ -397,7 +395,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         #merge in the same updateDom in again, this time there should be no changes
         statements, nodesToRemove = self._mergeAndUpdate(updateDom ,
             ['http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2'])
-        #pprint((statements, nodesToRemove))
+        pprint((statements, nodesToRemove))
         self.failUnless( not statements and not nodesToRemove )
 
         self.rdfDom = self.getModel("about.rx.nt")        

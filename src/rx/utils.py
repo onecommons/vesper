@@ -389,13 +389,6 @@ def walkDir(path, fileFunc, *funcArgs, **kw):
         del kw['dirFunc']
         return dirFunc(path, lambda *args, **kw: _walkDir(path, recurse, args, kw), *funcArgs, **kw)
 
-def execcmd(cmdline, successVal = None):
-    stdout = os.popen(cmdline)
-    val = stdout.read()
-    err = stdout.close()        
-    assert err == successVal, cmdline + " returned an error: " + str(err) + val#todo error handling
-    return val
-
 class Hasher:
     def __init__(self):                         
         self.sha = sha1()

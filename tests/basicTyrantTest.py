@@ -49,11 +49,17 @@ class BasicTyrantModelTestCase(unittest.TestCase):
 
     def getTyrantModel(self):
         port = self.tyrant['port']
-        return TyrantModel('127.0.0.1', port)
+        model = TyrantModel('127.0.0.1', port)
+        from rx import RxPath, RxPathGraph
+        modelUri = RxPath.generateBnode()
+        return RxPathGraph.NamedGraphManager(model, RxPath.TransactionMemModel(), modelUri)
 
     def getTransactionTyrantModel(self):
         port = self.tyrant['port']
-        return TransactionTyrantModel('127.0.0.1', port)
+        model = TransactionTyrantModel('127.0.0.1', port)
+        from rx import RxPath, RxPathGraph
+        modelUri = RxPath.generateBnode()
+        return RxPathGraph.NamedGraphManager(model, RxPath.TransactionMemModel(), modelUri)
 
     def setUp(self):
         self.tyrant = start_tyrant_server()
@@ -175,7 +181,6 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         model.rollback()
         r3 = model.getStatements()
         self.assertEqual(set(r3), set([s1]))
-
 
     def testTransactionIsolationCommit(self):
         "test commit transaction isolation across 2 models"
