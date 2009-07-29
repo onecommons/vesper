@@ -13,9 +13,7 @@ from rx.RxPath import *
 def RDFDoc(model, nsMap):
     from rx import RxPathGraph
     modelUri =generateBnode()
-    graphManager = RxPathGraph.NamedGraphManager(model, None, modelUri)
-    graphManager.createCtxResource = False
-    graphManager = None
+    graphManager = RxPathGraph.NamedGraphManager(model, TransactionMemModel(), modelUri)
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 
@@ -334,7 +332,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         #print 'res'; pprint( (statements, nodesToRemove) )
         
         #delete the statements or whole resources from the dom:            
-        for node in nodesToRemove:
+        for node in nodesToRemove:            
             node.parentNode.removeChild(node)
         #and add the statements
         addStatements(self.rdfDom, statements)
