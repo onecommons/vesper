@@ -104,6 +104,7 @@ class TyrantModel(Model):
         # figure out slice
         start = 0
         stop = None
+        hints = hints or {}
         if 'offset' in hints:
             start = int(hints['offset'])
         if 'limit' in hints:
