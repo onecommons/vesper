@@ -103,21 +103,22 @@ class TyrantModel(Model):
             
         # figure out slice
         start = 0
-        stop = None
+        limit = -1
         hints = hints or {}
         if 'offset' in hints:
             start = int(hints['offset'])
         if 'limit' in hints:
-            stop = int(hints['limit']) + start
+            limit = int(hints['limit'])
 
         results = self.tyrant.search.filter(**q)
+            
+        if start != 0 or limit != -1:
+            # XXX probably an indication we should be using pytyrant directly instead of the tabletyrant
+            tmp = '\x00'.join(('setlimit', str(limit), str(start)))
+            results.conditions.append(tmp)
+        
         if len(results) == 0:
             return []
-            
-        if start or stop:
-            # XXX probably inefficient - should do the slice first and then
-            #     do a subsequent items() call to only retrieve those items
-            results = results.items()[slice(start,stop)]
         else:
             results = results.items()
             
