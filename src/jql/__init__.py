@@ -38,6 +38,31 @@ def runQuery(query, model):
     ast = buildAST(query)
     return evalAST(ast, model)
 
+def getResults(query, model, addChangeMap=True):
+    '''
+    returns dictionary with the following keys:
+    :`results`: the result of the query (either a list or None if the query failed)
+    :`error`: An error string if the query failed or None if it succeeded
+    :`resource`: a list describing the resources (used for track changes)
+    '''
+    #XXX this method still under construction
+    ast = buildAST(query)
+    try:
+        results = list(evalAST(ast, model))
+        response = dict(results=results, error=None)
+    except:
+        error = 'error running query' #XXX
+        response = dict(results=None, error=error)
+    if addChangeMap:
+        if not results:
+            response['resources'] = []
+        else:
+            if not instance(results[0], dict):
+                raise NotImplementedError('cant figure out addChangeMap')
+            response['resources'] = [res['id'] for res in results]
+
+    return response
+
 def buildAST(query):
     from jql import parse
     return parse.parse(query)

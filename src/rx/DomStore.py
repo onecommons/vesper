@@ -14,10 +14,10 @@ def _toStatements(contents):
     if not contents:
         return [], None
     if isinstance(contents, (list, tuple)):
-        if isinstance(contents, (tuple, BaseStatement)):
+        if isinstance(contents[0], (tuple, RxPath.BaseStatement)):
             return contents, None #looks like a list of statements
     #assume sjson:
-    sjson.tostatements(contents), contents
+    return sjson.tostatements(contents), contents
 
 class DomStore(transactions.TransactionParticipant):
     '''
@@ -177,10 +177,10 @@ class BasicDomStore(DomStore):
                     'normalizeSource', DomStore._normalizeSource)
             versionStoreSource = normalizeSource(self, requestProcessor,
                                                  self.VERSION_STORAGE_PATH)
-            delmodel = self.versionModelFactory(source=versionStoreSource,
+            revisionModel = self.versionModelFactory(source=versionStoreSource,
                                                 defaultStatements=[])
         else:
-            delmodel = None
+            revisionModel = None
 
         #open or create the model (the datastore)
         #if savehistory is on and we are loading a store that has the entire 
@@ -191,9 +191,9 @@ class BasicDomStore(DomStore):
         #on your custom modelFactory
         if self.saveHistory and getattr(
                 self.modelFactory, 'loadNtriplesIncrementally', False):
-            if not delmodel:
-                delmodel = RxPath.MemModel()
-            dmc = RxPathGraph.DeletionModelCreator(delmodel)            
+            if not revisionModel:
+                revisionModel = RxPath.TransactionMemModel()
+            dmc = RxPathGraph.DeletionModelCreator(revisionModel)
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
             lastScope = dmc.lastScope        
@@ -201,7 +201,7 @@ class BasicDomStore(DomStore):
             model = None
             lastScope = None
             
-        return model, defaultStmts, delmodel, lastScope
+        return model, defaultStmts, revisionModel, lastScope
 
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    
@@ -228,12 +228,14 @@ class BasicDomStore(DomStore):
             return self.graphManager.getTxnContext() #return a contextUri
         return None
         
-    def add(self, updates):
+    def add(self, adds):
         '''
-        Takes a list of either statements or sjson conforming dicts
+        Adds data to the store.
+
+        `adds`: A list of either statements or sjson conforming dicts
         '''
         self.join(self.requestProcessor.txnSvc)
-        stmts, jsonrep = _toStatements(updates)
+        stmts, jsonrep = _toStatements(adds)
         resources = set()
         newresources = []
         for s in stmts:
@@ -251,39 +253,101 @@ class BasicDomStore(DomStore):
 
         self.model.addStatements(stmts)
         
-    def remove(self, removals):    
+    def remove(self, removes):
         '''
-        Takes a list of either statements or sjson conforming dicts
+
+        Removes data from the store.
+        `removes`: A list of either statements or sjson conforming dicts
         '''
-        #XXX to remove an object you have to explicitly list all the properties to remove 
-        #do we need a ways to remove an object just specifying id
         self.join(self.requestProcessor.txnSvc)
-        stmts, jsonrep = _toStatements(removals)
+        stmts, jsonrep = _toStatements(removes)
+
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
 
         self.model.removeStatements(stmts)
 
-    def update(self, replacements, removedresources, deleteprops=False):
+    def update(self, updates):
         '''
-        `deleteprops`: either bool
-        ''' 
-        deletepropstest = True               
-        try:
-            '' in deleteprops
-        except TypeError:
-            deletepropstest = False
+        Update the store by either adding or replacing the property value pairs
+        given in the update, depending on whether or not the pair currently 
+        appears in the store.
+
+        See also `replace`.
+
+        `updates`: A list of either statements or sjson conforming dicts
+        '''
+        return self.updateAll(updates, [])
+
+    def replace(self, replacements):
+        '''
+        Replace the given objects in the store. Unlike `update` this method will
+        remove properties in the store that aren't specified.
+        Also, if the data contains json object and an object has no properties
+        (just an `id` property), the object will be removed.
+
+        See also `update` and `updateAll`.
+
+        `replacements`: A list of either statements or sjson conforming dicts
+        '''
+        return self.updateAll([], replacements)
+
+    def updateAll(self, update, replace, removedResources=None):
+        '''
+        Add, remove, update, or replace resources in the store.
+
+        `update`: A list of either statements or sjson conforming dicts that will
+        be processed with the same semantics as the `update` method.
         
-        removals = []
-        for res in replacements:
-            if (deletepropstest and res in deleteprops) or deleteprops:
-               removals.extend( list(self.model.getStatements(res)) )
+        `replace`: A list of either statements or sjson conforming dicts that will
+        be processed with the same semantics as the `replace` method.
+        
+        `removedResources`: A list of ids of resources that will be removed 
+        from the store.
+        '''
+        self.join(self.requestProcessor.txnSvc)
+
+        removedResources = set(removedResources or [])
+
+        updateStmts, ujsonrep = _toStatements(update)
+        replaceStmts, replaceJson = _toStatements(replace)
+        if replaceJson:
+            for o in replaceJson:
+                #the object is empty so make it for removal
+                #we need to do this here because empty objects won't show up in
+                #replaceStmts
+                if len(o) == 1:
+                    removeid = o['id']
+                    removedresources.add(removeid)
+
+        updateDom = RxPath.RxPathDOMFromStatements(updateStmts + replaceStmts)
+        srcstmts = []
+        resources = set()
+        replaceResources = set(s[0] for s in replaceStmts)
+
+        for subjectNode in updateDom.childNodes:
+            subject = subjectNode.uri
+            resources.add(subject)
+            if subject in replaceResources:
+                srcstmts.extend( self.model.getStatements(subject) )
             else:
-                #xxx what about lists?
-                for prop in res:
-                    removals.extend( list(self.model.getStatements(res, prop)) )
-        
-        
+                predicates = set(pred.stmt.predicate for pred in subjectNode.childNodes)
+                for prop in predicates:
+                    propstmts = self.model.getStatements(subject, prop)
+                    srcstmts.extend( propstmts )
+
+        srcDom = RxPath.RxPathDOMFromStatements(srcstmts)
+        newStatements, removedNodes = RxPath.mergeDOM(srcDom, updateDom, resources)
+
+        removals = []
+        if removedResources:
+            for subject in removedResources:
+                removals.extend( self.model.getStatements(subject) )
+        for node in removedNodes:
+            removals.extend( node.getModelStatements() )
+        self.remove(removals)        
+        self.add(newStatements)
+
     def query(self, query):
         import jql
         return jql.runQuery(query, self.model)

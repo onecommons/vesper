@@ -20,32 +20,32 @@ class RaccoonTestCase(unittest.TestCase):
         result = root.runActions('http-request', dict(_name='foo'))
         #print 'result', type(result), result
         response = "<html><body>page content.</body></html>"
-        self.failUnless(response == result)
+        self.assertEquals(response, result)
         
         #XXX test for InputSource
         #result = raccoon.InputSource.DefaultFactory.fromUri(
         #    'site:///foo', resolver=root.resolver).read()    
         #print type(result), repr(result), result
-        #self.failUnless(response == result)
+        self.assertEquals(response, result)
         
         result = root.runActions('http-request', dict(_name='jj'))
         #print type(result), result
-        self.failUnless( '<html><body>not found!</body></html>' == result)
+        self.assertEquals( '<html><body>not found!</body></html>', result)
 
     def testSequencerApp(self):
         root = raccoon.RequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
         result = root.runActions('http-request', dict(_name='foo'))
-        self.failUnless("<html><body>page content.</body></html>" == result)
+        self.assertEquals("<html><body>page content.</body></html>", result)
 
         root = raccoon.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
         kw = dict(_name='no such page', _responseHeaders={}, _environ={})
         result = root.handleHTTPRequest(kw)
-        self.failUnless(kw['_responseHeaders']['_status'] == "404 Not Found")
+        self.assertEquals(kw['_responseHeaders']['_status'],"404 Not Found")
 
         kw = dict(_name='/static/testfile.txt', 
             _responseHeaders=dict(_status="200 OK"), _environ={})
         result = root.handleHTTPRequest(kw)
-        self.failUnless(result.read().strip() == "test file")
+        self.assertEquals(result.read().strip(), "test file")
 
     def testErrorHandling(self):
         root = raccoon.HTTPRequestProcessor(a='testErrorHandling-config.py',model_uri = 'test:')
@@ -53,7 +53,16 @@ class RaccoonTestCase(unittest.TestCase):
                     _responseHeaders=dict(_status="200 OK"), _environ={}))
         
         response = "404 not found"
-        self.failUnless(response == result)
+        self.assertEquals(response, result)
+
+    def testUpdatesApp(self):
+        root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        result = root.runActions('http-request', dict(_name='foo'))
+        response = "<html><body>page content.</body></html>"
+        self.assertEquals(response, result)
+
+        result = root.runActions('http-request', dict(_name='jj'))        
+        self.assertEquals('<html><body>not found!</body></html>', result)
 
 if __name__ == '__main__':
     import sys    

@@ -9,7 +9,7 @@ of particular changes.
 
 It can be used for retrieving the version history of particular resources or contexts.
 It can also be used to implement distributed or optimistic transactions by 
-by providing the ability to undo or redo a transaction in the history.
+by providing the ability to create a compensating transaction in the history.
 
 * we compose contexts from several names graphs using the a:includes and a:excludes
 * add contexts: when a statement is added to a particular context (including the empty context)
@@ -154,7 +154,7 @@ class NamedGraphManager(RxPath.Model):
 
         if not context:
             stmts = self.managedModel.getStatements(subject, predicate, object,
-                objecttype, context, asQuad, **hints)
+                objecttype, context, asQuad, hints)
             if context is None and self.revisionModel is self.managedModel:
                 #using single model and searching across all contexts, 
                 #so we need to filter out TXN contexts  
@@ -599,9 +599,9 @@ def getTransactionVersion(contexturi):
     return ctxUri and int(ctxUri.split(';')[1]) or 0
 
 def comparecontextversion(ctxUri1, ctxUri2):    
-    assert (not ctxUri1 or ctxUri1.startswith(TXNCTX),
+    assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
         ctxUri1 + " doesn't look like a txn context URI")
-    assert (not ctxUri2 or ctxUri2.startswith(TXNCTX),
+    assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
         ctxUri2 + " doesn't look like a txn context URI")
     assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
     assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
