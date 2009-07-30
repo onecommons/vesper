@@ -483,11 +483,11 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream.close()
     return parseRDFFromString(contents, modelbaseuri, type, scope, options)
      
-def RxPathDOMFromStatements(statements, uri2prefixMap, uri=None,schemaClass=None):    
+def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass=None):
     from rx import RxPath, RxPathSchema
     model = RxPath.MemModel(statements)    
     #default to no inferencing:
-    return RxPath.createDOM(model, uri2prefixMap, modelUri=uri,
+    return RxPath.createDOM(model, uri2prefixMap or {}, modelUri=uri,
                         schemaClass = schemaClass or RxPathSchema.BaseSchema) 
         
 def serializeRDF(statements, type, uri2prefixMap=None,

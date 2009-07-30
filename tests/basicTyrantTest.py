@@ -12,6 +12,8 @@ import string, random, shutil, time
 from rx.RxPath import *
 from rx.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
 
+testHistory = '' # 'single' or 'split' or '' (for no graph manager)
+
 def start_tyrant_server():
     "start a local tyrant server, return a dict needed to stop & clean up"
     # tmpdir for the datafile
@@ -50,16 +52,30 @@ class BasicTyrantModelTestCase(unittest.TestCase):
     def getTyrantModel(self):
         port = self.tyrant['port']
         model = TyrantModel('127.0.0.1', port)
-        from rx import RxPath, RxPathGraph
-        modelUri = RxPath.generateBnode()
-        return RxPathGraph.NamedGraphManager(model, RxPath.TransactionMemModel(), modelUri)
+        if testHistory:
+            from rx import RxPath, RxPathGraph
+            modelUri = RxPath.generateBnode()
+            if testHistory == 'single':
+                revmodel = None
+            else:
+                revmodel = RxPath.TransactionMemModel()
+            return RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
+        else:
+            return model
 
     def getTransactionTyrantModel(self):
         port = self.tyrant['port']
         model = TransactionTyrantModel('127.0.0.1', port)
-        from rx import RxPath, RxPathGraph
-        modelUri = RxPath.generateBnode()
-        return RxPathGraph.NamedGraphManager(model, RxPath.TransactionMemModel(), modelUri)
+        if testHistory:
+            from rx import RxPath, RxPathGraph
+            modelUri = RxPath.generateBnode()
+            if testHistory == 'single':
+                revmodel = None
+            else:
+                revmodel = RxPath.TransactionMemModel()
+            return RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
+        else:
+            return model
 
     def setUp(self):
         self.tyrant = start_tyrant_server()

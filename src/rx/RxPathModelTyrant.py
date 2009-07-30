@@ -53,6 +53,10 @@ class TyrantModel(Model):
             port = int(port)
         #print "creating a TyrantModel for %s %d" % (source, port)
         self.tyrant = pytyrant.PyTableTyrant.open(source, port)
+        if defaultStatements:
+            self.addStatements(defaultStatements)
+        return
+
         if not TYRANT_METADATA_KEY in self.tyrant:
             import datetime, uuid
             #print "initializing new tyrant database!"

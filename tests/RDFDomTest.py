@@ -8,12 +8,22 @@
 import unittest, os, os.path, glob, tempfile
 import cStringIO
 from pprint import *
-   
+
 from rx.RxPath import *
-def RDFDoc(model, nsMap):
+
+testHistory = '' #'single' # 'split' or '' (for no graph manager)
+
+def RDFDoc(model, nsMap, testHistory=testHistory):
     from rx import RxPathGraph
     modelUri =generateBnode()
-    graphManager = RxPathGraph.NamedGraphManager(model, TransactionMemModel(), modelUri)
+    if testHistory:
+        if testHistory == 'single':
+            revmodel = None
+        else:
+            revmodel = TransactionMemModel()
+        graphManager = RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
+    else:
+        graphManager = None
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 

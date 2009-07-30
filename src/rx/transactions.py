@@ -300,7 +300,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         '''
         state = self.state
         if self.isActive() and state.safeToJoin:            
-            state.additions.extends(stmts)
+            state.additions.extend(stmts)
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
                     jsorep = sjson.tojson(stmts)
