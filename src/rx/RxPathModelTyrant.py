@@ -97,20 +97,39 @@ class TyrantModel(Model):
         else:
             q['scope__strbw'] = ''
             
+        # figure out slice
+        start = 0
+        stop = None
+        if 'offset' in hints:
+            start = int(hints['offset'])
+        if 'limit' in hints:
+            stop = int(hints['limit']) + start
+
         results = self.tyrant.search.filter(**q)
         if len(results) == 0:
             return []
+            
+        if start or stop:
+            # XXX probably inefficient - should do the slice first and then
+            #     do a subsequent items() call to only retrieve those items
+            results = results.items()[slice(start,stop)]
         else:
-            stmts = []                    
-            for x in results.items():
-                try:
-                    stmts.append(make_statement(x))
-                except Exception:
-                    #print "exception creating statement from:", x
-                    pass
+            results = results.items()
+            
+        stmts = []
+        for x in results:
+            try:
+                stmts.append(make_statement(x))
+            except Exception:
+                # XXX use logging here
+                print "exception creating statement from:", x
+                pass
 
-            stmts.sort() # XXX make tokyo tyrant do this
+        stmts.sort() # XXX make tokyo tyrant do this
+        if not asQuad: # XXX should go away!
             return removeDupStatementsFromSortedList(stmts, asQuad, **(hints or {}))
+        else:
+            return stmts
     
 
     def addStatement(self, statement):

@@ -158,6 +158,25 @@ class BasicTyrantModelTestCase(unittest.TestCase):
         expected.add(statements[0])
         r2 = model.getStatements(asQuad=False)
         self.assertEqual(set(r2), expected)
+    
+    def testHints(self):
+        "test limit and offset hints"
+        model = self.getTyrantModel()
+        
+        # add 20 statements, subject strings '01' to '20'
+        model.addStatements([Statement("%02d" % x, "obj", "pred") for x in range(1,21)])
+        
+        # test limit (should contain 1 to 5)
+        r1 = model.getStatements(hints={'limit':5})
+        self.assertEqual(set(r1), set([Statement("%02d" % x, "obj", "pred") for x in range(1,6)]))
+        
+        # test offset (should contain 11 to 20)
+        r2 = model.getStatements(hints={'offset':10})
+        self.assertEqual(set(r2), set([Statement("%02d" % x, "obj", "pred") for x in range(11,21)]))
+        
+        # test limit and offset (should contain 13 & 14)
+        r3 = model.getStatements(hints={'limit':2, 'offset':12})
+        self.assertEqual(set(r3), set([Statement("%02d" % x, "obj", "pred") for x in range(13,15)]))
 
     def testTransactionCommitAndRollback(self):
         "test simple commit and rollback on a single model instance"
