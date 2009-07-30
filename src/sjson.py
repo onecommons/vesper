@@ -110,10 +110,20 @@ import re
 
 RESOURCE_REGEX = re.compile(r'^[\w:/\.\?&\$\-_\+#\@]+$') #XXX
 
-JSON_BASE = 'sjson:schema/' #XXX
+JSON_BASE = 'sjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
+
+XSD = 'http://www.w3.org/2001/XMLSchema#'
+
+_xsdmap = { XSD+'integer': int,
+#XSD+'int': int, #including this prevent RDF round-tripping
+XSD+'double' : float,
+#XSD+'float' : float,
+JSON_BASE+'null' : lambda v: None,
+ XSD+'boolean' : lambda v: v=='true' and True or False,
+}
 
 def _expandqname(qname, nsmap):
     #assume reverse sort of prefix
@@ -142,7 +152,9 @@ class sjson(object):
         if not isinstance(s, (str,unicode)):        
             return False
         m = RESOURCE_REGEX.match(s)
-        return m is not None
+        if m is not None:
+            return s
+        return False
  
     def deduceObjectType(self, item):    
         if isinstance(item, list):
@@ -158,8 +170,18 @@ class sjson(object):
                 return item, None
             else:
                 return value, objectType 
-        elif self.lookslikeUriOrQname(item):
-            return item, OBJECT_TYPE_RESOURCE
+
+        res = self.lookslikeUriOrQname(item)
+        if res:
+            return res, OBJECT_TYPE_RESOURCE
+        elif item is None:
+            return 'null', JSON_BASE+'null'
+        elif isinstance(item, bool):
+            return (item and 'true' or 'false'), XSD+'boolean'
+        elif isinstance(item, int):
+            return unicode(item), XSD+'integer'
+        elif isinstance(item, float):
+            return unicode(item), XSD+'double'
         else:
             return item, OBJECT_TYPE_LITERAL
 
@@ -168,8 +190,11 @@ class sjson(object):
         if isinstance(node.parentNode, RxPathDom.BasePredicate):
             stmt = node.parentNode.stmt
             if len(stmt.objectType) > 1:
-                #XXX: handle datatypes, especially numbers
-                return _encodeStmtObject(stmt)
+                valueparse = _xsdmap.get(stmt.objectType)
+                if valueparse:
+                    return valueparse(node.data)
+                else:
+                    return _encodeStmtObject(stmt)
         return node.data
 
     def _blank(self):
@@ -189,46 +214,64 @@ class sjson(object):
                     return suffix
         return prop
 
+    def _setPropSeq(self, propseq, idrefs):
+        #XXX what about empty lists?
+        from rx import RxPathDom
+        childlist = []
+        propbag = None
+        for p in propseq.childNodes:
+            prop = p.stmt.predicate
+            obj = p.childNodes[0]
+            #print '!!propseq member', p.stmt
+            if prop == PROPBAG:
+                propbag = obj.uri
+            elif prop == RxPath.RDF_SCHEMA_BASE+u'member':
+                if isinstance(obj, RxPathDom.Text):
+                    childlist.append( self._value(obj) )
+                elif obj.uri == RDF_MS_BASE + 'nil':
+                    childlist.append( [] )
+                else: #otherwise it's a resource
+                    childlist.append( self.QName(obj.uri) )
+                    #XXX test this: if obj.uri != res.uri: #object isn't same as subject
+                    key = len(childlist)-1
+                    idrefs.setdefault(obj.uri, []).append((childlist, key))
+        return propbag, childlist
+
     def _to_sjson(self, root, depth=-1, exclude_blankids=False):
-        """
-        If resource is a references more than once, just the string is output
-        RDF lists and containers that are not SJSON sequences
-        
-        >>> r = Res("http://example.org/book#1"); r['v1'] = 'string'; r['v2'] = 1;
-        >>> "http://example.org/book#2"
-        >>> r['l'] = [1, 2, 3, 4, 5]; r['r'] = Res('o')
-        
-        >>> sjson().to_sjson(doc())
-        """
-        #XXX depth
-        #XXX exclude_blankids (but if false, will need to add back if shared)
-        
-        #use RxPathDom, expensive but arranges as sorted tree, normalizes RDF collections et al. 
+        #1. build a list of subjectnodes
+        #2. map them to object or lists, building id => [ objrefs ] dict
+        #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
+
+        #use RxPathDom, expensive but arranges as sorted tree, normalizes RDF collections et al.
         #and is schema aware
         from rx import RxPathDom
         if not isinstance(root, RxPathDom.Node):
             #assume doc is iterator of statements or quad tuples
             #note: order is not preserved
-            root = RxPath.createDOM(RxPath.MemModel(root), schemaClass=RxPath.BaseSchema) 
-        
-        results = []
-        seen = {}   
-        shared = {}         
-        if isinstance(root, (RxPathDom.Document, RxPathDom.DocumentFragment)): #XXX RxPathDom.DocumentFragment
+            root = RxPath.createDOM(RxPath.MemModel(root), schemaClass=RxPath.BaseSchema)
+
+        #step 1: build a list of subjectnodes
+        if isinstance(root, (RxPathDom.Document, RxPathDom.DocumentFragment)):
             if isinstance(root, RxPathDom.Document):
-                #filter out propseq resources and resources with no properties            
-                nodes = [n for n in root.childNodes if n.childNodes and
-                            not n.matchName(JSON_BASE,'propseqtype')]
+                listnodes = []
+                nodes = []
+                for n in root.childNodes:
+                    if not n.childNodes:
+                        #filter out resources with no properties
+                        continue
+                    if n.matchName(JSON_BASE,'propseqtype'):
+                        listnodes.append(n)
+                    else:
+                        nodes.append(n)
             else:
                 nodes = [n for n in root.childNodes]
             #from pprint import pprint
             #pprint(nodes)
-            results = [{} for i in xrange(0, len(nodes))]
-            todo = [(results, i, n) for i,n in enumerate(nodes)]            
+            todo = nodes
         elif isinstance(root, RxPathDom.Resource):
-            results = [ {} ]
-            todo = [(results, 0, root)]
-        elif isinstance(root, RxPathDom.BasePredicate): 
+            todo = [root]
+        elif isinstance(root, RxPathDom.BasePredicate):
+            #XXX
             obj = p.childNodes[0]
             key = self.QName(root.parentNode.uri)
             propmap = { self.PROPERTYMAP : self.QName(root.stmt.predicate) }
@@ -236,127 +279,102 @@ class sjson(object):
                 v = self._value(obj)
                 todo = []
             else:
-                v = {}                
+                v = {}
                 todo = [ (propmap, key, obj) ]
             propmap[key] = v
             results = [propmap]
         elif isinstance(root, RxPathDom.Text):
             #return string value
             return self._value(root);
-        else:                    
+        else:
             raise TypeError('Unexpected root node')
- 
-        def setobj(obj, res, parent, key):
-            if isinstance(obj, RxPathDom.Text):
-                v = self._value(obj)
-                #otherwise its a resource
-            elif obj.uri == res.uri: #object is same as subject
-                v = self.QName(obj.uri)                
-            elif obj.uri == RDF_MS_BASE + 'nil':
-                v = [] #empty list
-            else: 
-                uri = obj.uri                     
-                #if an object appears in the tree more than once,
-                #replace prior reference with uri 
-                #and add to shared     
-                prior = seen.get(uri)
-                #print 'seen', uri, prior
-                if prior:
-                    v = self.QName(uri)
-                    shared[v] = prior[0][ prior[1] ]
-                    prior[0][ prior[1] ] = v            
-                else:
-                    v = {}
-                    #print 'add to seen', uri, type(uri)
-                    seen[uri] = (parent, key, v)
-                    todo.append( (parent, key, obj) )
-            parent[ key ] = v
-        
-        def setPropSeq(propseq, res):
-            #XXX what about empty lists?
-            childlist = []
-            for p in propseq.childNodes:
-                prop = p.stmt.predicate
-                obj = p.childNodes[0] 
-                if prop == PROPBAG:
-                    propbag = obj.uri
-                elif prop == RxPath.RDF_SCHEMA_BASE+u'member':
-                    childlist.append(0)
-                    setobj(obj, res, childlist, len(childlist)-1)         
-            return propbag, childlist
-    
-        while todo:
-            #res (the resource) has already been attached to its parent
-            #now we need to assign its properties
-            parent, key, res = todo.pop()        
-            if res.uri not in seen:
-                #print 'add subject to seen', res.uri, type(res.uri)
-                seen[res.uri] = (parent, key, parent[key])
-            else:
-                #print 'subject seen', res.uri
-                parent[key] = res.uri #replace object with uri reference
-                prior = seen[res.uri]
-                key = self.QName(res.uri)                
-                if key in shared:
-                    continue
-                else:
-                    #add to shared
-                    shared[key] = prior[2]
-                    parent = shared                
-            
-            if res.childNodes:
-                s = parent[key]
-                s[self.ID] = res.uri
-            else:
-                #no properties, just write out the id, not a dict
-                #and don't bother including it in shared
-                #XXX but then we can't tell if its an id or just a string?
-                if parent is shared:
-                    del parent[key]
-                else:                    
-                    parent[key] = res.uri
+
+        #step 2: map them to object or lists, building id => [ objrefs ] dict
+        #along the way
+        results = {}
+        lists = {}
+        idrefs = {}
+
+        for listnode in listnodes:
+            seqprop, childlist = self._setPropSeq(listnode, idrefs)
+            lists[listnode.uri] = (seqprop, childlist)
+
+        for res in todo:
+            if not res.childNodes:
+                #no properties
                 continue
-                
+            currentobj = { self.ID : res.uri }
             currentlist = []
             propseqs = {}
-            
-            for p in res.childNodes:  
+            #print 'adding to results', res.uri
+            results[res.uri] = currentobj
+            #print 'res', res, res.childNodes
+            for p in res.childNodes:
                 prop = p.stmt.predicate
                 if prop == PROPSEQ:
-                    #this will replace sequences                    
-                    seqprop, childlist = setPropSeq(p.childNodes[0], res)
-                    s[ self.QName(seqprop) ] = childlist
+                    #this will replace sequences
+                    #seqprop, childlist = self._setPropSeq(p.childNodes[0], res, idrefs)
+                    seqprop, childlist = lists[p.stmt.object]
+                    key = self.QName(seqprop)
+                    currentobj[ key ] = childlist
+                    #print 'adding propseq', p.stmt.object
+                    lists[ p.stmt.object ] = childlist
+                    #idrefs.setdefault(p.stmt.object, []).append( (currentobj, key) )
 
-            for p in res.childNodes:  
+            for p in res.childNodes:
                 prop = p.stmt.predicate
                 if prop == PROPSEQ:
                     continue
-                if self.QName(prop) in s:
+                key = self.QName(prop)
+                if key in currentobj:
+                    assert key != self.ID
                     continue #must have be already handled by getPropSeq
 
-                nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop                
-                #XXX Test empty and singleton rdf lists and containers                                
+                nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop
+                #XXX Test empty and singleton rdf lists and containers
                 if nextMatches or currentlist:
                     parent = currentlist
                     key = len(currentlist)
-                    currentlist.append(0)                     
+                    currentlist.append(0)
                 else:
-                    parent = s
-                    key = self.QName(prop)
-                
-                obj = p.childNodes[0]
-                setobj(obj, res, parent, key)
-                
-                if currentlist and not nextMatches:
-                    s[ self.QName(prop) ] = currentlist
-                    currentlist = [] #list done
+                    parent = currentobj
 
+                obj = p.childNodes[0]
+                if isinstance(obj, RxPathDom.Text):
+                    parent[ key ] = self._value(obj)
+                elif obj.uri == RDF_MS_BASE + 'nil':
+                    parent[ key ] = []
+                else: #otherwise it's a resource
+                    parent[ key ] = self.QName(obj.uri)
+                    if obj.uri != res.uri: #object isn't same as subject
+                        idrefs.setdefault(obj.uri, []).append( (parent, key) )
+
+                if currentlist and not nextMatches:
+                    #done with this list
+                    currentobj[ key ] = currentlist
+                    currentlist = []
+
+        #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
+        shared = []
+        for id, refs in idrefs.items():
+            if len(refs) == 1:
+                obj, key = refs[0]
+                if id in results:
+                    obj[key] = results[id]
+                    del results[id]
+                elif id in lists:
+                    obj[key] = lists[id][1]
+                    del lists[id]
+                #else:
+                #    print id, 'not found in', results, 'or', lists
+            else:
+                shared.append(id)
+
+        results = results.values()
         if shared:
             results = { 'results':results, 'shared':shared}
-
-        #if self.nsmap:        
+        #if self.nsmap:
         #    results['prefix'] = self.nsmap
-        
         return results
 
     def to_sjson(self, root, depth=-1):
@@ -395,6 +413,32 @@ class sjson(object):
                 id = self._blank() #XXX
                 obj[idprop] = id
             return id, idprop
+
+        def _createNestedList(val):
+            assert isinstance(val, list)
+            if not val:
+                return RDF_MS_BASE+'nil'
+
+            seq = self._blank()
+            m.addStatement( Statement(seq, RDF_MS_BASE+'type',
+                RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
+            m.addStatement( Statement(seq, RDF_MS_BASE+'type',
+                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
+
+            for i, item in enumerate(val):
+                item, objecttype = self.deduceObjectType(item)
+                if isinstance(item, dict):
+                    itemid, idprop = getorsetid(item)
+                    m.addStatement( Statement(seq,
+                        RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
+                    todo.append(item)
+                elif isinstance(item, list):
+                    nestedlistid = _createNestedList(item)
+                    m.addStatement( Statement(seq,
+                            RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
+                else: #simple type
+                    m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
+            return seq
         
         while todo:
             obj = todo.pop()
@@ -411,7 +455,7 @@ class sjson(object):
                 if isinstance(val, dict):
                     objid, idprop = getorsetid(val) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
-                    todo.push(val)
+                    todo.append(val)
                 elif isinstance(val, list):
                     #dont build a PROPSEQTYPE if prop in rdf:_ rdf:first rdfs:member                
                     specialprop = prop.startswith(RDF_MS_BASE+'_') or prop in [
@@ -434,14 +478,18 @@ class sjson(object):
                     for i, item in enumerate(val):
                         item, objecttype = self.deduceObjectType(item)
                         if isinstance(item, dict):
-                            itemid, idprop = getorsetid(val) #XXX
+                            itemid, idprop = getorsetid(item)
                             m.addStatement( Statement(id, prop, itemid, OBJECT_TYPE_RESOURCE, scope) )  
                             if addOrderInfo:
                                 m.addStatement( Statement(seq, 
-                                    RDF_MS_BASE+'_'+str(i+1), id, OBJECT_TYPE_RESOURCE, scope) )
-                            todo.push(val)
+                                    RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
+                            todo.append(item)
                         elif isinstance(item, list):                        
-                            pass #XXX nested lists: add JSONSEQ
+                            nestedlistid = _createNestedList(item)
+                            m.addStatement( Statement(id, prop, nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
+                            if addOrderInfo:
+                                m.addStatement( Statement(seq,
+                                    RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
                         else:
                             #simple type                            
                             m.addStatement( Statement(id, prop, item, objecttype, scope) )
