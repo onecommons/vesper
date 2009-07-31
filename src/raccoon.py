@@ -799,11 +799,11 @@ def get_http_params(environ):
                 getparams[key] = valueList.value
 
     if environ['REQUEST_METHOD'] == 'POST':
-        _forms = cgi.FieldStorage(fp=environ.get('wsgi.input'),
+        forms = cgi.FieldStorage(fp=environ.get('wsgi.input'),
                                 environ=environ, keep_blank_values=1)
-        if _forms.list is None:
-            assert _forms.file is not None
-            _postContent = _forms.file.read()
+        if forms.list is None:
+            assert forms.file is not None
+            _postContent = forms.file.read()
         else:
             for key in forms.keys():
                 valueList = forms[key]
@@ -812,9 +812,9 @@ def get_http_params(environ):
                 else:
                     # In case it's a file being uploaded, we save the filename in a map (user might need it)
                     if not valueList.filename:
-                        postparams[_key] = valueList.value
+                        postparams[key] = valueList.value
                     else:
-                        postparams[_key] = UploadFile(valueList)
+                        postparams[key] = UploadFile(valueList)
 
     if getparams and postparams:
         #merge the dicts together
@@ -956,17 +956,8 @@ def run(vars, out=sys.stdout):
         for logger in logging.Logger.manager.loggerDict.itervalues():
             logger.disabled = 0
 
-    try:
-        kw = translateCmdArgs(vars)
-        root = HTTPRequestProcessor(appName='root', appVars=kw)
-    except (TypeError), e:
-        print '*' * 20
-        print str(e)
-        index = str(e).find('argument') #bad keyword arguement
-        if index > -1:
-            raise Exception('invalid ' +str(e)[index:])
-        else:
-            raise
+    kw = translateCmdArgs(vars)
+    root = HTTPRequestProcessor(appName='root', appVars=kw)
 
     if 'DEBUG_FILENAME' in vars:
         debugFileName = vars['DEBUG_FILENAME']
