@@ -173,7 +173,7 @@ class NamedGraphManager(RxPath.Model):
                     model = self.revisionModel
                 else:
                     #note: this can be expensive!
-                    model = MemModel(self.getStatementsForContextAndRevision(context))
+                    model = RxPath.MemModel(self.getStatementsForContextAndRevision(context))
                     context = None
 
             return model.getStatements(subject, predicate, object,
@@ -216,6 +216,21 @@ class NamedGraphManager(RxPath.Model):
         :context: the context URI or an empty string
         '''
         return not context.startswith('context:')
+    
+    def isContextReflectedInPrimaryStore(self, context):
+        '''
+        Contexts managed by the version store (i.e. contexts for which
+        `isContextForPrimaryStore()` is false) are by default reflected with
+        statements added and removed from the primary store.
+
+        You can overriding this method to exclude particular contexts that
+        shouldn't have this behavior.
+
+        Note that if the behavior of this method changes and impacts which
+        statements should or should not be in the primary store, existing
+        instances of the store may need to be updated.
+        '''
+        return True
 
     def addStatement(self, srcstmt):
         '''
@@ -232,10 +247,13 @@ class NamedGraphManager(RxPath.Model):
         if not self.isContextForPrimaryStore(scope):
             if isTransactionContext(scope):
                 raise RuntimeError("can't directly add scope: "+scope)
-            stmt = Statement(scope='', *srcstmt[:4])
-            if self.managedModel.getStatements(*stmt):
-                #already exists, so don't re-add
-                stmt = None 
+            if not self.isContextReflectedInPrimaryStore(scope):
+                stmt = None
+            else:
+                stmt = Statement(scope='', *srcstmt[:4])
+                if self.managedModel.getStatements(*stmt):
+                    #already exists, so don't re-add
+                    stmt = None
         else:
             stmt = srcstmt
         if stmt:
@@ -265,9 +283,10 @@ class NamedGraphManager(RxPath.Model):
         removeStmt = None
         if self.isContextForPrimaryStore(srcstmt.scope):
             removeStmt = srcstmt
-        else:
+        elif self.isContextReflectedInPrimaryStore(srcstmt.scope):
             if isTransactionContext(srcstmt.scope):
                 raise RuntimeError("can't directly remove with scope: "+srcstmt.scope)
+
             #if the scope isn't intended for the primary store
             #we assume there might be multiple statements with different scopes
             #that map to the triple in the primary store
