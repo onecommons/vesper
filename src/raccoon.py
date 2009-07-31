@@ -956,17 +956,8 @@ def run(vars, out=sys.stdout):
         for logger in logging.Logger.manager.loggerDict.itervalues():
             logger.disabled = 0
 
-    try:
-        kw = translateCmdArgs(vars)
-        root = HTTPRequestProcessor(appName='root', appVars=kw)
-    except (TypeError), e:
-        print '*' * 20
-        print str(e)
-        index = str(e).find('argument') #bad keyword arguement
-        if index > -1:
-            raise Exception('invalid ' +str(e)[index:])
-        else:
-            raise
+    kw = translateCmdArgs(vars)
+    root = HTTPRequestProcessor(appName='root', appVars=kw)
 
     if 'DEBUG_FILENAME' in vars:
         debugFileName = vars['DEBUG_FILENAME']
