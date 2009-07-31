@@ -38,7 +38,7 @@ def runQuery(query, model):
     ast = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, addChangeMap=True):
+def getResults(query, model, addChangeMap=False):
     '''
     returns dictionary with the following keys:
     :`results`: the result of the query (either a list or None if the query failed)

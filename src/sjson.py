@@ -310,7 +310,7 @@ class sjson(object):
             results[res.uri] = currentobj
             #print 'res', res, res.childNodes
             for p in res.childNodes:
-                prop = p.stmt.predicate
+                prop = p.stmt.predicate                
                 if prop == PROPSEQ:
                     #this will replace sequences
                     #seqprop, childlist = self._setPropSeq(p.childNodes[0], res, idrefs)
@@ -322,7 +322,7 @@ class sjson(object):
                     #idrefs.setdefault(p.stmt.object, []).append( (currentobj, key) )
 
             for p in res.childNodes:
-                prop = p.stmt.predicate
+                prop = p.stmt.predicate                
                 if prop == PROPSEQ:
                     continue
                 key = self.QName(prop)
@@ -345,17 +345,19 @@ class sjson(object):
                 elif obj.uri == RDF_MS_BASE + 'nil':
                     parent[ key ] = []
                 else: #otherwise it's a resource
+                    #print 'prop key', key, prop, type(parent)
                     parent[ key ] = self.QName(obj.uri)
                     if obj.uri != res.uri: #object isn't same as subject
                         idrefs.setdefault(obj.uri, []).append( (parent, key) )
 
                 if currentlist and not nextMatches:
                     #done with this list
-                    currentobj[ key ] = currentlist
+                    currentobj[ prop ] = currentlist
                     currentlist = []
 
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
         shared = []
+        unresolvedRefs = []
         for id, refs in idrefs.items():
             if len(refs) == 1:
                 obj, key = refs[0]
@@ -365,14 +367,16 @@ class sjson(object):
                 elif id in lists:
                     obj[key] = lists[id][1]
                     del lists[id]
-                #else:
-                #    print id, 'not found in', results, 'or', lists
+                else:
+                    #print id, 'not found in', results, 'or', lists
+                    unresolvedRefs.append(id)
             else:
+                #print 'refs', refs
                 shared.append(id)
 
         results = results.values()
-        if shared:
-            results = { 'results':results, 'shared':shared}
+        #if shared:
+        #    results = { 'results':results, 'shared':shared}
         #if self.nsmap:
         #    results['prefix'] = self.nsmap
         return results
@@ -385,7 +389,7 @@ class sjson(object):
         m = RxPath.MemModel()
         if scope is None:
             scope = self.scope
-        
+
         if isinstance(json, (str,unicode)):
             todo = json = json.loads(json)            
         if isinstance(json, dict):

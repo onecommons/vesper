@@ -230,17 +230,18 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
         for stype in ['ntriples', 'json', 'ntjson', 'sjson']:
             #print 'stype', stype
             json = serializeRDF(stmts, stype)
-            #print 'json'
-            #print json
             if stype == 'sjson':
+                #print 'json'
+                #print json
                 options = dict(addOrderInfo=False)
             else:
                 options = {}
             newstmts = list(parseRDFFromString(json,'', stype, options=options))
             stmts.sort()
             newstmts.sort()
+            #print 'stmts'
             #print stmts
-            #print 'newstmts'            
+            #print 'newstmts'
             #print newstmts
             d = difflib.SequenceMatcher(None, stmts, newstmts )
             self.failUnless(stmts == newstmts, 'statements differ for %s: %s' % (stype, d.get_opcodes()) )

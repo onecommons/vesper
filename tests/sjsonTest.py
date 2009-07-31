@@ -110,6 +110,15 @@ def test():
     '''
     assert_json_and_back_match(src)
 
+    src = '''
+    { "id" : "test",
+     "circular" : "test",
+      "circularlist" : ["test"],
+      "circularlist2" : [["test"],["test"]]
+    }
+    '''
+    assert_json_and_back_match(src)
+
     #test missing ids and exclude_blankids
     #test shared
     print 'tests pass'
