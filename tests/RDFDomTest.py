@@ -11,7 +11,7 @@ from pprint import *
 
 from rx.RxPath import *
 
-testHistory = '' #'single' # 'split' or '' (for no graph manager)
+testHistory = 'split' #'single', 'split' or '' (for no graph manager)
 
 def RDFDoc(model, nsMap, testHistory=testHistory):
     from rx import RxPathGraph
@@ -20,6 +20,7 @@ def RDFDoc(model, nsMap, testHistory=testHistory):
         if testHistory == 'single':
             revmodel = None
         else:
+            assert testHistory == 'split'
             revmodel = TransactionMemModel()
         graphManager = RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
     else:
@@ -27,8 +28,16 @@ def RDFDoc(model, nsMap, testHistory=testHistory):
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
                                     graphManager=graphManager)
 
-import difflib, time
+import time
 from rx.RxPathUtils import _parseTriples as parseTriples
+
+def printdiff(a, b):
+    import difflib
+    d = difflib.SequenceMatcher(None, a, b)
+    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
+          (tag, i1, i2, a[i1:i2], j1, j2, b[j1:j2]))
+        for tag, i1, i2, j1, j2 in d.get_opcodes()])
+         
     
 class RDFDomTestCase(unittest.TestCase):
     ''' tests rdfdom, rxpath, rxslt, and xupdate on a rdfdom
@@ -243,8 +252,8 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
             #print stmts
             #print 'newstmts'
             #print newstmts
-            d = difflib.SequenceMatcher(None, stmts, newstmts )
-            self.failUnless(stmts == newstmts, 'statements differ for %s: %s' % (stype, d.get_opcodes()) )
+            #print 'lenght', len(stmts), len(newstmts)
+            self.failUnless(stmts == newstmts, printdiff(stmts, newstmts ))
 
     def testSubtype(self):        
         model = '''_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.

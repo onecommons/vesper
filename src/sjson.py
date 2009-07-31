@@ -200,6 +200,7 @@ class sjson(object):
     def _blank(self):
         if self._genBNode:
             return self._genBNode()
+        #return RxPath.generateBnode()
         self.bnodecounter+=1
         return self.bnodeprefix + str(self.bnodecounter)
     
@@ -232,12 +233,21 @@ class sjson(object):
                     childlist.append( [] )
                 else: #otherwise it's a resource
                     childlist.append( self.QName(obj.uri) )
-                    #XXX test this: if obj.uri != res.uri: #object isn't same as subject
                     key = len(childlist)-1
                     idrefs.setdefault(obj.uri, []).append((childlist, key))
         return propbag, childlist
 
-    def _to_sjson(self, root, depth=-1, exclude_blankids=False):
+    def createObjectRef(self, id, obj, isshared):
+        '''
+
+        obj: The object referenced by the id, if None, the object was not encountered
+        '''
+        if obj is not None and not isshared:
+            return obj
+        else:
+            return id
+
+    def _to_sjson(self, root, includesharedrefs=False, exclude_blankids=False):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
@@ -267,9 +277,8 @@ class sjson(object):
                 nodes = [n for n in root.childNodes]
             #from pprint import pprint
             #pprint(nodes)
-            todo = nodes
         elif isinstance(root, RxPathDom.Resource):
-            todo = [root]
+            nodes = [root]
         elif isinstance(root, RxPathDom.BasePredicate):
             #XXX
             obj = p.childNodes[0]
@@ -277,10 +286,10 @@ class sjson(object):
             propmap = { self.PROPERTYMAP : self.QName(root.stmt.predicate) }
             if isinstance(obj, RxPathDom.Text):
                 v = self._value(obj)
-                todo = []
+                nodes = []
             else:
                 v = {}
-                todo = [ (propmap, key, obj) ]
+                nodes = [obj]
             propmap[key] = v
             results = [propmap]
         elif isinstance(root, RxPathDom.Text):
@@ -299,21 +308,19 @@ class sjson(object):
             seqprop, childlist = self._setPropSeq(listnode, idrefs)
             lists[listnode.uri] = (seqprop, childlist)
 
-        for res in todo:
+        for res in nodes:
             if not res.childNodes:
                 #no properties
                 continue
             currentobj = { self.ID : res.uri }
             currentlist = []
-            propseqs = {}
             #print 'adding to results', res.uri
             results[res.uri] = currentobj
             #print 'res', res, res.childNodes
             for p in res.childNodes:
                 prop = p.stmt.predicate                
                 if prop == PROPSEQ:
-                    #this will replace sequences
-                    #seqprop, childlist = self._setPropSeq(p.childNodes[0], res, idrefs)
+                    #this will replace sequences                    
                     seqprop, childlist = lists[p.stmt.object]
                     key = self.QName(seqprop)
                     currentobj[ key ] = childlist
@@ -347,7 +354,8 @@ class sjson(object):
                 else: #otherwise it's a resource
                     #print 'prop key', key, prop, type(parent)
                     parent[ key ] = self.QName(obj.uri)
-                    if obj.uri != res.uri: #object isn't same as subject
+                    if includesharedrefs or obj.uri != res.uri:
+                        #add ref if object isn't same as subject
                         idrefs.setdefault(obj.uri, []).append( (parent, key) )
 
                 if currentlist and not nextMatches:
@@ -356,34 +364,39 @@ class sjson(object):
                     currentlist = []
 
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
-        shared = []
-        unresolvedRefs = []
+        roots = results.copy()
         for id, refs in idrefs.items():
-            if len(refs) == 1:
-                obj, key = refs[0]
-                if id in results:
-                    obj[key] = results[id]
-                    del results[id]
-                elif id in lists:
-                    obj[key] = lists[id][1]
-                    del lists[id]
+            isshared = includesharedrefs or len(refs) > 1
+            obj = None
+            if id in results:
+                obj = results[id]
+            elif id in lists:
+                obj = lists[id][1]
+            #else:
+            #   print id, 'not found in', results, 'or', lists
+            ref = self.createObjectRef(id, obj, isshared)
+            if ref != id:
+                if obj is None:
+                    #createObjectRef created an obj from an unreferenced obj,
+                    #so add it to the result
+                    results[id] = ref
                 else:
-                    #print id, 'not found in', results, 'or', lists
-                    unresolvedRefs.append(id)
-            else:
-                #print 'refs', refs
-                shared.append(id)
+                    #remove since the obj is referenced
+                    roots.pop(id, None)
+                for obj, key in refs:
+                    obj[key] = ref
 
-        results = results.values()
-        #if shared:
-        #    results = { 'results':results, 'shared':shared}
+        retval = { 'results': roots.values() }
+        if not includesharedrefs:
+            retval['objects'] = results
         #if self.nsmap:
-        #    results['prefix'] = self.nsmap
-        return results
+        #    retval['prefix'] = self.nsmap
+        return retval
 
-    def to_sjson(self, root, depth=-1):
-        results = self._to_sjson(root, depth)
-        return json.dumps(results) #a list
+    def to_sjson(self, root):
+        results = self._to_sjson(root)
+        results = results['results']
+        return json.dumps(r.values()) #a list
 
     def to_rdf(self, json, scope = None):        
         m = RxPath.MemModel()
@@ -506,7 +519,8 @@ class sjson(object):
 
 def tojson(statements, options=None):
     options = options or {}
-    return sjson(**options)._to_sjson(statements)
+    results = sjson(**options)._to_sjson(statements)
+    return results['results']
 
 def tostatements(contents, options=None):
     options = options or {}

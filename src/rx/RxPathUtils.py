@@ -1294,3 +1294,105 @@ def stmt2json(stmt):
         uri = '_:' + uri[BNODE_BASE_LEN:]
         
     return json.dumps({ "id" : uri, stmt[1] : _encodeStmtObject(stmt) })
+
+import md5
+class Graph(object):
+    """
+    based on:
+
+    Vanilla RDF Graph Isomorphism Tester
+    Author: Sean B. Palmer, inamidst.com
+    Uses the pyrple algorithm
+    Usage: ./rdfdiff-vanilla.py <ntriplesP> <ntriplesQ>
+    Requirements:
+       Python2.3+
+       http://inamidst.com/proj/rdf/ntriples.py
+    References:
+       http://inamidst.com/proj/rdf/rdfdiff.py
+       http://miscoranda.com/comments/129#id2005010405560004
+    """
+
+    def __init__(self, stmts, quad=True):
+      self.statements = set()
+      self.cache = {}
+      for stmt in stmts:
+        if stmt[3] == OBJECT_TYPE_RESOURCE:
+            obj = stmt[2]
+        else:
+            obj = '"'+stmt[2]+'"'+stmt[3]
+        if quad:
+            scope = stmt[4]
+        else:
+            scope = None
+        t = (stmt[0], stmt[1], obj, scope)
+        self.statements.add(t)
+
+    def isBnode(self, uri):
+      isbnode = uri.startswith(BNODE_BASE) or uri.startswith('_:')
+      return isbnode
+
+    def __hash__(self):
+      result = []
+      for (subj, pred, objt, scope) in self.statements:
+         if self.isBnode(subj):
+            tripleHash = md5.new(str(self.vhashmemo(subj)))
+         else: tripleHash = md5.new(subj)
+
+         for term in (pred, objt, scope):
+            if term is None:
+                continue
+            if self.isBnode(term):
+               tripleHash.update(str(self.vhashmemo(term)))
+            else: tripleHash.update(term)
+
+         result.append(tripleHash.digest())
+      result.sort()
+      return hash(tuple(result))
+
+    def vhashmemo(self, term, done=False):
+      if self.cache.has_key((term, done)):
+         return self.cache[(term, done)]
+
+      result = self.vhash(term, done=done)
+      self.cache[(term, done)] = result
+      return result
+
+    def vhash(self, term, done=False):
+      result = []
+      for stmt in self.statements:
+         if term in stmt:
+            for pos in xrange(4):
+               if stmt[pos] is None:
+                   continue
+               if not self.isBnode(stmt[pos]):
+                  result.append(stmt[pos])
+               elif done or (stmt[pos] == term):
+                  result.append(pos)
+               else: result.append(self.vhash(stmt[pos], done=True))
+      result.sort()
+      return tuple(result)
+
+    def normalizeBNodes(self):
+        for t in self.statements:
+            sub = t[0]
+            if self.isBnode(sub):
+                sub = self.vhash(sub)
+            pred = t[1]
+            if self.isBnode(pred):
+                pred = self.vhash(pred)
+            obj = t[2]
+            if self.isBnode(obj):
+                obj = self.vhash(obj)            
+            scope = t[3]
+            if scope is None:
+                yield (sub, pred, obj)
+            else:
+                if self.isBnode(scope):
+                    scope = self.vhash(scope)
+                yield (sub, pred, obj, scope)
+
+def graph_compare(p, q, asQuads=True):
+    '''
+    Return True if the given collections of statements are graph-isomorphic.
+    '''
+    return hash(Graph(p, asQuads)) == hash(Graph(q, asQuads))

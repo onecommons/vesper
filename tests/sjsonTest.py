@@ -9,23 +9,41 @@ def assert_json_match(expected, result, dosort=False):
     expected = json.dumps(expected, sort_keys=True)
     assert result == expected, pprint((result, '!=', expected))
 
-def assert_stmts_match(expected_stmts, result_stmts):
-    assert set(result_stmts) == set(expected_stmts), (
-                        pprint(result_stmts), '!=', pprint(expected_stmts))
+def printdiff(a, b):
+    import difflib
+    d = difflib.SequenceMatcher(None, a, b)
+    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
+          (tag, i1, i2, a[i1:i2], j1, j2, b[j1:j2]))
+        for tag, i1, i2, j1, j2 in d.get_opcodes()])
 
-def assert_json_and_back_match(src, expectedstmts=None):
+def assert_stmts_match(expected_stmts, result_stmts):
+    assert set(result_stmts) == set(expected_stmts), printdiff(
+                        result_stmts,expected_stmts)
+
+    if not RxPath.graph_compare(expected_stmts, result_stmts):
+        print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')
+        print 'expected _:1', RxPath.Graph(expected_stmts).vhash('_:1')
+        print 'result _:1', RxPath.Graph(result_stmts).vhash('_:1')
+        print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
+        assert False
+
+def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False):
     test_json = [ json.loads(src) ]
     result_stmts = sjson().to_rdf( { 'results' : test_json} )
     #pprint( result_stmts)
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = sjson()._to_sjson( result_stmts )
+    result_json = sjson()._to_sjson( result_stmts, includesharedrefs=includesharedrefs)['results']
     #pprint( result_json )
-    assert_json_match(result_json, test_json) 
+    if includesharedrefs:
+        test_json = includesharedrefs
+    assert_json_match(result_json, test_json)
+    if backagain:
+        assert_stmts_and_back_match(result_stmts)
 
 def assert_stmts_and_back_match(stmts, expectedobj = None):
-    result = sjson()._to_sjson( stmts )
+    result = sjson()._to_sjson( stmts )['results']
     if expectedobj is not None:
         assert_json_match(expectedobj, result, True)
     
@@ -84,7 +102,15 @@ def test():
      "baz" : { "nestedobj" : { "id" : "anotherid", "prop" : "value" }}
     } 
     '''
-
+    assert_json_and_back_match(src, False) #XXX backagain fails, but then next one succeeds!
+    
+    src = '''
+    { "id" : "testid",
+    "baz" : { "nestedobj" : { "id" : "anotherid", "prop" : "value" }},
+    "foo" : ["1","3"],
+     "bar" : []
+    } 
+    '''
     assert_json_and_back_match(src)
 
     #test nested lists
@@ -113,12 +139,20 @@ def test():
     src = '''
     { "id" : "test",
      "circular" : "test",
-      "circularlist" : ["test"],
-      "circularlist2" : [["test"],["test"]]
-    }
+      "circularlist" : ["test", "test"],
+      "circularlist2" : [["test"],["test", "test"]]
+        }
     '''
-    assert_json_and_back_match(src)
+    assert_json_and_back_match(src, False) #XXX backagain fails
 
+    #test that shardrefs output doesn't explode with circular references
+    #XXX current handling is bad, should give error
+    includesharedrefs = [{
+    "circular": "test",
+    "circularlist": ["test", "test"],
+    "circularlist2": ["_:3", "_:4"],
+    "id": "test"}]
+    assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs)
     #test missing ids and exclude_blankids
     #test shared
     print 'tests pass'
