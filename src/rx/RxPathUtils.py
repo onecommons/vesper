@@ -1295,7 +1295,11 @@ def stmt2json(stmt):
         
     return json.dumps({ "id" : uri, stmt[1] : _encodeStmtObject(stmt) })
 
-import md5
+try:
+    from hashlib import md5 # python 2.5 or greater
+except ImportError:
+    from md5 import new as md5
+
 class Graph(object):
     """
     based on:
@@ -1335,8 +1339,8 @@ class Graph(object):
       result = []
       for (subj, pred, objt, scope) in self.statements:
          if self.isBnode(subj):
-            tripleHash = md5.new(str(self.vhashmemo(subj)))
-         else: tripleHash = md5.new(subj)
+            tripleHash = md5(str(self.vhashmemo(subj)))
+         else: tripleHash = md5(subj)
 
          for term in (pred, objt, scope):
             if term is None:
@@ -1376,19 +1380,19 @@ class Graph(object):
         for t in self.statements:
             sub = t[0]
             if self.isBnode(sub):
-                sub = self.vhash(sub)
+                sub = self.vhashmemo(sub)
             pred = t[1]
             if self.isBnode(pred):
-                pred = self.vhash(pred)
+                pred = self.vhashmemo(pred)
             obj = t[2]
             if self.isBnode(obj):
-                obj = self.vhash(obj)            
+                obj = self.vhashmemo(obj)
             scope = t[3]
             if scope is None:
                 yield (sub, pred, obj)
             else:
                 if self.isBnode(scope):
-                    scope = self.vhash(scope)
+                    scope = self.vhashmemo(scope)
                 yield (sub, pred, obj, scope)
 
 def graph_compare(p, q, asQuads=True):

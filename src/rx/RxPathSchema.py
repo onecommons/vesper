@@ -105,9 +105,9 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
                    setattr(self.entailments, 'autocommit', set)
                  )
 
-    def __init__(self, model):
+    def __init__(self, model, entailmentModel=None):
         self.model = model
-        self.entailments = RxPathModel.TransactionMemModel()
+        self.entailments = entailmentModel or RxPathModel.TransactionMemModel()
         self.models = (model, self.entailments)        
         self.domains = {}
         self.ranges = {}
@@ -533,7 +533,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
         
         for supertype, subtypes in adds.items():
             resources = set(stmt[0] for stmt in 
-                        self.model.getstatements(predicate=supertype))
+                        self.model.getStatements(predicate=supertype))
             for res in resources:
                 
                 for subtype in subtypes:
@@ -546,7 +546,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
         for supertype, subtypes in removals.items():
             resources = set(stmt[0] for stmt in 
-                        self.entailments.getstatements(predicate=supertype))
+                        self.entailments.getStatements(predicate=supertype))
 
             for res in resources:                
                 for subtype in subtypes:
@@ -582,6 +582,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
     
     def rollback(self):
         super(RDFSSchema, self).rollback()
+        #if self.entailments is not self.models[0]:
         self.entailments.rollback()
         self.currentSubProperties = self.subproperties
         self.currentSubTypes = self.subtypes

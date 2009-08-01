@@ -29,7 +29,8 @@ def assert_stmts_match(expected_stmts, result_stmts):
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False):
     test_json = [ json.loads(src) ]
-    result_stmts = sjson().to_rdf( { 'results' : test_json} )
+    result_stmts = sjson().to_rdf( test_json )
+    #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)

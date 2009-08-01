@@ -406,12 +406,9 @@ class sjson(object):
         if isinstance(json, (str,unicode)):
             todo = json = json.loads(json)            
         if isinstance(json, dict):
-            todo = [r for r in json.get('results',[])
-                              if isinstance(r, dict)]
-            if 'shared' in json:
-                todo.extend( json['shared'].values() )            
+            todo = [json]
         else:
-            todo = json 
+            todo = list(json)
         if not isinstance(todo, list):
             raise TypeError('whats this?')
 
@@ -463,7 +460,6 @@ class sjson(object):
             #XXX propmap
             #XXX idmap
             id, idprop = getorsetid(obj) 
-                            
             for prop, val in obj.items():
                 if prop == idprop:                    
                     continue
@@ -513,8 +509,7 @@ class sjson(object):
                             if addOrderInfo:
                                 m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
                 else: #simple type
-                    m.addStatement( Statement(id, prop, val, objecttype, scope) )                    
-
+                    m.addStatement( Statement(id, prop, val, objecttype, scope) )
         return m.getStatements()
 
 def tojson(statements, options=None):
@@ -524,6 +519,4 @@ def tojson(statements, options=None):
 
 def tostatements(contents, options=None):
     options = options or {}
-    return sjson(**options).to_rdf( {
-        'results' : contents
-        })
+    return sjson(**options).to_rdf(contents)
