@@ -57,7 +57,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
     inTransaction = False
     
-    findCompabilityStatements = True
+    findCompatibleStatements = True
     
     addEntailmentCallBack = None
     removeEntailmentCallBack = None
@@ -360,7 +360,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
                                     OBJECT_TYPE_RESOURCE)
                                 self._addTypeStatement(typeStmt)
                                 self.inferences[key ] = 1
-                            else:
+                            else:                                
                                 self.inferences[key ] += 1
                 
                 if self.isCompatibleProperty(stmt.predicate, RDF_SCHEMA_BASE+u'range'):
@@ -412,10 +412,10 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             #if a range or domain statement is being removed, remove any inferences based on it
             removeTypeInference = False
             if self.isCompatibleProperty(stmt.predicate, RDF_SCHEMA_BASE+u'domain'):
-                self.domains[stmt.predicate].remove(stmt.object)
+                self.domains[stmt.subject].remove(stmt.object)
                 removeTypeInference = True
             if self.isCompatibleProperty(stmt.predicate, RDF_SCHEMA_BASE+u'range'):
-                self.ranges[stmt.predicate].remove(stmt.object)
+                self.ranges[stmt.subject].remove(stmt.object)
                 removeTypeInference = True 
     
             if removeTypeInference:
@@ -526,9 +526,26 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             self.subPropPreds  = self.currentSubProperties[self.SUBPROPOF]
             self.typePreds     = self.currentSubProperties[RDF_MS_BASE+u'type']        
         
+    def canRemoveDomain(self, stmt):
+        #XXX finish and use 
+        '''
+        see if the stmt being remove triggered an domain entailment and find any
+        the other domain rules that
+        entail this type and see if the subject of the statement is subject
+        of any of those properties, if not ok to remove type statement from subject
+        '''
+        types = self.domains.get(stmt.predicate,[])
+        for type in types:
+            predicates = self.domainsTypes.get(type, [])
+            for prop in predicates:
+                if prop == stmt.predicate:
+                    continue
+                if self.model.getStatements(stmt[0], prop):
+                    return False
+            self.entailments.removeStatement( (stmt[0], RDF+'type', type, R, SCHEMACTX) )
 
     def saveSubtypes(self):
-        #XXX make this work  
+        #XXX make this work and implement save_subtype_entailments = True
         adds, removes = diff(self.supertypes, self.currentSubTypes)
         
         for supertype, subtypes in adds.items():
@@ -613,18 +630,23 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
     def getStatements(self, subject = None, predicate = None, object = None,
                       objecttype=None,context=None, asQuad=True, hints=None):
         
-        if not self.findCompabilityStatements:
+        if not self.findCompatibleStatements:
             return super(RDFSSchema, self).getStatements(subject,
                         predicate,object,objecttype,context, asQuad, hints)
+
         
         if predicate in self.typePreds:
             submap = self.currentSubTypes
             test = object
             pos = 3
+            ranges = set()
+            domains = set()
         else:
             submap = self.currentSubProperties
             test = predicate
             pos = 2
+            ranges = domains = ()
+            
         
         statements = []     
         changed = 0           
@@ -633,9 +655,27 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
                 predicate = compatible
             elif pos == 3:
                 object = compatible
+                #handle subprops
+                #ranges += self.rangeProps.get(object, [])
+                #domains += self.domainsProps.get(object, [])
+                
             #XXX handle hints intelligently, see super() implementation
             moreStatements = super(RDFSSchema, self).getStatements(subject,
                                 predicate,object,objecttype,context, asQuad)
+            if moreStatements:
+                changed += 1
+                statements.extend(moreStatements)
+
+        for prop in domains:
+            moreStatements = super(RDFSSchema, self).getStatements(subject,
+                                prop,scope=context, asQuad=asQuad)
+            if moreStatements:
+                changed += 1
+                statements.extend(moreStatements)
+
+        for prop in ranges:
+            moreStatements = super(RDFSSchema, self).getStatements(predicate=prop,
+                object=subject, objecttype=OBJECT_TYPE_RESOURCE, scope=context, asQuad=asQuad)
             if moreStatements:
                 changed += 1
                 statements.extend(moreStatements)

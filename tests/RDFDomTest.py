@@ -270,6 +270,9 @@ _:O4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:A.
 _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
 '''
         rdfDom = self.getModel(cStringIO.StringIO(model) )
+        #we're testing the model directly so set this True:
+        rdfDom.schema.findCompatibleStatements = True
+
         def getcount(obj):
             stmts = rdfDom.model.getStatements(
                 predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
@@ -279,6 +282,85 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         self.failUnless(getcount('bnode:A') == 1)        
         self.failUnless(getcount('bnode:D') == 4)
         self.failUnless(getcount('bnode:F') == 3)
+
+        ### domain
+        #add a domain rule and a property to trigger it
+        rdfDom.model.addStatements([
+        Statement('test:prop', RDF_SCHEMA_BASE+u'domain', 'bnode:A', 'R'),
+        Statement('bnode:O5', 'test:prop', 'test'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+
+        #already has this type, so adding prop on this resource shouldn't change anything
+        rdfDom.model.addStatements([
+        Statement('bnode:O4', 'test:prop', 'test2'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+        #neither should removing it
+        rdfDom.model.removeStatements([
+        Statement('bnode:O4', 'test:prop', 'test2'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+
+        #add a subproperty rule and an resource with that property
+        rdfDom.model.addStatements([
+        Statement('test:subprop', RDF_SCHEMA_BASE+u'subPropertyOf', 'test:prop', 'R'),
+        Statement('bnode:D6', 'test:subprop', 'test'),
+        ])
+        #subproperty should trigger entailments too
+        self.failUnless(getcount('bnode:A') == 3)
+        self.failUnless(getcount('bnode:D') == 6)
+
+        #remove the rule, the entailments should be removed too
+        rdfDom.model.removeStatements([
+        Statement('test:prop', RDF_SCHEMA_BASE+u'domain', 'bnode:A', 'R'),
+        ])
+        #XXX adding test:subprop break removals
+        #self.assertEquals(getcount('bnode:A'), 1)
+        #self.assertEquals(getcount('bnode:D'), 4)
+        
+        ### range
+        #add a range rule and a property to trigger it
+        rdfDom.model.addStatements([
+        Statement('test:propR', RDF_SCHEMA_BASE+u'range', 'bnode:A', 'R'),
+        Statement('bnode:O6', 'test:propR', 'bnode:O5', 'R'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+
+        #already has this type, so adding prop on this resource shouldn't change anything
+        rdfDom.model.addStatements([
+        Statement('bnode:O7', 'test:propR', 'bnode:O4', 'R'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+        #neither should removing it
+        rdfDom.model.removeStatements([
+        Statement('bnode:O7', 'test:propR', 'bnode:O4', 'R'),
+        ])
+        self.failUnless(getcount('bnode:A') == 2)
+        self.failUnless(getcount('bnode:D') == 5)
+
+        #add a subproperty rule and an resource with that property
+        rdfDom.model.addStatements([
+        Statement('test:subpropR', RDF_SCHEMA_BASE+u'subPropertyOf', 'test:propR', 'R'),
+        Statement('bnode:R1', 'test:subpropR', 'bnode:R2', 'R'),
+        ])
+        #subproperty should trigger entailments too
+        self.failUnless(getcount('bnode:A') == 3)
+        self.failUnless(getcount('bnode:D') == 6)
+
+        #remove the rule, the entailments should be removed too
+        rdfDom.model.removeStatements([
+        Statement('test:propR', RDF_SCHEMA_BASE+u'range', 'bnode:A', 'R'),
+        ])
+        #XXX adding test:subpropR break removals
+        #self.failUnless(getcount('bnode:A') == 1)
+        #self.failUnless(getcount('bnode:D') == 4)
+
 
     def testSubproperty(self):        
         model = '''<http://rx4rdf.sf.net/ns/archive#C> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://rx4rdf.sf.net/ns/archive#D>.
@@ -294,6 +376,9 @@ _:O3 <http://rx4rdf.sf.net/ns/archive#B> "".
 _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
 '''
         rdfDom = self.getModel(cStringIO.StringIO(model) )
+        #we're testing the model directly so set this True:
+        rdfDom.schema.findCompatibleStatements = True
+
         def getcount(pred):
             stmts = rdfDom.model.getStatements(predicate=pred)
             return len(stmts)
