@@ -81,4 +81,7 @@ import rx.RxPathModelTyrant
 modelFactory=rx.RxPathModel.MemModel
 STORAGE_PATH="localhost:1978"
 
-raccoon.run(globals())
+try:
+    raccoon.run(globals())
+except KeyboardInterrupt:
+    print "exiting!"
