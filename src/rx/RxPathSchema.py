@@ -646,10 +646,11 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
             test = predicate
             pos = 2
             ranges = domains = ()
-            
         
         statements = []     
-        changed = 0           
+        changed = 0
+        #note: if `test` is None we will retrieve non-entailed statements
+        #to get all supertypes or superproperties, you need to explicitly query
         for compatible in submap.get(test, [test]):
             if pos == 2:
                 predicate = compatible
@@ -666,19 +667,31 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
                 changed += 1
                 statements.extend(moreStatements)
 
+        #XXX not yet implemented:
+        #all props and subprops that have a domain of requested type or subtype
+        if subject is not None:
+            drhints={'exist':1}
+        else:
+            drhints=None
         for prop in domains:
             moreStatements = super(RDFSSchema, self).getStatements(subject,
-                                prop,scope=context, asQuad=asQuad)
+                            prop,scope=context, hints=drhints)
             if moreStatements:
                 changed += 1
-                statements.extend(moreStatements)
+                #reconstruct rdf:type statement
+                statements.extend( set(Statement(s[0],predicate, object,
+                    OBJECT_TYPE_RESOURCE, s[4]) for s in moreStatements) )
 
+        #all props and subprops that have a range of requested type or subtype
         for prop in ranges:
             moreStatements = super(RDFSSchema, self).getStatements(predicate=prop,
-                object=subject, objecttype=OBJECT_TYPE_RESOURCE, scope=context, asQuad=asQuad)
+                object=subject, objecttype=OBJECT_TYPE_RESOURCE,
+                scope=context, hint=drhints)
             if moreStatements:
                 changed += 1
-                statements.extend(moreStatements)
+                #reconstruct rdf:type statement
+                statements.extend( set(Statement(s[2],predicate, object,
+                    OBJECT_TYPE_RESOURCE, s[4]) for s in moreStatements)   )
 
         if changed > 1 or hints:        
             statements.sort()

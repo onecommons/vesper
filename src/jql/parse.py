@@ -196,8 +196,8 @@ def t_error(t):
 
 # Newlines
 def t_NEWLINE(t):
-    r'\n+'
-    t.lexer.lineno += t.value.count("\n")
+    r'(\n|\r)+'
+    t.lexer.lineno += max(t.value.count("\n"),t.value.count("\r"))
 
 # Completely ignored characters
 t_ignore = ' \t\x0c'
@@ -369,7 +369,7 @@ def p_construct(p):
             defaults[ constructop[0].lower() ] = constructop[1]
 
     where = _joinFromConstruct(op, defaults['where'], p.jqlState)
-    #XXX other constructops: limit, offset, ns, groupby
+    #XXX other constructops: limit, offset, ns, groupby    
     p[0] = Select(op, where)
     assert not where or where.parent is p[0]
 
@@ -638,7 +638,7 @@ def p_columnname(p):
 
 def p_dictvalue(p): 
     '''
-    dictvalue : LBRACKET expression RBRACKET 
+    dictvalue : LBRACKET construct RBRACKET
               | construct
               | expression              
     '''

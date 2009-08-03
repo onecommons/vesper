@@ -766,7 +766,7 @@ class SimpleQueryEngine(object):
                     subjectcol = tupleset.findColumnPos(subjectlabel)
                     if not subjectcol:
                         raise QueryException(
-                            'construct: could not find subject label %s in %s'
+                            'construct: could not find subject label "%s" in %s'
                             % (subjectlabel, tupleset.columns))
                 idcells = list(getcolumn(subjectcol, row))
                 assert len(idcells) == 1, '%s %s %s' % (subjectcol, subjectlabel, idcells)
@@ -776,8 +776,6 @@ class SimpleQueryEngine(object):
                 #ccontext.currentTupleset = SimpleTupleset((row,),
                 #            hint=(row,), op='construct',debug=context.debug)
                 for prop in op.args:
-                    if isinstance(prop, jqlAST.Join): #XXX
-                        continue
                     if isinstance(prop, jqlAST.ConstructSubject):
                         #print 'cs', prop.name, idvalue
                         if not prop.name: #omit 'id' if prop if name is empty
@@ -792,21 +790,23 @@ class SimpleQueryEngine(object):
                     else:
                         ccontext = context
                         if isinstance(prop.value, jqlAST.Select):
+                            #evaluate the select using a new context with the
+                            #the current column as the tupleset
                             ccontext = copy.copy( ccontext )
-                            #if id label is set use that, or use the property name
-                            label = prop.value.construct.id.getLabel() or prop.name                            
+                            #if id label is set use that #old logic: or use the property name
+                            label = prop.value.construct.id.getLabel()# or prop.name
+                            assert label
                             col = tupleset.findColumnPos(label, True)
                             #print row
                             if not col:
                                 raise QueryException(
-                                    'construct: could not find label %s in %s'
+                                    'construct: could not find label "%s" in %s'
                                     % (label, tupleset.columns))
                             else:
                                 pos, rowInfoTupleset = col
 
-                            v = list([row for cell,row in getcolumn(pos, row)])
-                            #print '!!!v', col, label, v, 'row', row
-                            assert isinstance(v, (list, tuple, Tupleset))
+                            v = list([irow for cell,irow in getcolumn(pos, row)])
+                            #print '!!!v', col, label, v, 'row', row                            
                             #assert isinstance(col.type, Tupleset)
                             ccontext.currentTupleset = SimpleTupleset(v,
                               columns=rowInfoTupleset.columns,

@@ -728,9 +728,9 @@ class HTTPRequestProcessor(RequestProcessor):
         if hasattr(response, 'read'): #its a file not a string
             block_size = 8192
             if 'wsgi.file_wrapper' in environ:
-                return environ['wsgi.file_wrapper'](filelike, block_size)
+                return environ['wsgi.file_wrapper'](response, block_size)
             else:
-                return iter(lambda: filelike.read(block_size), '')
+                return iter(lambda: response.read(block_size), '')
         else:
             return [response]
 

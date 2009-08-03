@@ -52,15 +52,15 @@ def testaction(kw, retval):
             if path == 'index': # query
                 r = dom_store.query(postdata)
                 r = list(r)
-                out = json.dumps(r)
+                out = json.dumps(r,sort_keys=True, indent=4)
                 return out
             
             elif path == 'update':
                 print "storing data:", postdata
                 data = json.loads(postdata)
                 dom_store.update(data)
-                tmp = dom_store.model.getStatements()
-                return str(tmp)
+                from pprint import pprint
+                return pprint(tmp)
         
         except Exception, e:
             err = """
@@ -77,8 +77,8 @@ actions = {
 }
 
 import rx.RxPathModelTyrant
-modelFactory=rx.RxPathModelTyrant.TransactionTyrantModel
-#modelFactory=rx.RxPathModel.MemModel
+#modelFactory=rx.RxPathModelTyrant.TransactionTyrantModel
+modelFactory=rx.RxPathModel.MemModel
 STORAGE_PATH="localhost:1978"
 
 raccoon.run(globals())

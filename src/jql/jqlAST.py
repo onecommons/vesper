@@ -630,6 +630,13 @@ class ConstructSubject(QueryOp):
             value.parent = self
         self.value = value
 
+    def appendArg(self, op):
+        if isinstance(op, Label):
+            self.value = op #only one, replaces current if set
+        else:
+            raise QueryException('bad ast: ConstructSubject doesnt take %s' % type(op))
+        op.parent = self
+
     def getLabel(self):
         if self.value:
             return self.value.name
@@ -685,6 +692,7 @@ class Select(QueryOp):
 
     def replaceArg(self, child, with_):
         if isinstance(child, Join):
+            self.construct.id.appendArg(with_)
             self.where = None
             return
         raise QueryException('invalid operation')

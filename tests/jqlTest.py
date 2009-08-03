@@ -249,6 +249,55 @@ t("{*/1}", ast='error')
 
 #logs ERROR:parser:Syntax error at '}'
 t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
+
+#xxx fix when namespace and type support is better
+SUBPROPOF = u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf'
+SUBCLASSOF = u'http://www.w3.org/2000/01/rdf-schema#subClassOf'
+RDF_SCHEMA_BASE = u'http://www.w3.org/2000/01/rdf-schema#'
+TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
+
+t.model = modelFromJson([
+#{ 'ns': nsMap },
+
+{ "id" : "Tag",
+   SUBCLASSOF : RDF_SCHEMA_BASE+'Class'
+},
+{
+'id' : "subsumedby",
+ SUBPROPOF : SUBCLASSOF,
+ RDF_SCHEMA_BASE+'domain' : 'Tag',
+ RDF_SCHEMA_BASE+'range' : 'Tag'
+},
+{ "id" : "actions",
+  TYPE : "Tag"
+},
+{ "id" : "todo",
+  "subsumedby" : "actions"
+},
+{ "id" : "toread",
+   "label" : "to read",
+   "subsumedby" : "actions"
+},
+{ "id" : "projects",
+  TYPE : "Tag"
+},
+{'id' : 'commons',
+   "subsumedby" : "projects"
+},
+{'id':'rhizome',
+ "subsumedby" : "projects"
+}
+])
+
+t('''{
+id : ?parent,
+'contains' : [{ where(subsumedby = ?parent)}]
+}
+''',
+[{'contains': [{'id': 'commons'}, {'id': 'rhizome'}], 'id': 'projects'},
+ {'contains': [{'id': 'toread'}, {'id': 'todo'}], 'id': 'actions'}])
+
+
 basic = Suite()
 basic.model = [{}, {}]
 
