@@ -22,32 +22,6 @@ _ = lambda s: s #XXX
 # strings or, if invalid, could contain characters unsafe for the error
 # message stream.
 #
-MessageSource_URI = {
-    UriException.INVALID_BASE_URI:
-        _("Invalid base URI: %(base)r cannot be used to resolve reference %(ref)r"),
-    UriException.RELATIVE_BASE_URI:
-        _("Invalid base URI: %(base)r cannot be used to resolve reference %(ref)r;"
-          " the base URI must be absolute, not relative."),
-    UriException.NON_FILE_URI:
-        _("Only a 'file' URI can be converted to an OS-specific path; URI given was %r"),
-    UriException.UNIX_REMOTE_HOST_FILE_URI:
-        _("A URI containing a remote host name cannot be converted to a path on posix;"
-          " URI given was %r"),
-    UriException.RESOURCE_ERROR:
-        _("Error retrieving resource %(loc)r: %(msg)s"),
-    UriException.UNSUPPORTED_PLATFORM:
-        _("Platform %r not supported by URI function %s"),
-    UriException.SCHEME_REQUIRED:
-        _("Scheme-based resolution requires a URI with a scheme; "
-          "neither the base URI %(base)r nor the reference %(ref)r have one."),
-    UriException.INVALID_PUBLIC_ID_URN:
-        _("A public ID cannot be derived from URN %(urn)r"
-          " because it does not conform to RFC 3151."),
-    UriException.UNSUPPORTED_SCHEME:
-        _("The URI scheme %(scheme)s is not supported by resolver %(resolver)s"),
-    UriException.IDNA_UNSUPPORTED:
-        _("The URI ref %(uri)r cannot be made urllib-safe on this version of Python (IDNA encoding unsupported)."),
-    }
 
 class UriException(Exception):
     """
@@ -82,6 +56,33 @@ class UriException(Exception):
         self.message = messages[errorCode] % msgargs
         Exception.__init__(self, self.message, args)
         return
+
+MessageSource_URI = {
+    UriException.INVALID_BASE_URI:
+        _("Invalid base URI: %(base)r cannot be used to resolve reference %(ref)r"),
+    UriException.RELATIVE_BASE_URI:
+        _("Invalid base URI: %(base)r cannot be used to resolve reference %(ref)r;"
+          " the base URI must be absolute, not relative."),
+    UriException.NON_FILE_URI:
+        _("Only a 'file' URI can be converted to an OS-specific path; URI given was %r"),
+    UriException.UNIX_REMOTE_HOST_FILE_URI:
+        _("A URI containing a remote host name cannot be converted to a path on posix;"
+          " URI given was %r"),
+    UriException.RESOURCE_ERROR:
+        _("Error retrieving resource %(loc)r: %(msg)s"),
+    UriException.UNSUPPORTED_PLATFORM:
+        _("Platform %r not supported by URI function %s"),
+    UriException.SCHEME_REQUIRED:
+        _("Scheme-based resolution requires a URI with a scheme; "
+          "neither the base URI %(base)r nor the reference %(ref)r have one."),
+    UriException.INVALID_PUBLIC_ID_URN:
+        _("A public ID cannot be derived from URN %(urn)r"
+          " because it does not conform to RFC 3151."),
+    UriException.UNSUPPORTED_SCHEME:
+        _("The URI scheme %(scheme)s is not supported by resolver %(resolver)s"),
+    UriException.IDNA_UNSUPPORTED:
+        _("The URI ref %(uri)r cannot be made urllib-safe on this version of Python (IDNA encoding unsupported)."),
+    }
 
 #import Uuid
 
