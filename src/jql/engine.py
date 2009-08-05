@@ -891,8 +891,7 @@ class SimpleQueryEngine(object):
                 def bindjoinFunc(jointype, current):
                     '''
                     jointypes: inner, outer, semi- and anti-
-                    '''
-                    #need this func to create new local bindings inside iteration
+                    '''                    
                     if jointype=='o':
                         nullrows = [None] * len(current.columns)
                     elif jointype=='a':

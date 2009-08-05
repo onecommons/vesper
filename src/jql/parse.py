@@ -216,8 +216,8 @@ class _ParseState(object):
         if join.name:
             if join.name != name:
                 raise QueryException(
-                   "can't assign id %s, join already labeled %s"
-                    % (name, join.name))
+                   "can't assign id %s, join already labeled %s: %s"
+                    % (name, join.name, join))
         else:
             join.name = name
 
@@ -228,6 +228,12 @@ class _ParseState(object):
             self.labeledjoinorder.remove(name)
         #assumes this is called in bottoms-up parse order
         self.labeledjoinorder.append(name)
+
+    def getLabeledJoin(self, name):
+        jlist = self.labeledjoins.get(name)
+        if not jlist:
+            return None
+        return jlist[0]
 
     def nextAnonJoinId(self):
         self._anonJoinCounter += 1
@@ -317,7 +323,14 @@ def _joinFromConstruct(construct, where, parseState):
     if construct.id:
         name = construct.id.getLabel()
         assert left
-        parseState.addLabeledJoin(name, left)
+        try:
+            parseState.addLabeledJoin(name, left)
+        except:
+            #print construct
+            #print where
+            #print left
+            raise
+
     return left
 
 def p_root(p):
@@ -872,7 +885,7 @@ def _buildJoinsFromReferences(labeledjoins, parseState):
                 labeledjoin.appendArg(JoinConditionOp(op, pred))
             currentjoin = labeledjoin
 
-    if skipped:
+    if skipped: #XXX should just be warning?
         raise QueryException(
                 'reference to unknown label(s): '+ ', '.join(skipped))
     return skipped
@@ -1060,7 +1073,7 @@ def makeJoinExpr(expr, parseState):
                     v = Not(v)
                 cmproots.append( (parent, v) )
 
-    #for each top-level comparison in the expression
+    #for each top-level comparison in the expression    
     for parent, root in cmproots:
         #first add filter or join conditions that correspond to the columnrefs
         #(projections) that appear in the expression
@@ -1068,7 +1081,8 @@ def makeJoinExpr(expr, parseState):
         #look for Project ops but don't descend into ResourceSetOp (Join) ops
         projectops = []
         skipRoot = False
-        labelreference = None
+        labels ={}
+        
         for child in root.depthfirst(
                 descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
             if isinstance(child, ResourceSetOp):                
@@ -1077,6 +1091,11 @@ def makeJoinExpr(expr, parseState):
                     #XXX standalone join, do an "(not) exists join"
                     skipRoot = True #don't include this root in this join
                 else:
+                    if not child.name:
+                        child.name = parseState.nextAnonJoinId()
+                        parseState.addLabeledJoin(child.name, child)
+                    child = Label(child.name)
+                    #replace this join with a Label
                     #XXX same as Label case (assign label if necessary)
                     raise QueryException('join in filter not yet implemented')
             if isinstance(child, Project):
@@ -1084,32 +1103,54 @@ def makeJoinExpr(expr, parseState):
                  if projectop:
                     projectops.append( (child, projectop) )
             elif isinstance(child, Label):
-                if root == Eq(Project(SUBJECT), child):
-                    #its a declaration like id = ?label
-                    parseState.addLabeledJoin(child.name, parent)
-                else: #label reference
-                    labelname = child.name
-                    if labelreference:
-                        if labelreference == labelname:
-                            #skip duplicates references like func(?foo, ?foo)
-                            continue
-                        else:
-                            #XXX ?a = ?b
-                            #XXX foo = (?a or ?b) handle boolean
-                            raise QueryException('expressions like ?a = ?b not yet supported')
-                    labelreference = labelname
-                    child.__class__ = Constant #hack so label is treated as independant
-                    if root.isIndependent():
-                        #doesn't independ, so  treat as filter
-                        joincond = (Filter(root), SUBJECT) #filter, join pred
+                labels.setdefault(child.name,[]).append(child)
+
+        if len(labels) > 1:
+            if False:#len(labels) == 2:
+                ##XXX throws 'can't assign id , join already labeled b: Join:'b'
+                #with {id=?a and ?a = 1} and {id=?b and ?b = 2} and ?b = ?a
+                #XXX currently only handle patterns like ?a = ?b
+                #need to handle pattern like "foo = (?a or ?b)" (boolean)
+                # or "?a = ?b = ?c"  or foo(?a,?b) or ?a != ?b
+                (a, b) = [v[0] for v in labels.values()]
+                if root == Eq(a, b):                    
+                    #note: this isn't necessary associate with the parent op
+                    #that may come later when joins on labelreferences are made
+                    parentjoin = parseState.getLabeledJoin(a.name)
+                    if parentjoin:
+                        labelname = b.name
+                        joincond = (b, SUBJECT)
                     else:
-                        joincond = (parent, root) #join, join pred
-                    Project(SUBJECT)._mutateOpToThis(child)
-                    #print 'add label ref', joincond.parent
-                    labelreferences.setdefault(parent, []).append(
-                                                        (labelname, joincond) )
-                    #labelreferences.setdefault(labelname,[]).append(joincond)
-                skipRoot = True #don't include this root in this join
+                        parentjoin = parseState.getLabeledJoin(b.name)
+                        if parentjoin:
+                            labelname = a.name
+                            joincond = (a, SUBJECT)
+                        else:
+                            raise QueryException(
+                'could not find reference to neither %s or %s' % (a.name, b.name))
+                    labelreferences.setdefault(parentjoin, []).append(
+                                            (labelname, joincond) )
+                    skipRoot = True
+            else:
+                raise QueryException('expressions like ?a = ?b not yet supported')
+        for labelname, ops in labels.items():
+            child = ops[0] #XXX need to worry about expressions like foo(?a, ?a) ?
+            if root == Eq(Project(SUBJECT), child):
+                #its a declaration like id = ?label
+                parseState.addLabeledJoin(labelname, parent)
+            else: #label reference
+                child.__class__ = Constant #hack so label is treated as independant
+                if root.isIndependent():
+                    #expr doesn't depend it's parent join, so  treat as filter
+                    joincond = (Filter(root), SUBJECT) #filter, join pred
+                else:
+                    joincond = (parent, root) #join, join pred
+                #replace the label reference with a Project(SUBJECT):
+                Project(SUBJECT)._mutateOpToThis(child)
+                labelreferences.setdefault(parent, []).append(
+                                                    (labelname, joincond) )
+                
+            skipRoot = True #don't include this root in this join
 
         #try to consolidate the projection filters into root filter.
         if skipRoot:
