@@ -1,6 +1,7 @@
 import raccoon
 from string import Template
 from cgi import escape
+from optparse import OptionParser
 
 try:
     import json
@@ -104,7 +105,7 @@ def testaction(kw, retval):
     elif method == 'POST':
         dom_store = kw['__server__'].domStore
         postdata = kw['_params']['data']
-        store_query(postdata)
+        store_query(postdata, (path == 'update'))
         
         try:
             if path == 'index': # query
@@ -114,12 +115,13 @@ def testaction(kw, retval):
                 return out
             
             elif path == 'update':
-                print "storing data:", postdata
+                # print "storing data:", postdata
                 data = json.loads(postdata)
                 dom_store.update(data)
                 from pprint import pprint
-                return pprint(tmp)
-        
+                # return pprint(tmp)
+                return 'success?'
+                
         except Exception, e:
             err = """
             <html><body>
@@ -134,12 +136,16 @@ actions = {
   'http-request' : [testaction]
 }
 
-# import rx.RxPathModelTyrant
-#modelFactory=rx.RxPathModelTyrant.TransactionTyrantModel
-# modelFactory=rx.RxPathModel.MemModel
-# STORAGE_PATH="localhost:1978"
-STORAGE_PATH="out2.nt"
+# using STORAGE_URL sets modelFactory and STORAGE_PATH
+#STORAGE_URL="tyrant://localhost:1978"
+#STORAGE_URL="rdf://out2.nt"
+STORAGE_URL="mem://"
 
+parser = OptionParser()
+(options, args) = parser.parse_args()
+if len(args) > 0:
+    STORAGE_URL = args[0]
+    
 try:
     raccoon.run(globals())
 except KeyboardInterrupt:

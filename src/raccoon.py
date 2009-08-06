@@ -944,6 +944,36 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
     return vars
 
 def run(vars, out=sys.stdout):
+    if 'STORAGE_URL' in vars:
+        proto_map = { # XXX don't hardcode this
+            'tyrant':'rx.RxPathModelTyrant.TransactionTyrantModel',
+            'rdf':'rx.RxPath.IncrementalNTriplesFileModel',
+            'mem':'rx.RxPathModel.MemModel'
+        }
+        (proto, path) = vars['STORAGE_URL'].split('://')
+        full_model = proto_map[proto].split('.')
+        model_pkg = '.'.join(full_model[:-1]) # e.g. 'rx.RxPathModelTyrant'
+        model_class = full_model[-1] # e.g. 'TransactionTyrantModel'
+        
+        # get a reference to the module object
+        # workaround an inconvenient behavior with __import__ on
+        # multilevel imports
+        #
+        # Can't find the ref in the python docs anymore, but these discuss the issue:
+        # http://stackoverflow.com/questions/211100/pythons-import-doesnt-work-as-expected
+        # http://stackoverflow.com/questions/547829/how-to-dynamically-load-a-python-class
+        def my_import(name):
+            mod = __import__(name)
+            components = name.split('.')
+            for comp in components[1:]:
+                mod = getattr(mod, comp)
+            return mod
+
+        mod = my_import(model_pkg)
+        fac = getattr(mod, model_class)
+        vars['modelFactory'] = fac
+        vars['STORAGE_PATH'] = path
+    
     if 'LOG_CONFIG' in vars:
         logConfig = vars['LOG_CONFIG']
         import logging.config as log_config
