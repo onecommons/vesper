@@ -347,6 +347,7 @@ class BasicDomStore(DomStore):
             removals.extend( node.getModelStatements() )
         self.remove(removals)        
         self.add(newStatements)
+        return newStatements
 
     def query(self, query):
         import jql

@@ -102,7 +102,7 @@ def testaction(kw, retval):
             return "<html><body>Not Found</body></html>"            
         
         data['hist'] = len(_UPDATES) + len(_QUERIES)
-        return template.substitute(**data)
+        return str(template.substitute(**data))
     elif method == 'POST':
         dom_store = kw['__server__'].domStore
         postdata = kw['_params']['data']
@@ -118,10 +118,9 @@ def testaction(kw, retval):
             elif path == 'update':
                 # print "storing data:", postdata
                 data = json.loads(postdata)
-                dom_store.update(data)
-                from pprint import pprint
-                # return pprint(tmp)
-                return 'success?'
+                tmp = dom_store.update(data)
+                from pprint import pformat
+                return pformat(tmp)
                 
         except Exception, e:
             err = """
