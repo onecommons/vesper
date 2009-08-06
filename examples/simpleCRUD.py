@@ -34,10 +34,11 @@ HIST_PAGE = Template("""
 # query/update history
 _QUERIES = []
 _UPDATES = []
-import pickle
 try:
-    data = open('hist.pkl', 'rb') # XXX store this per-db
-    (_QUERIES, _UPDATES) = pickle.load(data)
+    data = json.load(open('hist.json', 'r')) # XXX store this per-db
+    _QUERIES = data['queries']
+    _UPDATES = data['updates']
+    
 except Exception, e:
     print "can't load history!", e
 
@@ -49,8 +50,8 @@ def store_query(q, update=False):
     if q not in dat:
         dat.append(q)
         try:
-            data = open('hist.pkl', 'wb')
-            pickle.dump((_QUERIES, _UPDATES), data)
+            data = open('hist.json', 'w')
+            json.dump({"queries":_QUERIES, "updates":_UPDATES}, data)
         except Exception, e:
             print "error saving query history!", e
 
@@ -95,7 +96,7 @@ def testaction(kw, retval):
             for (i,q) in enumerate(_UPDATES):
                 buf += "%d. <a href='/update?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
             buf += "</html></body>"
-            return buf
+            return str(buf)
         else:
             kw['_responseHeaders']['_status'] = "404 Not Found"
             return "<html><body>Not Found</body></html>"            
