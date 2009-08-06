@@ -1,52 +1,110 @@
 import raccoon
 from string import Template
+from cgi import escape
 
 try:
     import json
 except ImportError:
     import simplejson as json
+    
+QUERY_PAGE = Template("""
+<html><body>
+<b>$label</b>&nbsp;|&nbsp;<a href="$link">$link_label</a>
+<form action="/$path" method="post">
+  <textarea cols="60" rows="30" name="data">$sample</textarea>
+  <br>
+  <input type="submit" value="do $label">
+</form>
+<a href="/hist">$hist queries in history</a>
+</body></html>
+""")
+
+HIST_PAGE = Template("""
+<html><body>
+<b>$label</b>&nbsp;|&nbsp;<a href="$link">$link_label</a>
+<form action="/$path" method="post">
+  <textarea cols="60" rows="30" name="data">$sample</textarea>
+  <br>
+  <input type="submit" value="do $label">
+</form>
+</body></html>
+""")
+
+# query/update history
+_QUERIES = []
+_UPDATES = []
+import pickle
+try:
+    data = open('hist.pkl', 'rb') # XXX store this per-db
+    (_QUERIES, _UPDATES) = pickle.load(data)
+except Exception, e:
+    print "can't load history!", e
+
+def store_query(q, update=False):
+    if update:
+        dat = _UPDATES
+    else:
+        dat = _QUERIES
+    if q not in dat:
+        dat.append(q)
+        try:
+            data = open('hist.pkl', 'wb')
+            pickle.dump((_QUERIES, _UPDATES), data)
+        except Exception, e:
+            print "error saving query history!", e
+
 
 @raccoon.Action
 def testaction(kw, retval):
     path=kw['_name']
     method=kw['_environ']['REQUEST_METHOD']
     dom_store = kw['__server__'].domStore
+    params = kw['_params']
     
-    if path not in ('index', 'update'):
-        kw['_responseHeaders']['_status'] = "404 Not Found"
-        return "<html><body>Not Found</body></html>"
-        
     if method == 'GET':
         if path == 'index':
+            sample = ''
+            if 'hist' in params:
+                sample = _QUERIES[int(params['hist'])]
             data = {
                 'path':path,
                 'label':'query',
-                'sample':'{*}',
+                'sample':sample,
                 'link':'/update',
                 'link_label':'update'
             }
-        else:
+            template = QUERY_PAGE
+        elif path == 'update':
+            sample = ''
+            if 'hist' in params:
+                sample = _UPDATES[int(params['hist'])]
             data = {
                 'path':path,
                 'label': 'update',
-                'sample': '[{"id":"12345", "data":"foo bar baz"}]',
+                'sample': sample,
                 'link':'/',
                 'link_label':'query'
             }
-        template = Template("""
-        <html><body>
-        <b>$label</b>
-        <form action="/$path" method="post">
-          <textarea cols="40" rows="20" name="data">$sample</textarea>
-          <input type="submit" value="$label">
-        </form>
-        <a href="$link">$link_label</a>
-        </body></html>
-        """)
+            template = QUERY_PAGE
+        elif path == 'hist':
+            buf = "<html><body>%d queries<hr>" % len(_QUERIES)
+            for (i, q) in enumerate(_QUERIES):
+                buf += "%d. <a href='/?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
+            buf += "<hr>%d updates<hr>" % len(_UPDATES)
+            for (i,q) in enumerate(_UPDATES):
+                buf += "%d. <a href='/update?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
+            buf += "</html></body>"
+            return buf
+        else:
+            kw['_responseHeaders']['_status'] = "404 Not Found"
+            return "<html><body>Not Found</body></html>"            
+        
+        data['hist'] = len(_UPDATES) + len(_QUERIES)
         return template.substitute(**data)
     elif method == 'POST':
         dom_store = kw['__server__'].domStore
         postdata = kw['_params']['data']
+        store_query(postdata)
         
         try:
             if path == 'index': # query
@@ -76,10 +134,11 @@ actions = {
   'http-request' : [testaction]
 }
 
-import rx.RxPathModelTyrant
+# import rx.RxPathModelTyrant
 #modelFactory=rx.RxPathModelTyrant.TransactionTyrantModel
-modelFactory=rx.RxPathModel.MemModel
-STORAGE_PATH="localhost:1978"
+# modelFactory=rx.RxPathModel.MemModel
+# STORAGE_PATH="localhost:1978"
+STORAGE_PATH="out2.nt"
 
 try:
     raccoon.run(globals())
