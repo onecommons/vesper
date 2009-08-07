@@ -200,9 +200,9 @@ class sjson(object):
     def _blank(self):
         if self._genBNode:
             return self._genBNode()
-        #return RxPath.generateBnode()
-        self.bnodecounter+=1
-        return self.bnodeprefix + str(self.bnodecounter)
+        return RxPath.generateBnode()
+        #self.bnodecounter+=1
+        #return self.bnodeprefix + str(self.bnodecounter)
     
     def QName(self, prop):
         #reverse sorted so longest comes first
