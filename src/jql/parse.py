@@ -470,12 +470,12 @@ def p_join(p):
         p[0] = ErrorOp(p[2], "Invalid Join")
         errorlog.error("invalid join: "  +  str(e) + ' ' + repr(p[2]))
 
-def _makeConstructProp(n, v, nameIsFilter):
+def _makeConstructProp(n, v, nameIsFilter, derefName = False):
     if isinstance(v, T.forcelist):
         return ConstructProp(n, v[0],
-                PropShape.uselist, PropShape.uselist, nameIsFilter)
+                PropShape.uselist, PropShape.uselist, nameIsFilter, nameFunc=derefName)
     else:
-        return ConstructProp(n, v, nameIsFilter=nameIsFilter)
+        return ConstructProp(n, v, nameIsFilter=nameIsFilter, nameFunc=derefName)
 
 def p_constructitem1(p):
     '''
@@ -506,6 +506,12 @@ def p_constructitem5(p):
     constructitem : optional
     '''
     p[0] = p[1]
+
+def p_constructitem6(p):
+    '''
+    constructitem : LPAREN LPAREN columnname RPAREN RPAREN COLON dictvalue
+    '''
+    p[0] = _makeConstructProp(p[3], p[7], False, True)
 
 #def p_constructitem(p):
 #    '''

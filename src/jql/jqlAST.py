@@ -605,8 +605,9 @@ class PropShape(object):
 
 class ConstructProp(QueryOp):
     def __init__(self, name, value, ifEmpty=PropShape.usenull,
-                ifSingle=PropShape.nolist,nameIsFilter=False):
+                ifSingle=PropShape.nolist,nameIsFilter=False, nameFunc=False):
         self.name = name #if name is None (and needed) derive from value (i.e. Project)
+        self.nameFunc = nameFunc
         self.appendArg(value)
         assert ifEmpty in (PropShape.omit, PropShape.usenull, PropShape.uselist)
         self.ifEmpty = ifEmpty

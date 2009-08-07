@@ -817,8 +817,11 @@ class SimpleQueryEngine(object):
                         v = flatten(prop.value.evaluate(self, ccontext),
                                     flattenTypes=Tupleset)
                         #print '####PROP', prop.name or prop.value.name, 'v', v
-                        _setConstructProp(op, pattern, prop, v,
-                                                prop.name or prop.value.name)
+                        if prop.nameFunc:
+                            name = flatten(jqlAST.Project(prop.name).evaluate(self, ccontext))                            
+                        else:
+                            name = prop.name or prop.value.name
+                        _setConstructProp(op, pattern, prop, v, name)
 
                 yield pattern
                 count+=1

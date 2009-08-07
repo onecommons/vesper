@@ -62,7 +62,13 @@ class _ParseState(object):
                     value = prop.value
                 if value == Project('*'):
                     value = None
-    
+                
+                if prop.nameFunc:
+                    if not left:
+                        left = Project(prop.name)
+                    else:
+                        left = And(left, Project(prop.name))
+                                    
                 if prop.nameIsFilter:
                     if value:
                         value = Eq(Project(prop.name), value)                    
