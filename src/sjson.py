@@ -133,6 +133,8 @@ def _expandqname(qname, nsmap):
             return ns+suffix
     return qname
 
+_defaultBNodeGenerator = 'uuid'
+
 class sjson(object):    
     nsmap=[(JSON_BASE,'')]
     
@@ -142,7 +144,7 @@ class sjson(object):
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
 
-    def __init__(self, addOrderInfo=True, generateBnode=None, scope = ''):
+    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, scope = ''):
         self._genBNode = generateBnode
         self.addOrderInfo = addOrderInfo
         self.scope = scope
@@ -198,11 +200,13 @@ class sjson(object):
         return node.data
 
     def _blank(self):
-        if self._genBNode:
+        if self._genBNode=='uuid':
+            return RxPath.generateBnode()
+        if self._genBNode=='counter':
+            self.bnodecounter+=1
+            return self.bnodeprefix + str(self.bnodecounter)
+        else:
             return self._genBNode()
-        return RxPath.generateBnode()
-        #self.bnodecounter+=1
-        #return self.bnodeprefix + str(self.bnodecounter)
     
     def QName(self, prop):
         #reverse sorted so longest comes first

@@ -1,4 +1,4 @@
-from sjson import * 
+from sjson import *
 from pprint import pprint
 
 def assert_json_match(expected, result, dosort=False):
@@ -29,7 +29,7 @@ def assert_stmts_match(expected_stmts, result_stmts):
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False):
     test_json = [ json.loads(src) ]
-    result_stmts = sjson().to_rdf( test_json )
+    result_stmts = sjson(generateBnode='counter').to_rdf( test_json )
     #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
@@ -48,7 +48,7 @@ def assert_stmts_and_back_match(stmts, expectedobj = None):
     if expectedobj is not None:
         assert_json_match(expectedobj, result, True)
     
-    result_stmts = sjson().to_rdf( result )
+    result_stmts = sjson(generateBnode='counter').to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
 import unittest
