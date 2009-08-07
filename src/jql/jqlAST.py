@@ -143,13 +143,18 @@ class QueryOp(object):
         else:
             namerepr = ''
         if self.args:
-            assert all(a.parent is self for a in self.args), repr(self.__class__) + repr([(a.__class__, a.parent) for a in self.args if a.parent is not self])
+            self._validateArgs()
             argsrepr = '(' + ','.join([repr(a) for a in self.args]) + ')'
         else:
             argsrepr = ''
         return (indent + self.__class__.__name__ + namerepr
                 + (self.labels and repr(self.labels) or '')
                 + argsrepr)
+
+    def _validateArgs(self):
+        assert all(a.parent is self for a in self.args), (repr(self.__class__)
+            + repr([(a.__class__, a.parent)
+                    for a in self.args if a.parent is not self]))
 
     def _siblings(self):
         if not self.parent:
@@ -311,7 +316,6 @@ class JoinConditionOp(QueryOp):
         else:
             return self.position
 
-
 class Filter(QueryOp):
     '''
     Filters rows out of a tupleset based on predicate
@@ -426,7 +430,7 @@ class BooleanFuncOp(AnyFuncOp):
 class BooleanOp(QueryOp):
 
     def __repr__(self):
-        #assert all(a.parent is self for a in self.args), repr(self.__class__) + repr([a.parent for a in self.args if a.parent is not self])
+        #self._validateArgs()
         if not self.args:
             return self.name + '()'        
         elif len(self.args) > 1:
@@ -478,12 +482,12 @@ class Cmp(CommunitiveBinaryOp):
 
     def __repr__(self):
         op = self.op
-        assert all(a.parent is self for a in self.args)
+        self._validateArgs()
         return '(' + op.join( [repr(a) for a in self.args] ) + ')'
 
 class Eq(CommunitiveBinaryOp):
     def __repr__(self):
-        assert all(a.parent is self for a in self.args)
+        self._validateArgs()
         return '(' + ' == '.join( [repr(a) for a in self.args] ) + ')'
 
 class In(BooleanOp):

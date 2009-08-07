@@ -118,6 +118,5 @@ class MemCacheModel(Model):
 
 class TransactionMemCacheModel(TransactionModel, MemCacheModel):
     '''
-    Use this class when creating a 4Suite Model using a driver that is not transactional
-    (in particular, the Memory driver).
+    Provides in-memory transactions to MemCacheModel
     '''

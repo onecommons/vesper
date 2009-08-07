@@ -1001,15 +1001,27 @@ class SimpleQueryEngine(object):
             #        arg.left.value = arg.left.evaluate(self, fcontext)
 
             for row in tupleset:
+                value = None
                 for cost, i, arg in args:                    
                     fcontext.currentRow = row
                     #fcontext.currentValue = row[i]
                     value = arg.evaluate(self, fcontext)
+                    #if a filter function returns a tupleset 
+                    #yield those rows instead of the input rows
+                    #otherwise, treat return value as a boolean and use it to
+                    #filter the input row
+                    if isinstance(value, Tupleset):
+                        assert len(args)==1
+                        for row in value:
+                            yield row
+                        return
                     if not value:
                         break
+
                 if not value:
                     continue                
-                yield row        
+                yield row
+
         return SimpleTupleset(filterRows, hint=tupleset,columns=columns,
                 colmap=colmap, op='complexfilter', debug=context.debug)
 
@@ -1143,123 +1155,6 @@ class SimpleQueryEngine(object):
         else:
             return 1 #XXX
 
-    #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX###############
-
-    def evaluateToBoolean(self, op, context):        
-        result = op.evaluate(self, context)
-        if isinstance(result, Tupleset):            
-            if op.isIndependent():
-                return result.asBool()
-            else:
-                #we assume dependent ops return a join,
-                #and that the left side will be original tupleset
-                #left_inner will return the rows that match
-                return result.left_inner() #todo
-        else:
-            return result
-                    
-    def evalAnd(self, op, context):
-        #first flatten nested ands
-        #then sort by cost and evaluate in that order        
-        args = [(a.cost(self, context), -1, a) for x in flattenOp(op.args, AndOp)]
-        args.sort()
-        return self._evalAnd(args, context)
-    
-    def _evalAnd(self, args, context):
-        context = copy.copy(context)        
-        for cost, pos, arg in args:
-            if pos > -1:
-                context.currentPosition = pos
-
-            result = self.evaluateToBoolean(arg, context)
-            
-            if isinstance(result, Tupleset):
-                context.currentTupleset = result
-            else:
-                if not result:
-                    return SimpleTupleset(op='evalAndEmpty') #nothing matches 
-
-        return context.currentTupleset           
-
-    def costAnd(self, op, context):
-        #minCost = min([a.cost(self, context) for a in op.args])
-        #figure out the average cost
-        if not op.args:
-            return 0.0
-        total = reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
-        return total / len(op.args)
-
-    def evalOr(self, op, context):
-        assert not op.xpathExp
-
-        args = [(a.cost(self, context), a) for x in flattenOp(op.args, OrOp)]
-        args.sort()
-        
-        resultSoFar = Union(op='OrOp') #MutableTupleset()
-        startTupleset = context.currentTupleset
-        context = copy.copy( context )
-
-        for cost, arg in args:            
-            result = self.evaluateToBoolean(arg, context)
-            if isinstance(result, Tupleset):
-                if result is startTupleset:                    
-                    return startTupleset #all rows matched
-                #we only want to examine rows that haven't already been marked as true
-                #is this worth it? big win when all match but probably not most of the time
-                #context.currentTupleset = context.currentTupleset.difference(result)
-                #if not context.currentTupleset.size(): 
-                #    return startTupleset #nothing left so every row matched
-                resultSoFar.tuplesets.append(result)
-                #resultSoFar.update( result )
-            else:
-                if result:
-                    return startTupleset #everything matches
-        return resultSoFar
-    
-    def costOr(self, op, context):
-        return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
-
-    def evalIn(self, op, context):        
-        assert not op.xpathExp
-
-        left = op.args[0]
-        args = op.args[1:]
-
-        if left.isIndependent():
-            leftValue = left.evaluate(self, context)
-        else:
-            leftValue = None
-
-        resultSoFar = Union(op='InOp') #MutableTupleset()
-        startTupleset = context.currentTupleset
-        #print 'inop source', list(context.currentTupleset)
-        context = copy.copy( context )
-
-        for arg in args:
-            if arg.isIndependent():
-                rightValue = arg.evaluate(self, context)
-            else:
-                rightValue = None
-            result = self._evalEq(left, arg, context, leftValue, rightValue)
-            if isinstance(result, Tupleset):
-                if result is startTupleset:                    
-                    return startTupleset #all rows matched
-                #we only want to examine rows that haven't already been marked as true
-                #todo: is this worth it? yes when all match
-                #is this worth it? big win when all match but probably not most of the time
-                #context.currentTupleset = context.currentTupleset.difference(result)
-                #if not len(context.currentTupleset): #todo
-                #    return startTupleset #nothing left so every row matched
-                resultSoFar.tuplesets.append(result)
-                #resultSoFar.update( result )
-            else:
-                if result:
-                    return startTupleset #everything matches
-        #print 'resultSoFar', list(resultSoFar)
-        return resultSoFar
-
-    def costIn(self, op, context):
-        return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
         
         
 

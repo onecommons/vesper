@@ -201,17 +201,6 @@ failing = [
 #throws join in filter not yet implemented:
 '''{* where (foo = { id = 'd' }) }''',
 
-#throws "can't assign id , join already labeled b"
-#after adding "add ?b = ?a"
-'''
-{ *  
-    where (
-        {id=?a and ?a = 1} and {id=?b and ?b = 2}
-        and ?b = ?a
-    )
-}
-''',
-
 #qnames not handled correctly: jql.QueryException: comment projection not found
 '''{ rdfs:comment:* where(rdfs:label='foo')}''',
 #XXX parse._joinFromConstruct() doesn't work with lists:
@@ -319,6 +308,26 @@ id : ?parent,
 [{'contains': [{'id': 'commons'}, {'id': 'rhizome'}], 'id': 'projects'},
  {'contains': [{'id': 'toread'}, {'id': 'todo'}], 'id': 'actions'}])
 
+#error:   AttributeError: 'And' object has no attribute 'removeArg'
+# from this line in parse.py:  join.parent.removeArg(join) #XXX
+skip('''
+{ id : ?a
+    where (
+        {id=?a and ?a = 1} and {id=?b and ?b = 2}
+        and ?b = ?a
+    )
+}
+'''
+)
+
+#printast triggers ast validation failure in CmpOp
+skip('''
+{ id : ?a,
+  'foo' : { id : ?b where (?b > '1')}
+    where (?a = '2')
+}
+'''
+)
 
 basic = Suite()
 basic.model = [{}, {}]
