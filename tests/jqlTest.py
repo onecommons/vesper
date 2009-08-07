@@ -14,7 +14,7 @@ def cp(*args, **kw):
 
 
 def modelFromJson(model):
-    model = sjson.sjson().to_rdf(model)
+    model = sjson.sjson(generateBnode='counter').to_rdf(model)
     return RxPath.MemModel(model)
 
 '''
