@@ -1,4 +1,4 @@
-import raccoon
+import raccoon, route
 from string import Template
 from cgi import escape
 from optparse import OptionParser
@@ -55,85 +55,79 @@ def store_query(q, update=False):
         except Exception, e:
             print "error saving query history!", e
 
-
-@raccoon.Action
-def testaction(kw, retval):
-    path=kw['_name']
+@route.Route("index")
+def index(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
-    dom_store = kw['__server__'].domStore
+    params = kw['_params']
+
+    if method == 'GET':
+        sample = ''
+        if 'hist' in params:
+            sample = _QUERIES[int(params['hist'])]
+        data = {
+            'path':'index', # XXX
+            'label':'query',
+            'sample':sample,
+            'link':'/update',
+            'link_label':'update'
+        }
+        template = QUERY_PAGE
+        data['hist'] = len(_UPDATES) + len(_QUERIES)
+        return str(template.substitute(**data))
+    else: # POST
+        dom_store = kw['__server__'].domStore
+        postdata = kw['_params']['data']
+        store_query(postdata)
+
+        r = dom_store.query(postdata)
+        r = list(r)
+        out = json.dumps(r,sort_keys=True, indent=4)
+        return out
+    
+@route.Route("update")
+def update(kw, retval):
+    method=kw['_environ']['REQUEST_METHOD']
     params = kw['_params']
     
     if method == 'GET':
-        if path == 'index':
-            sample = ''
-            if 'hist' in params:
-                sample = _QUERIES[int(params['hist'])]
-            data = {
-                'path':path,
-                'label':'query',
-                'sample':sample,
-                'link':'/update',
-                'link_label':'update'
-            }
-            template = QUERY_PAGE
-        elif path == 'update':
-            sample = ''
-            if 'hist' in params:
-                sample = _UPDATES[int(params['hist'])]
-            data = {
-                'path':path,
-                'label': 'update',
-                'sample': sample,
-                'link':'/',
-                'link_label':'query'
-            }
-            template = QUERY_PAGE
-        elif path == 'hist':
-            buf = "<html><body>%d queries<hr>" % len(_QUERIES)
-            for (i, q) in enumerate(_QUERIES):
-                buf += "%d. <a href='/?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
-            buf += "<hr>%d updates<hr>" % len(_UPDATES)
-            for (i,q) in enumerate(_UPDATES):
-                buf += "%d. <a href='/update?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
-            buf += "</html></body>"
-            return str(buf)
-        else:
-            kw['_responseHeaders']['_status'] = "404 Not Found"
-            return "<html><body>Not Found</body></html>"            
-        
+        sample = ''
+        if 'hist' in params:
+            sample = _UPDATES[int(params['hist'])]
+        data = {
+            'path':'update', # XXX
+            'label': 'update',
+            'sample': sample,
+            'link':'/',
+            'link_label':'query'
+        }
+        template = QUERY_PAGE
         data['hist'] = len(_UPDATES) + len(_QUERIES)
         return str(template.substitute(**data))
-    elif method == 'POST':
+    else: #POST
         dom_store = kw['__server__'].domStore
         postdata = kw['_params']['data']
-        store_query(postdata, (path == 'update'))
+        store_query(postdata, update=True)
         
-        try:
-            if path == 'index': # query
-                r = dom_store.query(postdata)
-                r = list(r)
-                out = json.dumps(r,sort_keys=True, indent=4)
-                return out
-            
-            elif path == 'update':
-                # print "storing data:", postdata
-                data = json.loads(postdata)
-                tmp = dom_store.update(data)
-                from pprint import pformat
-                return pformat(tmp)
-                
-        except Exception, e:
-            err = """
-            <html><body>
-            <h3>Error</h3>
-            <p>%s</p>
-            </body></html>
-            """
-            kw['_responseHeaders']['_status'] = "500 Error"
-            return err % e
-        
+        data = json.loads(postdata)
+        tmp = dom_store.update(data)
+        from pprint import pformat
+        return pformat(tmp)
+
+    
+@route.Route("hist")
+def hist(kw, retval):
+    method=kw['_environ']['REQUEST_METHOD']
+    buf = "<html><body>%d queries<hr>" % len(_QUERIES)
+    for (i, q) in enumerate(_QUERIES):
+        buf += "%d. <a href='/?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
+    buf += "<hr>%d updates<hr>" % len(_UPDATES)
+    for (i,q) in enumerate(_UPDATES):
+        buf += "%d. <a href='/update?hist=%d'>%s</a><br><br>" % (i, i, escape(q))
+    buf += "</html></body>"
+    return str(buf)
+
 actions = {
-  'http-request' : [testaction]
+  'http-request' : route.gensequence
 }
 
 # using STORAGE_URL sets modelFactory and STORAGE_PATH
