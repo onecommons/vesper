@@ -198,7 +198,8 @@ syntaxtests = [
 
 #XXX fix failing queries!
 failing = [
-#parsing failing for this:
+#throws join in filter not yet implemented:
+'''{* where (foo = { id = 'd' }) }''',
 
 #qnames not handled correctly: jql.QueryException: comment projection not found
 '''{ rdfs:comment:* where(rdfs:label='foo')}''',
@@ -250,6 +251,16 @@ t("{*/1}", ast='error')
 #logs ERROR:parser:Syntax error at '}'
 t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
 
+#XXX filters to test:
+'''
+    foo = (?a or ?b)
+    foo = (a or b)
+    foo = (?a and ?b)
+    foo = (a and b)
+    foo = {c='c'}
+    foo = ({c='c'} and ?a)
+'''
+
 #xxx fix when namespace and type support is better
 SUBPROPOF = u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf'
 SUBCLASSOF = u'http://www.w3.org/2000/01/rdf-schema#subClassOf'
@@ -297,6 +308,26 @@ id : ?parent,
 [{'contains': [{'id': 'commons'}, {'id': 'rhizome'}], 'id': 'projects'},
  {'contains': [{'id': 'toread'}, {'id': 'todo'}], 'id': 'actions'}])
 
+#error:   AttributeError: 'And' object has no attribute 'removeArg'
+# from this line in parse.py:  join.parent.removeArg(join) #XXX
+skip('''
+{ id : ?a
+    where (
+        {id=?a and ?a = 1} and {id=?b and ?b = 2}
+        and ?b = ?a
+    )
+}
+'''
+)
+
+#printast triggers ast validation failure in CmpOp
+skip('''
+{ id : ?a,
+  'foo' : { id : ?b where (?b > '1')}
+    where (?a = '2')
+}
+'''
+)
 
 basic = Suite()
 basic.model = [{}, {}]
