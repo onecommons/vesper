@@ -154,7 +154,7 @@ def t_STRING(t):
     return t
 
 def t_URI(t):
-    r'''<(([a-zA-Z][0-9a-zA-Z+\\-\\.]*:)/{0,2}[0-9a-zA-Z;/?:@&=+$\\.\\-_!~*'()%]+)?("\#[0-9a-zA-Z;/?:@&=+$\\.\\-_!~*'()%]+)?>'''
+    r'''<(([a-zA-Z][0-9a-zA-Z+\-\.]*:)/{0,2}[0-9a-zA-Z;/?:@&=+$\.\-_!~*'()%]+)?(\#[0-9a-zA-Z;/?:@&=+$\.\-_!~*'()%]*)?>'''
     t.value = t.value[1:-1]
     return t
 
@@ -202,7 +202,7 @@ def t_NEWLINE(t):
 # Completely ignored characters
 t_ignore = ' \t\x0c'
 
-lexer = ply.lex.lex(errorlog=errorlog) #optimize=1)
+lexer = ply.lex.lex(errorlog=errorlog) #, debug=1) #, optimize=1)
 
 # Parsing rules
 
@@ -285,11 +285,23 @@ precedence = (
     ('right','UMINUS', 'UPLUS'),
 )
 
+def p_expression_in(p):
+    """
+    expression : expression IN LPAREN exprlist RPAREN
+    """    
+    p[0] = In(p[1], *p[4])
+
 def p_expression_notin(p):
     """
     expression : expression NOT IN expression
     """    
     p[0] = Not(In(p[1], p[4]))
+
+def p_expression_notin2(p):
+    """
+    expression : expression NOT IN LPAREN exprlist RPAREN
+    """    
+    p[0] = Not(In(p[1], *p[5]))
 
 def p_expression_binop(p):
     """
@@ -308,7 +320,6 @@ def p_expression_binop(p):
               | expression AND expression
               | expression OR expression
     """
-    #print [repr(p[i]) for i in range(0,4)]
     p[0] = _opmap[p[2].upper()](p[1], p[3])
 
 def p_expression_uminus(p):
@@ -415,11 +426,13 @@ def p_funccall(p):
         errorlog.error(msg)
 
 def p_arglist(p):
-    """
+    """    
     arglist : arglist COMMA argument
             | arglist COMMA keywordarg
             | keywordarg
             | argument
+    exprlist : exprlist COMMA expression
+             | expression
     constructitemlist : constructitemlist COMMA constructitem
                       | constructitem
     constructoplist : constructoplist COMMA constructop
@@ -669,6 +682,6 @@ _opmap = {
 '%' : lambda *args: qF.getOp('mod',*args),
 }
 
-def parse(query):
-    return parser.parse(query,tracking=True)#, debug=True)
+def parse(query, debug=False):
+    return parser.parse(query,tracking=True, debug=debug)
 

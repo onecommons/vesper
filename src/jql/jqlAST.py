@@ -185,6 +185,7 @@ class QueryOp(object):
             sorted(self._bydepth(), key=lambda k:k[1], reverse=deepestFirst)]
 
     def appendArg(self, arg):
+        assert isinstance(arg, QueryOp)
         self.args.append(arg)
         arg.parent = self
 
@@ -415,6 +416,12 @@ class AnyFuncOp(QueryOp):
     def evaluate(self, engine, context):
         return engine.evalAnyFuncOp(self, context)
 
+    def execFunc(self, context, *args, **kwargs):
+        if self.metadata.needsContext:
+            return self.metadata.func(context, *args, **kwargs)
+        else:
+            return self.metadata.func(*args, **kwargs)
+        
 class NumberFuncOp(AnyFuncOp):
     def getType(self):
         return NumberType
@@ -428,6 +435,10 @@ class BooleanFuncOp(AnyFuncOp):
         return BooleanType
 
 class BooleanOp(QueryOp):
+    def __init__(self, *args):
+        self.args = []
+        for a in args:
+            self.appendArg(a)
 
     def __repr__(self):
         #self._validateArgs()
@@ -510,12 +521,13 @@ class QueryFuncMetadata(object):
       }
 
     def __init__(self, func, type=None, opFactory=None, isIndependent=True,
-                                                             costFunc=None):
+                                            costFunc=None, needsContext=False):
         self.func = func
         self.type = type or ObjectType
         self.isIndependent = isIndependent
         self.opFactory  = opFactory or self.factoryMap.get(self.type, AnyFuncOp)
         self.costFunc = costFunc
+        self.needsContext = needsContext
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
@@ -530,21 +542,22 @@ class QueryFuncs(object):
                             lambda *args: 0),
     }
 
-    def addFunc(self, name, func, type=None, cost=None):
+    def addFunc(self, name, func, type=None, cost=None, needsContext=False):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         if cost is None or callable(cost):
             costfunc = cost
         else:
             costfunc = lambda *args: cost
-        self.SupportedFuncs[name] = QueryFuncMetadata(func, type, costFunc=costfunc)
+        self.SupportedFuncs[name] = QueryFuncMetadata(func, type, 
+                            costFunc=costfunc, needsContext=needsContext)
 
     def getOp(self, name, *args):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         funcMetadata = self.SupportedFuncs[name]
         return funcMetadata.opFactory(name,funcMetadata,*args)
-
+        
 qF = QueryFuncs() #todo: SupportedFuncs should be per query engine and schema handler
 qF.addFunc('add', lambda a, b: float(a)+float(b), NumberType)
 qF.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
@@ -555,6 +568,8 @@ qF.addFunc('negate', lambda a: -float(a), NumberType)
 #XXX not so lame isref
 qF.addFunc('isref', lambda a: a and True or False, BooleanType)
 
+def addQueryfunc(*args, **kw):
+    qF.addFunc(*args, **kw)
 
 class Project(QueryOp):  
     

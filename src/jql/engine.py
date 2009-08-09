@@ -793,25 +793,24 @@ class SimpleQueryEngine(object):
                             #evaluate the select using a new context with the
                             #the current column as the tupleset
                             ccontext = copy.copy( ccontext )
-                            #if id label is set use that #old logic: or use the property name
-                            label = prop.value.construct.id.getLabel()# or prop.name
+                            #if id label is set use that 
+                            label = prop.value.construct.id.getLabel()
                             assert label
                             col = tupleset.findColumnPos(label, True)
                             #print row
                             if not col:
-                                raise QueryException(
-                                    'construct: could not find label "%s" in %s'
-                                    % (label, tupleset.columns))
+                                #assume we're doing a cross join:
+                                ccontext.currentTupleset = ccontext.initialModel
                             else:
                                 pos, rowInfoTupleset = col
 
-                            v = list([irow for cell,irow in getcolumn(pos, row)])
-                            #print '!!!v', col, label, v, 'row', row                            
-                            #assert isinstance(col.type, Tupleset)
-                            ccontext.currentTupleset = SimpleTupleset(v,
-                              columns=rowInfoTupleset.columns,
-                              hint=v,
-                              op='nested construct value', debug=context.debug)
+                                v = list([irow for cell,irow in getcolumn(pos, row)])
+                                #print '!!!v', col, label, v, 'row', row                            
+                                #assert isinstance(col.type, Tupleset)
+                                ccontext.currentTupleset = SimpleTupleset(v,
+                                columns=rowInfoTupleset.columns,
+                                hint=v,
+                                op='nested construct value', debug=context.debug)
 
                         #print '!!v eval', prop
                         v = flatten(prop.value.evaluate(self, ccontext),
@@ -956,7 +955,6 @@ class SimpleQueryEngine(object):
             value = other.evaluate(self, context)
             simplefilter[proj.name] = value
             complexargs.pop()
-
         return simplefilter, complexargs
 
     def evalFilter(self, op, context):
@@ -1025,8 +1023,9 @@ class SimpleQueryEngine(object):
                     continue                
                 yield row
 
+        opmsg = 'complexfilter:'+ str(complexargs)
         return SimpleTupleset(filterRows, hint=tupleset,columns=columns,
-                colmap=colmap, op='complexfilter', debug=context.debug)
+                colmap=colmap, op=opmsg, debug=context.debug)
 
     def evalProject(self, op, context):
         '''
@@ -1134,18 +1133,37 @@ class SimpleQueryEngine(object):
         #XXX
         lvalue = op.left.evaluate(self, context)
         if op.right:
-            rvalue = op.left.evaluate(self, context)
+            rvalue = op.right.evaluate(self, context)
         else:
             rvalue = context.currentValue
         return lvalue == rvalue
 
     def costEq(self, op, context): #XXX
+        assert len(op.args) == 2, op
+        return op.args[0].cost(self, context) + op.args[1].cost(self, context)
+
+    def evalCmp(self, op, context):
+        lvalue = op.left.evaluate(self, context)
+        if op.right:
+            rvalue = op.right.evaluate(self, context)
+        else:
+            rvalue = context.currentValue
+        result = cmp(lvalue, rvalue)
+        if result == 0 and (op.op == '<=' or op.op == '>='):
+            return True
+        elif result < 0 and op.op[0] == '<':
+            return True
+        elif result > 0 and op.op[0] == '>':
+            return True        
+        return False
+
+    def costCmp(self, op, context): #XXX
         assert len(op.args) == 2
         return op.args[0].cost(self, context) + op.args[1].cost(self, context)
 
     def evalAnyFuncOp(self, op, context):
         values = [arg.evaluate(self, context) for arg in op.args]
-        result = op.metadata.func(*values)
+        result = op.execFunc(context, *values)
         return result
 
     def costAnyFuncOp(self, op, context):
@@ -1158,6 +1176,56 @@ class SimpleQueryEngine(object):
         else:
             return 1 #XXX
 
-        
-        
+    def evalNot(self, op, context):
+        left = op.args[0]
+        lvalue = left.evaluate(self, context)
+        return not lvalue
 
+    def costNot(self, op, context):
+        return 1
+
+    def evalIn(self, op, context):
+        left = op.args[0]
+        lvalue = left.evaluate(self, context)
+        args = op.args[1:]
+
+        #context = copy.copy( context )
+        #XXX sort by cost
+        for arg in args:
+            rightValue = arg.evaluate(self, context)
+            if isinstance(rightValue, Tupleset):
+                for row in rightValue:
+                    if lvalue == row[0]:
+                        return True
+                return False
+            elif rightValue == lvalue:
+                return True
+        return False
+
+    def costIn(self, op, context):
+        return 1
+        return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
+
+def recurse(context, startid, propname=None):
+    '''
+    Starting with the given id, follow the given property
+    '''
+    #XXX expand propname
+    #XXX add unittest for circularity
+    tovisit = [startid]
+
+    def getRows():
+        while tovisit:
+            startid = tovisit.pop()
+            yield [startid]
+            #print 'visit', startid, propname
+            for row in context.initialModel.filter({0:startid, 1:propname}):
+                obj = row[2]
+                if obj not in tovisit:
+                    yield [obj]
+                    tovisit.append(obj)
+
+    columns = [ColumnInfo(0, '', object)]
+    return SimpleTupleset(getRows, columns=columns, op='recurse', debug=context.debug)
+
+jqlAST.addQueryfunc('recurse', recurse, Tupleset, needsContext=True)

@@ -110,9 +110,12 @@ class _ParseState(object):
     
         if construct.id:
             name = construct.id.getLabel()
-            assert left
+            assert left            
             try:
-                self.addLabeledJoin(name, left)
+                if not name and left.name:
+                    construct.id.appendArg(Label(left.name))
+                else:
+                    self.addLabeledJoin(name, left)
             except:
                 #print construct
                 #print where
@@ -140,20 +143,21 @@ class _ParseState(object):
                 if not labeledjoin:
                     if label in skipped:
                         #XXX support unlabeled joins
-                        raise QueryException('unlabeled joins not yet supported')
+                        raise QueryException('unlabeled joins not yet supported "%s"' % label)
                     else:
                         #XXX keep skipped around to check if there are construct labels
                         #for this label, if not, emit warning
                         skipped.append(label)
                     continue
-    
+                    
                 if op is join:
                     #any subsequent join predicates should operate on the new join
                     op = currentjoin
                 if op is not labeledjoin:
                     if isinstance(op, Join):
-                        self.joinMoved(op, op.parent, labeledjoin)
+                        self.joinMoved(op, op.parent, labeledjoin)                    
                     labeledjoin.appendArg(JoinConditionOp(op, pred))
+                                        
                 currentjoin = labeledjoin
     
         if skipped: #XXX should just be warning?
@@ -342,9 +346,8 @@ class _ParseState(object):
                     #XXX currently only handle patterns like ?a = ?b
                     #need to handle pattern like "foo = (?a or ?b)" (boolean)
                     # or "?a = ?b = ?c"  or foo(?a,?b) or ?a != ?b
-                    (a, b) = [v[0] for v in labels.values()]
-                    #XXX fix this hack hardcoding recurse func
-                    if root == Eq(a, b) or root == Eq(recurse(a), b) or root == Eq(recurse(b), a):
+                    (a, b) = [v[0] for v in labels.values()]                    
+                    if root == Eq(a, b):# or root == Eq(recurse(a), b) or root == Eq(recurse(b), a):
                         parentjoin = self.getLabeledJoin(a.name)                        
                         childjoin = self.getLabeledJoin(b.name)                                                
                         if parentjoin and childjoin:
@@ -371,13 +374,14 @@ class _ParseState(object):
                         if root.isIndependent():
                             #the filter only depends on the label's join, not the parent join
                             #so we can just treat as it as a filter on the parent
-                            joincond = (Filter(root), SUBJECT) #filter, join pred
+                            joincond = (Filter(root, subjectlabel=labelname), SUBJECT) #filter, join pred
                         else:
                             #depends on both the parent and the label's join, 
                             #so join them together
                             joincond = (parent, root) #join, join pred
-                        #replace the label reference with a Project(SUBJECT):
+                        #replace the label reference with a Project(SUBJECT):                        
                         Project(SUBJECT)._mutateOpToThis(child)
+                        #print 'adding labelref', labelname, 'joincond', joincond, 'parent', parent
                         labelreferences.setdefault(parent, []).append(
                                                             (labelname, joincond) )
                         

@@ -4,6 +4,9 @@ from rx import RxPath
 import sys, pprint
 from rx.utils import flatten
 
+import jql.jqlAST
+import jql.engine
+
 #aliases for convenience
 jc = JoinConditionOp
 cs = ConstructSubject
@@ -11,7 +14,6 @@ def cp(*args, **kw):
     if len(args) == 1:
         return ConstructProp(None, args[0], **kw)
     return ConstructProp(*args, **kw)
-
 
 def modelFromJson(model):
     model = sjson.sjson(generateBnode='counter').to_rdf(model)
@@ -75,14 +77,19 @@ t.model = modelFromJson([
         { "id" : "3", "foo" : "bar"}
     ])
 
-t('{ ((parent)) : child }',
-   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t('{*}',
 [{'foo': 'bar', 'id': '3'},
  {'foo': 'bar', 'id': '2'},
  {'child': '2', 'id': '_:2', 'parent': '1'},
  {'child': '3', 'id': '_:1', 'parent': '1'}])
+
+t('''{ * where (foo > 'bar') }''')
+
+#   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
+
+t('{ ((parent)) : child }',
+   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t(
 ''' { id : ?childid,
@@ -300,6 +307,10 @@ t.model = modelFromJson([
 },
 {'id':'rhizome',
  "subsumedby" : "projects"
+},
+{
+'subject': 'commons',
+'content' : 'some text about the commons'
 }
 ])
 
@@ -310,6 +321,141 @@ id : ?parent,
 ''',
 [{'contains': [{'id': 'commons'}, {'id': 'rhizome'}], 'id': 'projects'},
  {'contains': [{'id': 'toread'}, {'id': 'todo'}], 'id': 'actions'}])
+
+t('''
+{ id : ?tag, * 
+where (?tag in ('foo', 'commons'))
+}
+''',
+[{'id': 'commons', 'subsumedby': 'projects'}])
+
+#should be the same as prior query but fails with
+#jql.QueryException: can't assign id , join already labeled tag: Join:'tag'
+skip('''
+{ *
+where (id = ?tag and ?tag in ('foo', 'commons'))
+}
+''',
+[{'id': 'commons', 'subsumedby': 'projects'}])
+
+t('''
+{ 
+where (id not in ('foo', 'commons') and subsumedby)
+}''',
+[{'id': 'toread'},
+ {'id': 'todo'},
+ {'id': 'rhizome'}])
+
+#XXX * not handle properly, matching property named '*', should match any value 
+skip('''{ 
+where (subsumedby = *)
+}''',
+[{'id': 'toread'},
+ {'id': 'todo'},
+ {'id': 'rhizome'},
+ {'id': 'commons'},])
+
+#throws: jql.QueryException: unlabeled joins not yet supported "tag"
+skip('''
+    {
+    *
+     where (subjectof= ?tag and
+          {
+            ?tag in recurse('commons', 'subsumedby')
+           }
+        )
+    }
+    ''',[])
+
+#test recurse()
+skip(ast=
+Select(Construct([cp(Project('*'))]),
+Join(
+    JoinConditionOp(
+      Filter(In(Project(0), jql.jqlAST.qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
+          ),               
+     JoinConditionOp(
+      Join(
+        JoinConditionOp(
+          Filter(Eq('subject',Project(1)), subjectlabel='#0', objectlabel='subject')
+                       )
+        ,name='@1') 
+      ,'subject')
+    )
+)
+)
+
+skip(ast=
+Select(Construct([cp(Project('*'))]),
+Join(
+    JoinConditionOp(
+          Filter(Eq('subject',Project(1)), subjectlabel='#0', objectlabel='subject')          
+    ),
+    JoinConditionOp(
+      Join(
+        JoinConditionOp(
+            Filter(In(Project(0), jql.jqlAST.qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
+                       )
+        ,name='@1') 
+        ,'subject')
+,name='@1')
+)
+)
+
+#this fails because the top level join isn't joined with the inner join
+t('''{ *, 'blah' : [{ *  where(id = ?tag and ?tag = 'dd') }]
+ where ( subject = ?tag) }
+''',
+[])
+
+#this fails because the top level join isn't joined with the inner join
+skip('''{ * 
+ where ({id = ?tag and ?tag = 'dd'} and subject = ?tag) }
+''',
+[])
+
+t('''
+    {
+    *
+     where (
+          { id = ?tag and
+            ?tag in recurse('project', 'subsumedby')
+           }
+           and subject= ?tag
+        )
+    }
+    ''',
+    [{'content': 'some text about the commons',
+        'id': '_:1', 'subject': 'commons'}
+    ])
+
+#test recurse() that
+t( '''
+    {
+    *
+     where (subject= ?tag and
+          { id = ?tag and
+            ?tag in recurse('commons', 'subsumedby')
+           }
+        )
+    }
+    ''',
+    [{'content': 'some text about the commons',
+        'id': '_:1', 'subject': 'commons'}
+    ])
+
+#throws jql.QueryException: only equijoin supported for now
+skip( '''
+    { *
+     where (subjectof= ?tag and
+          { id = ?start and id = 'commons' }
+          and
+          {
+           id = ?tag and id in recurse(?start, 'subsumedby')
+           }
+        )
+    }
+    ''',[])
 
 #error:   AttributeError: 'And' object has no attribute 'removeArg'
 # from this line in parse.py:  join.parent.removeArg(join) #XXX
@@ -566,7 +712,7 @@ def main(cmdargs=None):
             print 'query', test.query
 
         if test.ast:
-            if not test.skipParse:
+            if not test.skipParse and test.query:
                 testast = jql.buildAST(test.query)
                 #jql.rewriteAST(testast)
                 if not options.quiet: print 'comparing ast'
@@ -613,6 +759,7 @@ def main(cmdargs=None):
         if not options.quiet:        
             print "Construct Results:"
             pprint.pprint(testresults)
+
         if test.results is not None:
             assert test.results == testresults,  ('unexpected results for test %d' % i)
 
