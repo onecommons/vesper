@@ -126,6 +126,41 @@ def hist(kw, retval):
     buf += "</html></body>"
     return str(buf)
 
+
+@route.Route("api/{action}")
+def api_handler(kw, retval):
+    dom_store = kw['__server__'].domStore
+    params = kw['_params']
+    action = kw['urlvars']['action']
+    
+    if action not in ('query', 'update', 'delete', 'add'):
+        raise Exception("404 action not found") # todo    
+    if 'data' not in params:
+        raise Exception("500 missing required parameter") # todo
+
+    out = {}
+    try:
+        if action == 'query':
+            r = dom_store.query(params['data'])
+            r = list(r) # XXX
+            out['data'] = r
+        elif action == 'update':
+            data = json.loads(params['data'])
+            out['changed'] = dom_store.update(data)
+        elif action == 'add':
+            data = json.loads(params['data'])
+            out['added'] = dom_store.add(data)
+        elif action == 'delete':
+            print "XXX delete action not supported!"
+            pass
+            
+        out['success'] = True
+    except Exception, e:
+        out['success'] = False
+        out['error'] = str(e)
+
+    return json.dumps(out,sort_keys=True, indent=4)
+
 actions = {
   'http-request' : route.gensequence
 }

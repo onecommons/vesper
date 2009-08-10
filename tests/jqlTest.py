@@ -91,7 +91,7 @@ t('''{ * where (foo > 'bar') }''')
 t("{ 'parent' : child }",
    [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
 
-skip("{ ((parent)) : child }",
+t("{ ((parent)) : child }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t(
