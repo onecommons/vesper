@@ -17,13 +17,12 @@ import logging
 log = logging.getLogger("RxPath")
 
 class ColumnInfo(object):
-    def __init__(self, pos, label, type=object):
-        self.pos = pos
+    def __init__(self, label, type=object):
         self.label = label
         self.type = type
 
     def __repr__(self):
-        return 'ColInfo'+repr((self.pos, self.label,self.type))
+        return 'ColInfo'+repr((self.label,self.type))
 
 class Tupleset(object):
     '''
@@ -31,36 +30,19 @@ class Tupleset(object):
     '''
     columns = None
 
-    def findColumn(self, label, deep=False):
-        if not self.columns:
-            return None
-
-        if isinstance(label, int):
-            if label >= len(self.columns):
-                return None
-            return self.columns[label]
-
-        for col in self.columns:
-            if label == col.label:
-                return col
-            if deep and isinstance(col.type, Tupleset):
-                if col.type.findColumn(label, deep):
-                    return col
-        return None
-
     def findColumnPos(self, label, rowinfo=False, pos=()):
         if not self.columns:
             return None
 
-        for col in self.columns:
+        for i, col in enumerate(self.columns):
             if label == col.label:
-                pos = pos+(col.pos,)
+                pos = pos+(i,)
                 if rowinfo:
                     return pos, self
                 else:
                     return pos
             if isinstance(col.type, Tupleset):
-                match = col.type.findColumnPos(label, rowinfo, pos+(col.pos,))
+                match = col.type.findColumnPos(label, rowinfo, pos+(i,))
                 if match:
                     return match
         return None
@@ -117,7 +99,7 @@ class Model(Tupleset):
         return
 
     ### Tupleset interface ###
-    columns = tuple(ColumnInfo(i, l, i == 4 and object or unicode) for i, l in
+    columns = tuple(ColumnInfo(l, i == 4 and object or unicode) for i, l in
           enumerate(('subject', 'predicate','object', 'objecttype','context')))
 
     def filter(self,conditions=None, hints=None):

@@ -237,18 +237,9 @@ def _colrepr(self):
         colstr = ','.join( map(x,self.columns) )
     return '('+colstr+')'
 
-def _reordercols(cols):
-    for i, c in enumerate(cols):
-        c.pos = i
-        if isinstance(c.type, Tupleset):
-            _reordercols(c.type.columns)
-    return cols
-
 def validateRowShape(columns, row):
     if columns is None:
         return
-    assert [col.pos for col in columns] == range(len(columns)), ('bad order',
-         [col.pos for col in columns], range(len(columns)), columns)
     assert isinstance(row, (tuple,list)), row
     assert len(columns) == len(row), '(c %d:%s, r %d:%s)'%(len(columns), columns,  len(row), row)
     for (i, (ci, ri)) in enumerate(itertools.izip(columns, row)):
@@ -364,13 +355,8 @@ class MutableTupleset(list, Tupleset):
     '''
     columns = None
 
-    def __init__(self, columns=None, seq=(), reorder=True):
-        if columns is not None:
-            if reorder :
-                self.columns = [ColumnInfo(i, c.label, c.type)
-                                    for (i, c) in enumerate(columns)]
-            else:
-                self.columns = columns
+    def __init__(self, columns=None, seq=()):        
+        self.columns = columns
         return list.__init__(self, [row for row in seq])
     
     def filter(self, conditions=None, hints=None):
@@ -612,9 +598,6 @@ def groupbyUnordered(tupleset, groupby, debug=False):
     #>>> list(groupbyUnordered([t], (1,1)))
     #[[('c1', 'c2'), MutableTupleset[['a1', ('a2', [('b2', ('c1', 'c2'))]), 'b1']]]]
     resources = {}
-    if debug:
-        columns = debug
-        assert [col.pos for col in columns] == range(len(columns)), columns
     for row in tupleset:
         #print 'gb', groupby, row
         if debug: validateRowShape(tupleset.columns, row) 
@@ -645,7 +628,7 @@ def getcolumn(pos, row):
     p = pos.pop(0)    
     cell = row[p]
     if pos:
-        assert isinstance(cell, Tupleset), "cell %s p %s restp %s" % (cell, p, pos)
+        assert isinstance(cell, Tupleset), "cell %s %s p %s restp %s" % (type(cell), cell, p, pos)
         for nestedrow in cell:
             assert isinstance(nestedrow, (list, tuple)
                 ) and not isinstance(nestedrow, Tupleset), "%s" % (type(nestedrow))
@@ -787,17 +770,16 @@ class SimpleQueryEngine(object):
             subjectlabel = ''
         else:
             subjectlabel = op.id.getLabel()
-            subjectcol = tupleset.findColumnPos(subjectlabel)
-            if not subjectcol:
+            colinfo = tupleset.findColumnPos(subjectlabel, True)
+            if not colinfo:
                 raise QueryException(
                     'construct: could not find subject label "%s" in %s'
                     % (subjectlabel, tupleset.columns))
-            else:                                
-                col = tupleset.findColumn(subjectlabel)  
-                if not col:              
-                    col, tu = tupleset.findColumnPos(subjectlabel, True)
-                    col = tu.columns[col[-1]]
-                rowcolumns = _reordercols([ColumnInfo(0, subjectlabel, col.type)]
+            else: 
+                subjectcol, colTupleset = colinfo
+                #last pos will be offset into the tupleset:
+                col = colTupleset.columns[subjectcol[-1]] 
+                rowcolumns = ([ColumnInfo(subjectlabel, col.type)]
                                     + choosecolumns(subjectcol,tupleset.columns))
 
 
@@ -818,7 +800,7 @@ class SimpleQueryEngine(object):
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
                     print 'valid outer'
-                #print 'currentrow', context.currentRow
+                print 'currentrow', context.currentRow
                 #print 'rowcolumns', rowcolumns
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
@@ -857,11 +839,11 @@ class SimpleQueryEngine(object):
                         for name, value in prop.value.evaluate(self, context):                            
                             _setConstructProp(op, pattern, prop, value, name)
                     else:
-                        ccontext = context
+                        ccontext = copy.copy(context)
                         if isinstance(prop.value, jqlAST.Select):
                             #evaluate the select using a new context with the
                             #the current column as the tupleset
-                            ccontext = copy.copy( ccontext )
+                            
                             #if id label is set use that 
                             label = prop.value.construct.id.getLabel()
                             assert label
@@ -881,14 +863,13 @@ class SimpleQueryEngine(object):
                                 hint=v,
                                 op='nested construct value', debug=context.debug)
                         else:                            
-                            v = [idvalue, row]
+                            v = context.currentRow
                             ccontext.currentTupleset = SimpleTupleset(v,
                                 columns=rowcolumns, 
                                 hint=tupleset, 
                                 op='construct on '+subjectlabel, debug=context.debug)
-                            ccontext.currentRow = v
                         
-                        #print '!!v eval', prop
+                        #print '!!v eval', prop, ccontext.currentRow
                         v = flatten(prop.value.evaluate(self, ccontext),
                                     flattenTypes=Tupleset)
                         #print '####PROP', prop.name or prop.value.name, 'v', v
@@ -913,12 +894,11 @@ class SimpleQueryEngine(object):
         #print '_groupby', joincond.position, position, tupleset.columns
         coltype = object        
         columns = [
-            ColumnInfo(0, joincond.parent.name or '', coltype),
-            ColumnInfo(1, joincond.getPositionLabel(),
+            ColumnInfo(joincond.parent.name or '', coltype),
+            ColumnInfo(joincond.getPositionLabel(),
                                     choosecolumns(position,tupleset.columns) )
         ]
-        columns = _reordercols(columns)
-        assert [col.pos for col in columns] == range(len(columns))
+        
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
                 debug=debug and columns[:]),
@@ -999,7 +979,7 @@ class SimpleQueryEngine(object):
                 assert current.columns and len(current.columns) >= 1
                 assert previous.columns is not None
                 #columns: (left + right)
-                columns = _reordercols(previous.columns + current.columns) 
+                columns = previous.columns + current.columns
                 previous = IterationJoin(previous, current,
                                 bindjoinFunc(jointype, current),
                                 columns,joincond.name,debug=context.debug)
@@ -1043,7 +1023,7 @@ class SimpleQueryEngine(object):
 
         columns = []
         for label, pos in op.labels:
-            columns.append( ColumnInfo(len(columns), label, object) )
+            columns.append( ColumnInfo(label, object) )
 
         def colmap(row):
             for label, pos in op.labels:
@@ -1121,12 +1101,19 @@ class SimpleQueryEngine(object):
         # iteration join it might be nearly expensive as doing the iteration join
         # on the subject only.
         if op.name != '*':
-            col = context.currentTupleset.findColumn(op.name, True)
-            #print op.name, 'col', col, 'currentrow', context.currentRow
-            if not col:
-                print 'raise', context.currentTupleset.columns, 'row', context.currentRow
-                raise QueryException(op.name + " projection not found")            
-            return context.currentRow[col.pos]
+            if isinstance(op.name, int):
+                pos = (op.name,)
+            else:                
+                pos = context.currentTupleset.findColumnPos(op.name)               
+                if not pos:
+                    #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
+                    raise QueryException(op.name + " projection not found")
+                #assert len(pos) == 1, ('unexpected nested column for ', op.name, pos, context.currentRow[pos[0]])
+                #pos = pos[0]
+            print 'project', pos, MutableTupleset(seq=context.currentRow), op.name
+            cell,irow = iter( getcolumn(pos, context.currentRow) ).next()
+            return cell
+            #return context.currentRow[pos]
         else:
             tupleset = context.initialModel
             subject = context.currentRow[SUBJECT]
@@ -1302,7 +1289,7 @@ def recurse(context, startid, propname=None):
                     yield [obj]
                     tovisit.append(obj)
 
-    columns = [ColumnInfo(0, '', object)]
+    columns = [ColumnInfo('', object)]
     return SimpleTupleset(getRows, columns=columns, op='recurse', hint=startid, debug=context.debug)
 
 jqlAST.addQueryfunc('recurse', recurse, Tupleset, needsContext=True)
