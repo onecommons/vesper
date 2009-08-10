@@ -34,7 +34,7 @@ querypartfunc(expression) # groupby | orderby | limit | offset
 
 from jqlAST import *
 import logging
-#logging.basicConfig() #XXX only if logging hasn't already been set
+logging.basicConfig() #XXX only if logging hasn't already been set
 errorlog = logging.getLogger('parser')
 
 class Tag(tuple):
@@ -262,15 +262,27 @@ def p_construct(p):
     props = p[1][0]
     op = Construct(props, shape)
 
-    defaults = dict(where = None, ns = {}, offset = -1, limit = - 1,
+    defaults = dict(where = None, ns = {}, offset = None, limit = None,
                     groupby = None)
     if len(p[1]) > 1 and p[1][1]:
         for constructop in p[1][1]:
             defaults[ constructop[0].lower() ] = constructop[1]
 
-    where = p.jqlState._joinFromConstruct(op, defaults['where'])
-    #XXX other constructops: limit, offset, ns, groupby    
-    p[0] = Select(op, where)
+    groupby = defaults['groupby']
+    if groupby:
+        if isinstance(groupby[0], Constant):
+            arg = Project(groupby[0].value)
+        elif isinstance(groupby[0], Project):
+            arg = groupby[0]
+        else:
+            raise QueryException("bad group by expression")
+                
+        groupby = GroupBy(arg)
+
+    where = p.jqlState._joinFromConstruct(op, defaults['where'], groupby)
+    #XXX add support for ns constructop    
+           
+    p[0] = Select(op, where, groupby, defaults['limit'], defaults['offset'])    
     assert not where or where.parent is p[0]
 
 precedence = (
@@ -580,32 +592,28 @@ def p_optional(p):
             #XXX jc.join = 'outer'
     p[0] = p[3]
 
-def p_constructop(p):
+def p_constructop1(p):
     '''
-    constructop : constructopname LPAREN expression RPAREN
+    constructop : WHERE LPAREN expression RPAREN
+                | GROUPBY LPAREN arglist RPAREN
+                | ORDERBY LPAREN arglist RPAREN
+                | NS LPAREN arglist RPAREN
     '''
     p[0] = T.constructop(p[1], p[3])
 
-XXX = '''
-constructop : WHERE LPAREN expression RPAREN
-            | GROUPBY LPAREN columnamelist RPAREN
-            | ORDERBY LPAREN columnamelist RPAREN
-            | NS LPAREN keywordarglist RPAREN
-            | LIMIT NUMBER
-            | OFFSET NUMBER
-'''
-
-def p_constructopname(p):
+def p_constructop2(p):
     '''
-    constructopname : WHERE
-                    | LIMIT
-                    | OFFSET
-                    | GROUPBY
-                    | ORDERBY
-                    | NS
+    constructop : LIMIT INT
+                | OFFSET INT
     '''
-    p[0] = p[1]
+    p[0] = T.constructop(p[1], p[2])
 
+#def p_constructop2(p):
+#    '''
+#    constructop : WHERE
+#    '''
+#    p[0] = p[1]
+    
 def p_dictconstruct(p):
     '''
     dictconstruct : LBRACE constructitemlist RBRACE
@@ -659,7 +667,7 @@ def p_constructempty(p):
     #conflict is harmless
     pass
 
-parser = ply.yacc.yacc(start="root", errorlog=errorlog ) #, debug=True)
+parser = ply.yacc.yacc(start="root", errorlog=errorlog)#, debug=True)
 
 ####parse-tree-to-ast mapping ####
 

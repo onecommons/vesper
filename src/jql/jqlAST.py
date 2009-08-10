@@ -689,26 +689,41 @@ class Construct(QueryOp):
         return (super(Construct,self).__eq__(other)
             and self.shape == other.shape and self.id == self.id)
 
-class Select(QueryOp):
-    offset = None
-    limit = None
-    where = None
+class GroupBy(QueryOp):
+    aggregateShape = None
+    
+    def __init__(self, arg, **options):
+        assert isinstance(arg, Project)
+        self.args = []
+        self.appendArg(arg)
 
-    def __init__(self, construct, where=None):
+    name = property(lambda self: self.args[0].name)
+        
+class Select(QueryOp):
+    where = None
+    groupby = None
+
+    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None):
         self.appendArg(construct)
         if where:
             self.appendArg(where)
+        if groupby:
+            self.appendArg(groupby)
+        self.offset = offset
+        self.limit = limit
 
     def appendArg(self, op):
         if (isinstance(op, ResourceSetOp)): 
             self.where = op #only one, replaces current if set
         elif (isinstance(op, Construct)):
             self.construct = op #only one, replaces current if set
+        elif (isinstance(op, GroupBy)):
+            self.groupby = op #only one, replaces current if set
         else:
             raise QueryException('bad ast: Select doesnt take %s' % type(op))
         op.parent = self
 
-    args = property(lambda self: [a for a in [self.construct, self.where] if a])
+    args = property(lambda self: [a for a in [self.construct, self.where, self.groupby] if a])
 
     def replaceArg(self, child, with_):
         if isinstance(child, Join):

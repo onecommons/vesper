@@ -78,6 +78,12 @@ t.model = modelFromJson([
     ])
 
 
+skip('''
+{
+groupby('id', display=merge)
+}
+''')
+
 t('{*}',
 [{'foo': 'bar', 'id': '3'},
  {'foo': 'bar', 'id': '2'},
@@ -318,9 +324,47 @@ t.model = modelFromJson([
 {
 'subject': 'commons',
 'content' : 'some more text about the commons'
+},
+{
+'subject': 'rhizome',
+'content' : 'some text about rhizome'
 }
 
 ])
+
+
+# XXX need to add groupby project
+# XXX * is broken: need evalProject not to assume id is SUBJECT
+skip('''{
+*,  
+subject : *, 
+groupby('subject', display=merge)
+}
+''')
+
+t('''{
+subject : *, 
+content : *
+groupby('subject')
+}
+''', 
+[{'content': ['some more text about the commons',
+              'some text about the commons'],
+  'subject': 'commons'},
+  {'content': 'some text about rhizome', 'subject': 'rhizome'}
+]
+)
+
+#leave the groupby property out of the display list
+t('''{
+content : *
+groupby(subject)
+}
+''', [{'content': ['some more text about the commons',
+              'some text about the commons']},
+ {'content': 'some text about rhizome'}]
+ )
+
 
 t('''{
 id : ?parent,
@@ -424,19 +468,24 @@ t('''{ content : *,
     'blah' : [{ *  where(id = ?tag and ?tag = 'commons') }]
  where ( subject = ?tag) }
 ''',
-[{'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
-  'content': 'some text about the commons',
-  'id': '_:2'},
+[
  {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
   'content': 'some more text about the commons',
-  'id': '_:1'}]
+  'id': '_:2'},
+  
+{'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+  'content': 'some text about the commons',
+  'id': '_:3'},
+  ]
 )
 
 t('''{ content : *, 
  where ({id = ?tag and ?tag = 'commons'} and subject = ?tag) }
 ''',
-[{'content': 'some text about the commons', 'id': '_:2'},
- {'content': 'some more text about the commons', 'id': '_:1'}]
+[
+ {'content': 'some more text about the commons', 'id': '_:2'},
+ {'content': 'some text about the commons', 'id': '_:3'},
+]
 )
 
 #find all the entries that implicitly or explicitly are tagged 'projects'
@@ -451,11 +500,12 @@ t('''
         )
     }
     ''',
-[{'content': 'some text about the commons', 
-  'id': '_:2', 'subject': 'commons'},
- {'content': 'some more text about the commons',
-  'id': '_:1', 'subject': 'commons'}]
-)
+[{'content': 'some more text about the commons',
+  'id': '_:2',
+  'subject': 'commons'},
+ {'content': 'some text about the commons', 'id': '_:3', 'subject': 'commons'},
+ {'content': 'some text about rhizome', 'id': '_:1', 'subject': 'rhizome'}]
+ )
 
 #find all the entries that implicitly or explicitly are tagged 'commons'
 t( '''
@@ -468,11 +518,11 @@ t( '''
         )
     }
     ''',
-[{'content': 'some text about the commons', 'id': '_:2', 'subject': 'commons'},
- {'content': 'some more text about the commons',
-  'id': '_:1',
-  'subject': 'commons'}]
-  )
+[{'content': 'some more text about the commons',
+  'id': '_:2',
+  'subject': 'commons'},
+ {'content': 'some text about the commons', 'id': '_:3', 'subject': 'commons'}]
+)
 
 #throws jql.QueryException: only equijoin supported for now
 skip( '''

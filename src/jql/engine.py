@@ -748,6 +748,9 @@ class SimpleQueryEngine(object):
     def evalSelect(self, op, context):
         if op.where:
             context.currentTupleset = op.where.evaluate(self, context)
+        if op.groupby:
+            context.currentTupleset = op.groupby.evaluate(self, context)
+        
         #print 'where ct', context.currentTupleset
         return op.construct.evaluate(self, context)
 
@@ -758,12 +761,15 @@ class SimpleQueryEngine(object):
         tupleset = context.currentTupleset
         assert isinstance(tupleset, Tupleset), type(tupleset)
 
-        if not op.id.getLabel(): 
+        if not op.parent.groupby and not op.id.getLabel(): 
             subjectcol = (0,) 
             rowcolumns = tupleset.columns
             subjectlabel = ''
         else:
-            subjectlabel = op.id.getLabel()
+            if op.parent.groupby:
+                subjectlabel = op.parent.groupby.name
+            else:
+                subjectlabel = op.id.getLabel()
             colinfo = tupleset.findColumnPos(subjectlabel, True)
             if not colinfo:
                 raise QueryException(
@@ -798,6 +804,8 @@ class SimpleQueryEngine(object):
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
                         #print 'cs', prop.name, idvalue
+                        if op.parent.groupby:
+                            continue #don't output id if groupby is specified
                         if not prop.name: #omit 'id' if prop if name is empty
                             continue
                         if op.shape is op.dictShape:
@@ -855,6 +863,28 @@ class SimpleQueryEngine(object):
 
         return SimpleTupleset(construct, hint=tupleset, op='construct',
                                                             debug=context.debug)
+
+
+    def evalGroupBy(self, op, context):
+        tupleset = context.currentTupleset
+        label = op.name         
+        position = tupleset.findColumnPos(label)
+        assert position is not None, 'cant find %s in %s %s' % (label, tupleset, tupleset.columns)
+        #print 'group by', joincond.position, position, tupleset.columns
+        coltype = object        
+        columns = [
+            ColumnInfo(label, coltype),
+            ColumnInfo('', chooseColumns(position, tupleset.columns) )
+        ] 
+        debug = context.debug
+        return SimpleTupleset(
+            lambda: groupbyUnordered(tupleset, position,
+                debug=debug and columns),
+            columns=columns, 
+            hint=tupleset, op='groupby op on '+label,  debug=debug)
+
+    def costGroupBy(self, op, context):
+        return 1.0
 
     def _groupby(self, tupleset, joincond, msg='group by ',debug=False):
         #XXX use groupbyOrdered if we know tupleset is ordered by groupby key
@@ -1076,10 +1106,7 @@ class SimpleQueryEngine(object):
                 if not pos:
                     #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
                     raise QueryException(op.name + " projection not found")
-                #assert len(pos) == 1, ('unexpected nested column for ', op.name, pos, context.currentRow[pos[0]])
-                #pos = pos[0]
-            cell,irow = iter( getColumn(pos, context.currentRow) ).next()
-            return cell
+            return flatten(c[0] for c in getColumn(pos, context.currentRow))
         else:
             tupleset = context.initialModel
             subject = context.currentRow[SUBJECT]

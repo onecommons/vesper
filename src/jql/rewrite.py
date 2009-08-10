@@ -1,4 +1,5 @@
 from jqlAST import *
+import copy
 
 class _ParseState(object):
     def __init__(self):
@@ -52,7 +53,7 @@ class _ParseState(object):
             to.parent = from_
         return False
 
-    def _joinFromConstruct(self, construct, where):
+    def _joinFromConstruct(self, construct, where, groupby):
         '''
         build a join expression from the construct pattern
         '''
@@ -92,7 +93,6 @@ class _ParseState(object):
                     for child in value.depthfirst(
                      descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
                         if isinstance(child, Project) and child.fields != [SUBJECT]:
-                            import copy
                             if not left:                            
                                 left = copy.copy( child )
                             else:
@@ -105,7 +105,15 @@ class _ParseState(object):
                 #else:
                 #    jointype = JoinConditionOp.INNER
                 #join.appendArg(JoinConditionOp(filter, SUBJECT,jointype))
-    
+        
+        if groupby:
+            project = copy.copy(groupby.args[0])
+            assert isinstance(project, Project)
+            if not left:
+                left = project
+            else:
+                left = And(left, project)
+            
         if left:
             left = self.makeJoinExpr(left)
             assert left
@@ -116,8 +124,9 @@ class _ParseState(object):
         if construct.id:
             name = construct.id.getLabel()
             assert left            
-            try:
+            try:                
                 if not name and left.name:
+                    #no name given to the id, but the join is named, so use that
                     construct.id.appendArg(Label(left.name))
                 else:
                     self.addLabeledJoin(name, left)
