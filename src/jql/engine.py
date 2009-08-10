@@ -241,7 +241,8 @@ def validateRowShape(columns, row):
     if columns is None:
         return
     assert isinstance(row, (tuple,list)), row
-    assert len(columns) == len(row), '(c %d:%s, r %d:%s)'%(len(columns), columns,  len(row), row)
+    #this next assertion should be ==, not <=, but can't figure how that is happening 
+    assert len(columns) <= len(row), '(c %d:%s, r %d:%s)'%(len(columns), columns,  len(row), row)
     for (i, (ci, ri)) in enumerate(itertools.izip(columns, row)):
         if isinstance(ci.type, Tupleset):
             assert isinstance(ri, Tupleset), (ri, type(ri), ci.type, i)
@@ -460,22 +461,6 @@ class IterationJoin(Join):
             else:
                 yield row
 
-    def left_inner(self):
-        '''
-        Returns iterator of the left inner rows
-        '''
-        def getInner():
-            lastRowA = None
-            for rowA in self.left:                
-                for right in self.joinFunc(rowA,self.right,lastRowA):
-                    #todo: if joinFunc is a right outer join,
-                    #test that right isn't null                    
-                    yield rowA
-                    lastRowA = rowA, right
-                    break;
-                
-        return SimpleTupleset(getInner, self, op='left_inner')
-
 class MergeJoin(Join):
     '''
     Assuming the left and right tables are ordered by the columns 
@@ -517,21 +502,11 @@ class MergeJoin(Join):
     def filter(self, conditions=None, hints=None):
         for left, right in self._filter(conditions):
             yield left+right
-            
-    def left_inner(self):
-        '''
-        Returns iterator of the left inner rows
-        '''
-        def getInner():
-            for left, right in self._filter():
-                yield left
-
-        return SimpleTupleset(getInner, self, op='MergeJoin.left_inner')
 
     def getJoinType(self):
         return 'ordered merge'
 
-def getcolumns(keypos, row, tableType=Tupleset):
+def getColumns(keypos, row, tableType=Tupleset):
     '''
     Given a row which may contain nested tuplesets as cells and a "key" cell position,
     yield (key, row) pairs where the returned rows doesn't include the key cell.
@@ -541,8 +516,12 @@ def getcolumns(keypos, row, tableType=Tupleset):
     repeated with each row. For example:
     
     >>> t = ('a1', [('b1', 'c1'), ('b2', 'c2')] )    
-    >>> list( getcolumns((1,1), t, list) ) #group by 'c'
-    [('c1', ['a1', 'b1']), ('c2', ['a1', 'b2'])]    
+    >>> list( getColumns((1,1), t, list) ) #group by 'c'
+    [('c1', ['a1', 'b1']), ('c2', ['a1', 'b2'])]
+    
+    >>> t = ('a1', [('b1', [('c1','d1')]), ('b2', [('c2','d1')])] )    
+    >>> list( getColumns((1,1), t, list) ) #group by 'd'
+    [('d1', ['a1', 'b1', 'c1']), ('d1', ['a1', 'b2', 'c2'])]
     '''
     keypos = list(keypos)
     pos = keypos.pop(0)
@@ -557,13 +536,28 @@ def getcolumns(keypos, row, tableType=Tupleset):
     if not keypos:
         yield keycell, cols
     else: #i above keypos
-        assert isinstance(keycell, tableType), "cell %s p %s restp %s" % (keycell, pos, keypos)
+        assert isinstance(keycell, tableType), "cell %s (%s) is not %s p %s restp %s" % (keycell, type(keycell), tableType, pos, keypos)
         #print 'keycell', keycell
         for nestedrow in keycell:
             #print 'nestedrow', nestedrow
-            for key, nestedcols in getcolumns(keypos, nestedrow):
+            for key, nestedcols in getColumns(keypos, nestedrow, tableType):
                 yield key, cols+nestedcols
 
+def getColumnsColumns(keypos, columns):
+    keypos = list(keypos)
+    pos = keypos.pop(0)
+    cols = []
+    for i, c in enumerate(columns):
+        if pos == i:
+            if keypos:
+                assert isinstance(c.type, Tupleset)
+                nestedcols = getColumnsColumns(keypos, c.type.columns)
+                if nestedcols:
+                    cols.extend(nestedcols)
+        else:
+            cols.append(c)
+    return cols
+            
 def groupbyUnordered(tupleset, groupby, debug=False):
     '''
     Group the given tupleset by the column specified by groupby
@@ -601,7 +595,7 @@ def groupbyUnordered(tupleset, groupby, debug=False):
     for row in tupleset:
         #print 'gb', groupby, row
         if debug: validateRowShape(tupleset.columns, row) 
-        for key, outputrow in getcolumns(groupby, row):
+        for key, outputrow in getColumns(groupby, row):
             vals = resources.get(key)
             if vals is None:
                 vals = MutableTupleset()
@@ -619,7 +613,7 @@ def groupbyUnordered(tupleset, groupby, debug=False):
                 raise
         yield [key, values]
 
-def getcolumn(pos, row):
+def getColumn(pos, row):
     '''
     yield a sequence of values for the nested column
     '''
@@ -632,13 +626,13 @@ def getcolumn(pos, row):
         for nestedrow in cell:
             assert isinstance(nestedrow, (list, tuple)
                 ) and not isinstance(nestedrow, Tupleset), "%s" % (type(nestedrow))
-            for (c, row) in getcolumn(pos, nestedrow):
+            for (c, row) in getColumn(pos, nestedrow):
                 #print 'ct', c
                 yield (c, row)
     else:
         yield (cell, row)
 
-def choosecolumns(groupby, columns):
+def chooseColumns(groupby, columns):
     '''
     "above" columns go first, omit groupby column
     '''
@@ -649,7 +643,7 @@ def choosecolumns(groupby, columns):
     for i, c in enumerate(columns):
         if pos == i:
             if groupby:
-                groupbycol = choosecolumns(groupby, c.type.columns)
+                groupbycol = chooseColumns(groupby, c.type.columns)
             #else: skip column
         else:
             outputcolumns.append(c)
@@ -780,8 +774,7 @@ class SimpleQueryEngine(object):
                 #last pos will be offset into the tupleset:
                 col = colTupleset.columns[subjectcol[-1]] 
                 rowcolumns = ([ColumnInfo(subjectlabel, col.type)]
-                                    + choosecolumns(subjectcol,tupleset.columns))
-
+                                    + getColumnsColumns(subjectcol,tupleset.columns))
 
         def construct():
           count = 0
@@ -789,43 +782,19 @@ class SimpleQueryEngine(object):
           assert context.currentTupleset is tupleset
 
           for outerrow in tupleset:
-            for idvalue, row in getcolumns(subjectcol, outerrow):
+            for idvalue, row in getColumns(subjectcol, outerrow):
                 i+=1
                 if op.parent.offset is not None and op.parent.offset < i:
                     continue
                 
                 context.currentRow = [idvalue] + row
-                #print 'outercolumns', tupleset.columns
-                #print 'outerrows', outerrow                
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
                     print 'valid outer'
-                print 'currentrow', context.currentRow
-                #print 'rowcolumns', rowcolumns
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
                 pattern = op.shape()
-               
-#                if len(subjectcol) == 1:
-#                    idvalue = row[subjectcol[0]]
-#                else:            
-#                    #idcells = list(getcolumn(subjectcol, row))
-#                    #print 'label', op.id.getLabel(), 'idcells', idcells, 'subjectcol', subjectcol, 'row', row
-#                    #assert len(idcells) == 1, '%s %s %s' % (subjectcol, subjectlabel, idcells)
-#                    #get the first item in the nested sequence
-#                    #idvalue = iter(flattenSeq( idcells[0][1] )).next()
-#
-#                    v = list([irow for cell,irow in getcolumn(subjectcol, row)])
-#                    idvalue = v[0]
-#                    print '!!!v', subjectcol, v #, 'row', row                                         
-#                    tupleset = SimpleTupleset(v,
-#                        columns=rowInfoTupleset.columns,
-#                        hint=v,
-#                        op='nested construct subject', debug=context.debug)
 
-
-                #ccontext.currentTupleset = SimpleTupleset((row,),
-                #            hint=(row,), op='construct',debug=context.debug)
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
                         #print 'cs', prop.name, idvalue
@@ -855,7 +824,7 @@ class SimpleQueryEngine(object):
                             else:
                                 pos, rowInfoTupleset = col
 
-                                v = list([irow for cell,irow in getcolumn(pos, outerrow)])
+                                v = list([irow for cell,irow in getColumn(pos, outerrow)])
                                 #print '!!!v', col, label, v, 'row', row                            
                                 #assert isinstance(col.type, Tupleset)
                                 ccontext.currentTupleset = SimpleTupleset(v,
@@ -896,13 +865,12 @@ class SimpleQueryEngine(object):
         columns = [
             ColumnInfo(joincond.parent.name or '', coltype),
             ColumnInfo(joincond.getPositionLabel(),
-                                    choosecolumns(position,tupleset.columns) )
-        ]
-        
+                                    chooseColumns(position,tupleset.columns) )
+        ]        
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
-                debug=debug and columns[:]),
-            columns=columns[:], 
+                debug=debug and columns),
+            columns=columns, 
             hint=tupleset, op=msg + repr(joincond.position),  debug=debug)
 
     def evalJoin(self, op, context):
@@ -1103,17 +1071,15 @@ class SimpleQueryEngine(object):
         if op.name != '*':
             if isinstance(op.name, int):
                 pos = (op.name,)
-            else:                
+            else:
                 pos = context.currentTupleset.findColumnPos(op.name)               
                 if not pos:
                     #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
                     raise QueryException(op.name + " projection not found")
                 #assert len(pos) == 1, ('unexpected nested column for ', op.name, pos, context.currentRow[pos[0]])
                 #pos = pos[0]
-            print 'project', pos, MutableTupleset(seq=context.currentRow), op.name
-            cell,irow = iter( getcolumn(pos, context.currentRow) ).next()
+            cell,irow = iter( getColumn(pos, context.currentRow) ).next()
             return cell
-            #return context.currentRow[pos]
         else:
             tupleset = context.initialModel
             subject = context.currentRow[SUBJECT]

@@ -424,15 +424,23 @@ t('''{ content : *,
     'blah' : [{ *  where(id = ?tag and ?tag = 'commons') }]
  where ( subject = ?tag) }
 ''',
-['XXX'])
+[{'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+  'content': 'some text about the commons',
+  'id': '_:2'},
+ {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+  'content': 'some more text about the commons',
+  'id': '_:1'}]
+)
 
 t('''{ content : *, 
  where ({id = ?tag and ?tag = 'commons'} and subject = ?tag) }
 ''',
-['XXX'])
+[{'content': 'some text about the commons', 'id': '_:2'},
+ {'content': 'some more text about the commons', 'id': '_:1'}]
+)
 
 #find all the entries that implicitly or explicitly are tagged 'projects'
-skip('''
+t('''
     {
     * 
      where (
@@ -443,12 +451,14 @@ skip('''
         )
     }
     ''',
-    [{'content': 'some text about the commons',
-        'id': '_:1', 'subject': 'commons'}
-    ])
+[{'content': 'some text about the commons', 
+  'id': '_:2', 'subject': 'commons'},
+ {'content': 'some more text about the commons',
+  'id': '_:1', 'subject': 'commons'}]
+)
 
 #find all the entries that implicitly or explicitly are tagged 'commons'
-skip( '''
+t( '''
     {
     *
      where (subject= ?tag and
@@ -458,9 +468,11 @@ skip( '''
         )
     }
     ''',
-    [{'content': 'some text about the commons',
-        'id': '_:1', 'subject': 'commons'}
-    ])
+[{'content': 'some text about the commons', 'id': '_:2', 'subject': 'commons'},
+ {'content': 'some more text about the commons',
+  'id': '_:1',
+  'subject': 'commons'}]
+  )
 
 #throws jql.QueryException: only equijoin supported for now
 skip( '''
