@@ -41,10 +41,15 @@ class _ParseState(object):
             join.name = self.nextAnonJoinId()
         if not from_ or join is to or from_ is to:
             return False
-        #XXX implement replaceArg for filter, any expression arg
+        #XXX implement replaceArg for filter, any expression arg                
         if from_.parent:
             from_.replaceArg(join, Label(join.name))
             return True
+        elif isinstance(from_, Select):
+            to.parent.where = None            
+            from_.construct.id.appendArg( Label(join.name) )
+            from_.where = to
+            to.parent = from_
         return False
 
     def _joinFromConstruct(self, construct, where):
@@ -154,10 +159,13 @@ class _ParseState(object):
                     #any subsequent join predicates should operate on the new join
                     op = currentjoin
                 if op is not labeledjoin:
+                    from_ = op.parent
                     if isinstance(op, Join):
+                        #print 'op moved', op
+                        #print 'to', labeledjoin
                         self.joinMoved(op, op.parent, labeledjoin)                    
                     labeledjoin.appendArg(JoinConditionOp(op, pred))
-                                        
+                    #print 'from', from_
                 currentjoin = labeledjoin
     
         if skipped: #XXX should just be warning?
@@ -266,7 +274,6 @@ class _ParseState(object):
     
         labeledjoins = self.labeledjoins
         labelreferences = self.labelreferences
-    
         newexpr = None
         while to_visit:
             parent, v = to_visit.pop()
@@ -316,7 +323,6 @@ class _ParseState(object):
             projectops = []
             skipRoot = False
             labels ={}
-            
             for child in root.depthfirst(
                     descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
                 if isinstance(child, ResourceSetOp):                
@@ -338,7 +344,7 @@ class _ParseState(object):
                         projectops.append( (child, projectop) )
                 elif isinstance(child, Label):
                     labels.setdefault(child.name,[]).append(child)
-    
+
             if len(labels) > 1:
                 if len(labels) == 2:
                     ##XXX buildJoinsFromReferences asserts: pos 0 but not a Filter: <class Label>
@@ -347,7 +353,7 @@ class _ParseState(object):
                     #need to handle pattern like "foo = (?a or ?b)" (boolean)
                     # or "?a = ?b = ?c"  or foo(?a,?b) or ?a != ?b
                     (a, b) = [v[0] for v in labels.values()]                    
-                    if root == Eq(a, b):# or root == Eq(recurse(a), b) or root == Eq(recurse(b), a):
+                    if root == Eq(Label(a.name), Label(b.name)):# or root == Eq(recurse(a), b) or root == Eq(recurse(b), a):
                         parentjoin = self.getLabeledJoin(a.name)                        
                         childjoin = self.getLabeledJoin(b.name)                                                
                         if parentjoin and childjoin:
@@ -363,12 +369,12 @@ class _ParseState(object):
                 else:
                     raise QueryException('expressions like ?a = ?b not yet supported')
             else:
-                #handle filter conditions that contain a label (which is a reference to another join)
+                #handle filter conditions that contain a label (which is a reference to another join)                
                 for labelname, ops in labels.items():
                     child = ops[0] #XXX need to worry about expressions like foo(?a, ?a) ?
-                    if root == Eq(Project(SUBJECT), child):
+                    if root == Eq(Project(SUBJECT), Label(child.name)):
                         #its a declaration like id = ?label
-                        self.addLabeledJoin(labelname, parent)
+                        self.addLabeledJoin(labelname, parent)                        
                     else: #label reference
                         child.__class__ = Constant #hack so label is treated as independant
                         if root.isIndependent():
@@ -380,11 +386,11 @@ class _ParseState(object):
                             #so join them together
                             joincond = (parent, root) #join, join pred
                         #replace the label reference with a Project(SUBJECT):                        
+                        #print 'child1', child, 'child.parent', child.parent, 'root', root
                         Project(SUBJECT)._mutateOpToThis(child)
                         #print 'adding labelref', labelname, 'joincond', joincond, 'parent', parent
                         labelreferences.setdefault(parent, []).append(
                                                             (labelname, joincond) )
-                        
                     skipRoot = True #don't include this root in this join
     
             #try to consolidate the projection filters into root filter.

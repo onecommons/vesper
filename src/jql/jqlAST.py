@@ -152,8 +152,8 @@ class QueryOp(object):
                 + argsrepr)
 
     def _validateArgs(self):
-        assert all(a.parent is self for a in self.args), (repr(self.__class__)
-            + repr([(a.__class__, a.parent)
+        assert all(a.parent is self for a in self.args), ('self:'+repr((self.__class__, self.name))
+            + repr(['wrong parent:'+str((a.parent))+'for:'+repr(a)
                     for a in self.args if a.parent is not self]))
 
     def _siblings(self):

@@ -88,7 +88,10 @@ t('''{ * where (foo > 'bar') }''')
 
 #   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
-t('{ ((parent)) : child }',
+t("{ 'parent' : child }",
+   [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
+
+skip("{ ((parent)) : child }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t(
@@ -311,7 +314,12 @@ t.model = modelFromJson([
 {
 'subject': 'commons',
 'content' : 'some text about the commons'
+},
+{
+'subject': 'commons',
+'content' : 'some more text about the commons'
 }
+
 ])
 
 t('''{
@@ -402,24 +410,34 @@ Join(
 )
 )
 
-#this fails because the top level join isn't joined with the inner join
 t('''{ *, 'blah' : [{ *  where(id = ?tag and ?tag = 'dd') }]
  where ( subject = ?tag) }
 ''',
 [])
 
-#this fails because the top level join isn't joined with the inner join
-skip('''{ * 
+t('''{ * 
  where ({id = ?tag and ?tag = 'dd'} and subject = ?tag) }
 ''',
 [])
 
-t('''
+t('''{ content : *,  
+    'blah' : [{ *  where(id = ?tag and ?tag = 'commons') }]
+ where ( subject = ?tag) }
+''',
+['XXX'])
+
+t('''{ content : *, 
+ where ({id = ?tag and ?tag = 'commons'} and subject = ?tag) }
+''',
+['XXX'])
+
+#find all the entries that implicitly or explicitly are tagged 'projects'
+skip('''
     {
-    *
+    * 
      where (
           { id = ?tag and
-            ?tag in recurse('project', 'subsumedby')
+            'projects' in recurse(?tag, 'subsumedby')
            }
            and subject= ?tag
         )
@@ -429,8 +447,8 @@ t('''
         'id': '_:1', 'subject': 'commons'}
     ])
 
-#test recurse() that
-t( '''
+#find all the entries that implicitly or explicitly are tagged 'commons'
+skip( '''
     {
     *
      where (subject= ?tag and
@@ -469,8 +487,7 @@ skip('''
 '''
 )
 
-#printast triggers ast validation failure in CmpOp
-skip('''
+t('''
 { id : ?a,
   'foo' : { id : ?b where (?b > '1')}
     where (?a = '2')
