@@ -127,6 +127,8 @@ JSON_BASE+'null' : lambda v: None,
 
 def _expandqname(qname, nsmap):
     #assume reverse sort of prefix
+    return qname
+    #XXX    
     for ns, prefix in nsmap:
         if qname.startswith(prefix+'$'):
             suffix = qname[len(prefix)+1:]
@@ -136,18 +138,21 @@ def _expandqname(qname, nsmap):
 _defaultBNodeGenerator = 'uuid'
 
 class sjson(object):    
-    nsmap=[(JSON_BASE,'')]
+    #XXX need separate output nsmap for serializing
+    #this nsmap shouldn't be the default for that
+    nsmap=[(JSON_BASE,'')] 
     
     bnodecounter = 0
     bnodeprefix = '_:'
 
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
-
-    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, scope = ''):
+    
+    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, scope = '', model=None):
         self._genBNode = generateBnode
         self.addOrderInfo = addOrderInfo
         self.scope = scope
+        self.model = model
         
     def lookslikeUriOrQname(self, s):
         #XXX think about customization, e.g. if number were ids
@@ -249,6 +254,14 @@ class sjson(object):
         if obj is not None and not isshared:
             return obj
         else:
+            if not isshared and self.model:
+                #XXX pass on options like includesharedrefs
+                #XXX pass in idrefs
+                #XXX add depth option
+                results = self._to_sjson(self.model.getStatements(id)) 
+                objs = results.get('results')
+                if objs:
+                    return objs[0]                    
             return id
 
     def _to_sjson(self, root, includesharedrefs=False, exclude_blankids=False):
