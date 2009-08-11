@@ -642,13 +642,14 @@ class ConstructProp(QueryOp):
     args = property(lambda self: (self.value,))
 
 class ConstructSubject(QueryOp):
-    def __init__(self, name='id', value=None):
+    def __init__(self, name='id', value=None, suppress=False):
         self.name = name        
         if value: #could be a string
             if not isinstance(value, QueryOp):
                 value = Label(value)
             value.parent = self
         self.value = value
+        self.suppress = suppress
 
     def appendArg(self, op):
         if isinstance(op, Label):
@@ -680,11 +681,17 @@ class Construct(QueryOp):
             self.appendArg(p)
             if isinstance(p, ConstructSubject):
                 self.id = p
-        if not self.id:
-            self.id = ConstructSubject()
+        if not self.id:            
+            self.id = ConstructSubject(suppress= (shape == self.listShape))
             self.appendArg(self.id)
         self.shape = shape
 
+    def appendArg(self, op):
+        assert isinstance(op, QueryOp)
+        if not isinstance(op, (ConstructSubject, ConstructProp)):
+            op = ConstructProp(None, op)
+        super(Construct, self).appendArg(op)
+        
     def __eq__(self, other):
         return (super(Construct,self).__eq__(other)
             and self.shape == other.shape and self.id == self.id)

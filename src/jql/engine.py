@@ -803,6 +803,8 @@ class SimpleQueryEngine(object):
 
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
+                        if prop.suppress:
+                            continue
                         #print 'cs', prop.name, idvalue
                         if op.parent.groupby:
                             continue #don't output id if groupby is specified

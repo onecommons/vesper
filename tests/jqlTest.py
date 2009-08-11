@@ -77,7 +77,13 @@ t.model = modelFromJson([
         { "id" : "3", "foo" : "bar"}
     ])
 
+t('''
+[*]
+''',
+[['bar'], ['bar'], ['2', '1'], ['3', '1']]
+)
 
+#XXX: AssertionError: cant find 0 in SimpleTupleset 0xd6c650 for group by '#0' [ColInfo('', <type 'object'>), ColInfo('#0', MutableTupleset[])]
 skip('''
 {
 groupby('id', display=merge)
@@ -213,6 +219,12 @@ t('''
 
 syntaxtests = [
 '''{ 'ok': */1 }''',
+'''
+'blah' : [foo]
+''',
+'''
+[rdfs:comment where(rdfs:label='foo')]
+'''
 ]
 
 #XXX fix failing queries!
