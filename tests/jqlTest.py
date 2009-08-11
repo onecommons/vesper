@@ -569,6 +569,39 @@ t('''
 '''
 )
 
+t('''{*}''')
+
+#XXX test circularity
+t('''{*
+DEPTH 1
+}''')
+
+t.model = modelFromJson([
+     { 'id' : '1',
+       'values' :  {
+          'prop1' : 'foo',
+          'prop2' : 3,
+          'prop3' : None
+       }
+     },
+     { 'id' : '2',
+       'values' :  {
+          'prop1' : 'bar',
+          'prop2' : None,
+       }
+     },
+    ]
+)
+
+#XXX what's up with 'null' and u'3' instead of None and 3 ? 
+t('''{*}''',
+[{'id': '1',
+  'values': {'id': '_:2', 'prop1': 'foo', 'prop2': u'3', 'prop3': 'null'}},
+ {'id': '2', 'values': {'id': '_:1', 'prop1': 'bar', 'prop2': 'null'}},
+ {'id': '_:2', 'prop1': 'foo', 'prop2': u'3', 'prop3': 'null'},
+ {'id': '_:1', 'prop1': 'bar', 'prop2': 'null'}]    
+)
+
 basic = Suite()
 basic.model = [{}, {}]
 

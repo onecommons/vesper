@@ -81,7 +81,7 @@ import ply.yacc
 ###########
 
 reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NS',
-           'ID', 'OPTIONAL', 'WHERE', 'LIMIT', 'OFFSET', 'GROUPBY', 'ORDERBY')
+           'ID', 'OPTIONAL', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH','GROUPBY', 'ORDERBY')
 
 tokens = reserved + (
     # Literals (identifier, integer constant, float constant, string constant, char const)
@@ -263,7 +263,7 @@ def p_construct(p):
     op = Construct(props, shape)
 
     defaults = dict(where = None, ns = {}, offset = None, limit = None,
-                    groupby = None)
+                    groupby = None, depth=None)
     if len(p[1]) > 1 and p[1][1]:
         for constructop in p[1][1]:
             defaults[ constructop[0].lower() ] = constructop[1]
@@ -277,12 +277,12 @@ def p_construct(p):
         else:
             raise QueryException("bad group by expression")
                 
-        groupby = GroupBy(arg)
+        defaults['groupby'] = groupby = GroupBy(arg)
 
-    where = p.jqlState._joinFromConstruct(op, defaults['where'], groupby)
+    where = defaults['where'] = p.jqlState._joinFromConstruct(op, defaults['where'], groupby)
     #XXX add support for ns constructop    
-           
-    p[0] = Select(op, where, groupby, defaults['limit'], defaults['offset'])    
+    
+    p[0] = Select(op, **defaults)
     assert not where or where.parent is p[0]
 
 precedence = (
@@ -605,6 +605,7 @@ def p_constructop2(p):
     '''
     constructop : LIMIT INT
                 | OFFSET INT
+                | DEPTH INT
     '''
     p[0] = T.constructop(p[1], p[2])
 

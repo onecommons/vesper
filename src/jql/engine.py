@@ -750,6 +750,8 @@ class SimpleQueryEngine(object):
             context.currentTupleset = op.where.evaluate(self, context)
         if op.groupby:
             context.currentTupleset = op.groupby.evaluate(self, context)
+        if op.depth is not None:
+            context.depth = op.depth
         
         #print 'where ct', context.currentTupleset
         return op.construct.evaluate(self, context)
@@ -792,7 +794,7 @@ class SimpleQueryEngine(object):
                 i+=1
                 if op.parent.offset is not None and op.parent.offset < i:
                     continue
-                
+                context.constructStack.append(idvalue)
                 context.currentRow = [idvalue] + row
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
@@ -858,6 +860,8 @@ class SimpleQueryEngine(object):
                             name = prop.name or prop.value.name
                         _setConstructProp(op, pattern, prop, v, name)
 
+                currentIdvalue = context.constructStack.pop()
+                assert idvalue == currentIdvalue
                 yield pattern
                 count+=1
                 if op.parent.limit is not None and op.parent.limit < count:
@@ -1117,9 +1121,33 @@ class SimpleQueryEngine(object):
                 rows = tupleset.filter({
                     SUBJECT:subject
                 })
-                for row in rows:
+                refFunc = jqlAST.getQueryFuncOp('isref')
+                for row in rows:                    
                     v = row[OBJECT]
-                    if not isinstance(v, (list,tuple)):
+                    #if it's object reference and not a circular reference
+                    isref = refFunc.execFunc(context, v)
+                    isbnode = isref and hasattr(v, 'startswith') and (v.startswith('bnode') or v.startswith('_:'))                    
+                    if ( (isref and context.depth > 0) or isbnode 
+                                        and v not in context.constructStack):
+                        #if v in context.constructCache:
+                        #    v = context.constructCache[v]
+                        #    continue
+                        query = jqlAST.Select(
+                                    jqlAST.Construct([jqlAST.Project('*')]),
+                                    jqlAST.Join())
+                        ccontext = copy.copy(context)
+                        ccontext.currentTupleset = SimpleTupleset([[v]], 
+                                columns=[ColumnInfo('', object)], 
+                                op='recursive project on %s'%v, 
+                                debug=context.debug)
+                        if not isbnode:
+                            ccontext.depth -= 1
+                        result = list(query.evaluate(self, ccontext))
+                        assert len(result) == 1
+                        if len(result[0]) > 1: #has more than just id
+                            v = result
+                            #context.constructCache[v] = v
+                    elif not isinstance(v, (list,tuple)):
                         v = [v]
                     yield row[PROPERTY], v
 

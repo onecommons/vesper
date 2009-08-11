@@ -81,20 +81,23 @@ class QueryContext(object):
     currentRow = None
     currentValue = None
     
-    def __init__(self, initModel, ast, explain=False, debug=False, vars=None):
+    def __init__(self, initModel, ast, explain=False, debug=False, depth=0, vars=None):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
         self.ast = ast
         self.vars = vars
         self.debug=debug
+        self.depth=depth
+        self.constructStack = []
 
     def __copy__(self):
         copy = QueryContext(self.initialModel, self.ast, self.explain, 
-                                                        self.debug, self.vars)
+                                              self.debug, self.depth, self.vars)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow
+        copy.constructStack = self.constructStack
         return copy
 
     def __repr__(self):

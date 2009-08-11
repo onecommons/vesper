@@ -5,29 +5,6 @@ from rx.utils import flattenSeq, flatten
 ########################   AST   ############################
 #############################################################
 
-#define the AST syntax using Zephyr Abstract Syntax Definition Language.
-#(see http://www.cs.princeton.edu/~danwang/Papers/dsl97/dsl97-abstract.html)
-#If the AST gets more complicated we could write a code generator using
-#http://svn.python.org/view/python/trunk/Parser/asdl.py
-
-syntax = '''
--- Zephyr ASDL's five builtin types are identifier, int, string, object, bool
-
-module RxPathQuery
-{
-    exp =  boolexp | AnyFunc(exp*) | Query(subquery)
-
-    subquery = Filter(subquery input?, boolexp* subject,
-                    boolexp* predicate, boolexp* object) |
-               Join(subquery left, subquery right) |
-               Project(subquery input, column id)  |
-               Union(subquery left, subquery right)
-
-    boolexp = BoolFunc(exp*)
-    -- nodesetfunc, eqfunc, orfunc, andfunc
-}
-'''
-
 def depthfirstsearch(root, descendPredicate = None, visited = None):
     """
     Given a starting vertex, root, do a depth-first search.
@@ -570,6 +547,9 @@ qF.addFunc('isref', lambda a: a and True or False, BooleanType)
 
 def addQueryfunc(*args, **kw):
     qF.addFunc(*args, **kw)
+    
+def getQueryFuncOp(name, *args):
+    return qF.getOp(name, *args)
 
 class Project(QueryOp):  
     
@@ -710,7 +690,7 @@ class Select(QueryOp):
     where = None
     groupby = None
 
-    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None):
+    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None):
         self.appendArg(construct)
         if where:
             self.appendArg(where)
@@ -718,6 +698,7 @@ class Select(QueryOp):
             self.appendArg(groupby)
         self.offset = offset
         self.limit = limit
+        self.depth = depth
 
     def appendArg(self, op):
         if (isinstance(op, ResourceSetOp)): 
