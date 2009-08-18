@@ -6,7 +6,7 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-import subprocess, tempfile, os, signal
+import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 from rx.RxPath import *
@@ -228,7 +228,7 @@ class BasicModelTestCase(unittest.TestCase):
         r3b = modelB.getStatements()
         self.assertEqual(set(), set(r3a), set(r3b))
 
-    def XtestBigInsert(self):
+    def testBigInsert(self):
         model = self.getTyrantModel()
         print 'start big insert'
         start = time.time()
@@ -238,6 +238,21 @@ class BasicModelTestCase(unittest.TestCase):
                 model.addStatement(Statement(subj, 'pred'+str(j), 'obj'+str(j)) )
         print 'added 70,000 statements in', time.time() - start, 'seconds'
         
+        try:
+            if hasattr(model, 'close'):
+                print 'closing'
+                sys.stdout.flush()
+                model.close()
+                print 're-opening'            
+                model = self.getTyrantModel()
+        except:
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
+
+        print 'getting statements'
+        sys.stdout.flush()
         start = time.time()
         stmts = model.getStatements()
         print 'got 70,000 statements in', time.time() - start, 'seconds'
@@ -246,12 +261,24 @@ class BasicModelTestCase(unittest.TestCase):
         start = time.time()
         lastSubject = None
         for i, s in enumerate(stmts):
-            if i > 100: 
+            if i > 10000: 
                 break
             if s[0] != lastSubject:
                 lastSubject = s[0]
                 self.assertEqual(len(model.getStatements(s[0])), 7)
         print 'did 10,000 subject lookups in', time.time() - start, 'seconds'
 
+def main(testCaseClass):
+    try:
+        test=sys.argv[sys.argv.index("-r")+1]
+    except (IndexError, ValueError):
+        unittest.main()
+    else:
+        tc = testCaseClass(test)
+        tc.setUp()
+        testfunc = getattr(tc, test)
+        testfunc() #run test
+        #tc.tearDown()
+
 if __name__ == '__main__':
-    unittest.main()
+    main(BasicModelTestCase)

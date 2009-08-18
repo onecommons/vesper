@@ -105,6 +105,8 @@ class RDFDomTestCase(unittest.TestCase):
             self.loadModel = self.loadRedlandModel
         elif DRIVER == 'Mem':
             self.loadModel = self.loadMemModel
+        elif DRIVER == 'Bdb':
+            self.loadModel = self.loadBdbModel
         elif DRIVER == 'Tyrant':
             from basicTyrantTest import start_tyrant_server
             self.tyrant = start_tyrant_server()
@@ -178,6 +180,26 @@ class RDFDomTestCase(unittest.TestCase):
         model.addStatements(data)
         return model
 
+    def loadBdbModel(self, source, type='nt'):
+        from rx.RxPathModelBdb import TransactionBdbModel
+        
+        if type == 'nt':
+            type = 'ntriples'
+        elif type == 'rdf':
+            type = 'rdfxml'
+
+        if isinstance(source, (str, unicode)):
+            data = parseRDFFromURI('file:'+source,type)
+        else:
+            data = parseRDFFromString(source.read(),'test:', type)
+
+        for f in glob.glob('RDFDomTest*.bdb'):
+            if os.path.exists(f):
+                os.unlink(f)
+        
+        model = TransactionBdbModel('RDFDomTest.bdb', data)
+        return model
+
     def getModel(self, source, type='nt'):
         model = self.loadModel(source, type)
         self.nsMap = {u'http://rx4rdf.sf.net/ns/archive#':u'arc',
@@ -191,7 +213,6 @@ class RDFDomTestCase(unittest.TestCase):
             from basicTyrantTest import stop_tyrant_server
             stop_tyrant_server(self.tyrant)
             self.tyrant = None
-
 
     def testNtriples(self):        
         #test character escaping 
@@ -272,16 +293,17 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         rdfDom = self.getModel(cStringIO.StringIO(model) )
         #we're testing the model directly so set this True:
         rdfDom.schema.findCompatibleStatements = True
-
+        model = rdfDom.model.models[0].managedModel
+        #print 'all',  model.getStatements()
         def getcount(obj):
             stmts = rdfDom.model.getStatements(
                 predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
                 object=obj)
             return len(set(s[0] for s in stmts))
 
-        self.failUnless(getcount('bnode:A') == 1)        
-        self.failUnless(getcount('bnode:D') == 4)
-        self.failUnless(getcount('bnode:F') == 3)
+        self.assertEquals(getcount('bnode:A'), 1)        
+        self.assertEquals(getcount('bnode:D'), 4)
+        self.assertEquals(getcount('bnode:F'), 3)
 
         ### domain
         #add a domain rule and a property to trigger it
@@ -384,9 +406,9 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
             return len(stmts)
         
         a='http://rx4rdf.sf.net/ns/archive#'
-        self.failUnless(getcount(a+'A') == 1)        
-        self.failUnless(getcount(a+'D') == 4)
-        self.failUnless(getcount(a+'F') == 3)
+        self.assertEquals(getcount(a+'A'), 1)        
+        self.assertEquals(getcount(a+'D'), 4)
+        self.assertEquals(getcount(a+'F'), 3)
 
         #modify the DOM and make sure the schema is updated properly
         rdfDom.commit()
@@ -395,17 +417,17 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
             Statement('http://rx4rdf.sf.net/ns/archive#A', 'http://www.w3.org/2000/01/rdf-schema#subPropertyOf', 
                     'http://rx4rdf.sf.net/ns/archive#C', OBJECT_TYPE_RESOURCE))
         
-        self.failUnless(getcount(a+'F') == 2)
+        self.assertEquals(getcount(a+'F'), 2)
         
         stmt = Statement("http://rx4rdf.sf.net/ns/archive#E", "http://www.w3.org/2000/01/rdf-schema#subPropertyOf",
                          "http://rx4rdf.sf.net/ns/archive#F", objectType=OBJECT_TYPE_RESOURCE)
         addStatements(rdfDom, [stmt])
-        self.failUnless(getcount(a+'F') == 5)
+        self.assertEquals(getcount(a+'F'), 5)
         
         #now let rollback those changes and redo the queries --
         #the results should now be the same as the first time we ran them
         rdfDom.rollback()
-        self.failUnless(getcount(a+'F') == 3)
+        self.assertEquals(getcount(a+'F'), 3)
         
     def testDiff(self):
         self.rdfDom = self.getModel("about.rx.nt")

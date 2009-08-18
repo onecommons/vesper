@@ -16,13 +16,32 @@
     * prop : [] are represented in RDF as
       prop : value, 
       prop : value
-      prop-seq:
+      prop : prop_seq-bnode      
+      //prop-seq:
       {
+      id : prop_seq-bnode,      
       type: propseqclass //subclass of RDF$seq,
-      prop-bag : prop, //domain propseqclass, range: Propery
-      _1: value,  _2: value //note: can contain duplicate values
+      #prop-bag : prop, //domain propseqclass, range: Propery
+      _1: value,  _2: value //note: can contain duplicate values      
       }
-
+   * nested list:
+    {
+    prop : [ ['value1' ] ]
+    }
+    prop : outer-prop_seq-bnode
+    prop : inner-seq-bnode //cuz its a value
+      {
+      id : outer-prop_seq-bnode,      
+      type: propseqclass, //subclass of RDF$seq,
+      _1: inner-seq-bnode      
+      }
+      
+      {
+      id : inner-seq-bnode,      
+      type: standalone-seqclass, //subclass of RDF$seq,
+      _1: value1      
+      }
+    
 Note: RDF collection and containers will appears as objects look like:
 {
 rdfs:member : [...]
@@ -113,6 +132,7 @@ RESOURCE_REGEX = re.compile(r'^[\w:/\.\?&\$\-_\+#\@]+$') #XXX
 JSON_BASE = 'sjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
+STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
 
 XSD = 'http://www.w3.org/2001/XMLSchema#'
@@ -473,6 +493,8 @@ class sjson(object):
         
         while todo:
             obj = todo.pop()
+            #XXX support top level lists
+            assert isinstance(obj, dict), "only top-level dicts support right now"            
             #XXX if obj.nsmap: push nsmap
             #XXX propmap
             #XXX idmap
@@ -506,6 +528,7 @@ class sjson(object):
                         m.addStatement( Statement(id, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
                     
                     for i, item in enumerate(val):
+                        #xxx handle dups, go through list twice
                         item, objecttype = self.deduceObjectType(item)
                         if isinstance(item, dict):
                             itemid, idprop = getorsetid(item)

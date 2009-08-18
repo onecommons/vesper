@@ -39,7 +39,7 @@ class Test(object):
 
 class Suite(object):
     defaults = dict(ast=None, rows=None, result=None, skip=False,
-                skipParse=False, model=None, name=None, query=None)
+                skipParse=False, model=None, name=None, query=None, group=None)
 
     def __init__(self):
         self.tests = []
@@ -77,6 +77,7 @@ t.model = modelFromJson([
         { "id" : "3", "foo" : "bar"}
     ])
 
+t.group = 'smoke'
 t('''
 [*]
 ''',
@@ -292,6 +293,8 @@ t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
     foo = ({c='c'} and ?a)
 '''
 
+t.group = 'recurse'
+
 #xxx fix when namespace and type support is better
 SUBPROPOF = u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf'
 SUBCLASSOF = u'http://www.w3.org/2000/01/rdf-schema#subClassOf'
@@ -344,12 +347,9 @@ t.model = modelFromJson([
 
 ])
 
-
-# XXX need to add groupby project
 # XXX * is broken: need evalProject not to assume id is SUBJECT
 skip('''{
 *,  
-subject : *, 
 groupby('subject', display=merge)
 }
 ''')
@@ -779,7 +779,20 @@ query='''
   where ( ?foo = bar) }
 ''')
 
+t.group = 'lists'
 
+t.model = modelFromJson([
+     {
+     'id' : '1',
+     'listprop' : [ 'a', 'b'] 
+     },
+     {
+     'id' : '2',
+     'listprop' : [ 'a', ['nestedlist'], [], 'b'] 
+     },     
+    ])
+
+t('{*}')
 
 import unittest
 class JQLTestCase(unittest.TestCase):
@@ -792,7 +805,7 @@ logging.basicConfig()
 def main(cmdargs=None):
     from optparse import OptionParser
     
-    usage = "usage: %prog [options] [test name or number]"
+    usage = "usage: %prog [options] [group name] [number]"
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
         ('printdebug', 0), ('printrows', 0), ('quiet',0)]:
@@ -800,23 +813,44 @@ def main(cmdargs=None):
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
     options.num = -1
-    options.name = ''
+    options.group = None
     if args and args[0] != 'null':
-        try:
-            options.num = int(args[0])
-        except:
-            options.name = args[0]
-
+        if len(args) > 1:
+            options.group = args[0]
+            options.num = int(args[1])
+        else:            
+            try:                        
+                options.num = int(args[0])
+            except:
+                options.group = args[0]
+    
     model = t.model
     if options.printmodel:
         print 'model', list(model)
 
     count = 0
     skipped = 0
+    currentgroup = None
+    groupcount = 0
     for (i, test) in enumerate(flatten(t)):
+        if test.group != currentgroup:
+            currentgroup = test.group
+            groupcount = 0
+        else:
+            groupcount += 1
+        if options.group and options.group != currentgroup:
+            skipped += 1
+            continue
+        
         if options.num > -1:
-            if i != options.num:
+            if options.group:
+                if groupcount != options.num:
+                    skipped += 1
+                    continue
+            elif i != options.num:
+                skipped += 1
                 continue
+                
         if test.skip:
             skipped += 1
             continue
@@ -825,11 +859,9 @@ def main(cmdargs=None):
         if test.name:
             name = test.name
         else:
-            name = "%d" % i
-
-        if options.name:
-            if name != options.name:
-                continue
+            name = "%d" % i        
+        if test.group:
+            name = test.group + '.' + name
 
         if not options.quiet:
             print '*** running test:', name

@@ -662,7 +662,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
                 
             #XXX handle hints intelligently, see super() implementation
             moreStatements = super(RDFSSchema, self).getStatements(subject,
-                                predicate,object,objecttype,context, asQuad)
+                                predicate,object,objecttype,context, asQuad)            
             if moreStatements:
                 changed += 1
                 statements.extend(moreStatements)

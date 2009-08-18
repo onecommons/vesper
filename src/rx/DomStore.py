@@ -343,8 +343,13 @@ class BasicDomStore(DomStore):
         if removedResources:
             for subject in removedResources:
                 removals.extend( self.model.getStatements(subject) )
+
         for node in removedNodes:
-            removals.extend( node.getModelStatements() )
+            stmts = node.getModelStatements()             
+            #for s in stmts:
+            #    if s.object is bnode:
+            #        bnode
+            removals.extend( stmts )
         self.remove(removals)        
         self.add(newStatements)
         return newStatements
