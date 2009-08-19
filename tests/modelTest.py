@@ -52,8 +52,67 @@ class BasicModelTestCase(unittest.TestCase):
         s1 = Statement(subj, 'pred', "obj")
         model.addStatement(s1)
 
-        r2 = model.getStatements(subject=subj)
-        self.assertEqual(set(r2), set([s1]))
+    def testGetStatements(self):
+        model = self.getTyrantModel()
+                        
+        stmts = [Statement('s', 'p', 'o', 'en', 'c'),
+        Statement('s', 'p', 'o', 'en', 'c1'),
+        Statement('s', 'p', 'o', 'en-1', 'c1'),
+        Statement('s', 'p', 'o1', 'en-1', 'c1'),
+        Statement('s', 'p1', 'o1', 'en-1', 'c1'),
+        Statement('s1', 'p1', 'o1', 'en-1', 'c1')
+        ]
+        model.addStatements(stmts)
+        
+        conditions = ['subject', 's', 
+            'predicate', 'p', 
+            'object', 'o',
+            'objecttype', 'en',
+            'context', 'c']
+        pairs = zip(*[iter(conditions)]*2)
+        
+        #each additional condition eliminates one of the matches
+        beginMatches = 5
+        while pairs:
+            matches = beginMatches
+            kw = {}
+            for k, v in pairs:
+                #first match each condition individually
+                r1 = model.getStatements(**{k : v})
+                self.assertEqual(len(r1), matches)             
+                self.assertEqual(set(r1), set(stmts[:matches]))            
+                
+                kw[k] = v
+                r2 = model.getStatements(**kw)
+                self.assertEqual(len(r2), matches)             
+                self.assertEqual(set(r2), set(stmts[:matches]))
+                matches -= 1
+            
+            #repeat tests but start matching at next position
+            pairs.pop(0)
+            beginMatches -= 1
+        
+        more =  [
+        Statement('s', 'p1', 'o2', 'en-1', 'c1'),
+        Statement('s', 'p1', 'o1', 'en-1', 'c2'),
+        Statement('s2', 'p1', 'o2', 'en-1', 'c2'),
+        ]
+        model.addStatements(more)
+        
+        r = model.getStatements(predicate='p1', context='c2')
+        self.assertEqual(set(r), set(more[1:]) )
+        
+        r = model.getStatements(subject='s', predicate='p1')
+        self.assertEqual(set(r), set( (more[0], more[1], stmts[-2]) ) )
+        
+        r = model.getStatements(predicate='p1')
+        self.assertEqual(set(r), set( more + stmts[-2:] ) )
+        
+        r = model.getStatements(predicate='p1', object='o')
+        self.assertEqual(r, [])
+        
+        r = model.getStatements(predicate='p1', object='o2')
+        self.assertEqual(set(r), set( (more[0], more[-1]) ) )
 
     def testRemove(self):
         "basic removal test"

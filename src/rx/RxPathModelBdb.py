@@ -5,7 +5,11 @@ try:
     bsddb.db.DB_GET_BOTH_RANGE
 except AttributeError:
     #you have an old version of bsddb
-    bsddb.db.DB_GET_BOTH_RANGE = 10
+    bdbver = tuple(int(i) for i in bsddb.db.__version__.split('.'))
+    if bdbver < (4,7):    
+        bsddb.db.DB_GET_BOTH_RANGE = 12
+    else:
+        bsddb.db.DB_GET_BOTH_RANGE = 10
     
 class _ListInfo(object):
     prop = ''
@@ -121,6 +125,8 @@ class BdbModel(Model):
                         val += '\0'+ _to_safe_str(objecttype)
                         if fc:
                             val += '\0'+_to_safe_str(context)
+                #duplicates are sorted so we can position the cursor at the
+                #first value we're interested
                 rec = scursor.get(subject, val, bsddb.db.DB_GET_BOTH_RANGE)
             else:
                 rec = scursor.set(subject)
@@ -128,12 +134,27 @@ class BdbModel(Model):
                 #s => p o t c 
                 s, value = rec
                 assert s == subject
-                p, o, t, c = value.split('\0')
-                stmts.append( Statement(s, p, o, t, c) )            
-
+                p, o, t, c = value.split('\0')                
+                if fp:
+                    #since dups are sorted we can break
+                    if p != predicate:
+                        break
+                    if fo:
+                        if o != object:
+                            break
+                        if fot:
+                            if t != objecttype:
+                                break
+                            if fc:
+                                if c != context:
+                                    break      
+                
+                if ((not fo or o == object)
+                    and (not fot or t == objecttype)
+                    and (not fc or c == context)):            
+                    stmts.append( Statement(s, p, o, t, c) )            
                 rec = scursor.next_dup()
-                if not rec:
-                    break
+                
         elif fp:
             pcursor = self.pDb.db.cursor()            
             key = _to_safe_str(predicate)
@@ -144,50 +165,36 @@ class BdbModel(Model):
                     key += '\0'+_to_safe_str(objecttype)
                     if fc:
                         val = _to_safe_str(context)
-                        first = pcursor.get(key, val, bsddb.db.DB_GET_BOTH_RANGE)
+                        rec = pcursor.get(key, val, bsddb.db.DB_GET_BOTH_RANGE)
             if val is None:
-                first = pcursor.set_range(key)                
-            if first:
-                key, value = first
-                p, o, t = key.split('\0')
-                if p == predicate and (not fo or o == object) and (not fot or t == objecttype):                       
-                    c, s = value.split('\0')                    
-                    if not fc or c == context:
-                        stmts.append( Statement(s, p, o, t, c) )
-                        while 1:
-                            rec = pcursor.next()
-                            if not rec:
-                                break                                               
-                            key, value = rec
-                            p, o, t = key.split('\0')
-                            if p != predicate or (fo and o != object) or (fot and t != objecttype):
-                                break
-                            c, s = value.split('\0')
-                            if fc and c != context:
-                                break
-                            stmts.append( Statement(s, p, o, t, c) )                
+                rec = pcursor.set_range(key)                
+                        
+            while rec:                
+                key, value = rec
+                p, o, t = key.split('\0')                
+                if p != predicate or (fo and o != object) or (fot and t != objecttype):
+                    break  #we're finished with the range of the key we're interested in               
+                c, s = value.split('\0')                            
+                if not fc or c == context:                     
+                    stmts.append( Statement(s, p, o, t, c) )                
+                rec = pcursor.next()
+                            
         else:            
             #get all            
             scursor = self.sDb.db.cursor()
-            while 1:
-                rec = scursor.next()
-                if not rec:
-                    break
+            rec = scursor.first()
+            while rec:
                 s, value = rec
                 p, o, t, c = value.split('\0')
-                stmts.append( Statement(s, p, o, t, c) )
-                
-        stmts = [s for s in stmts 
-                    if (not fs or s.subject == subject)
-                    and (not fp or s.predicate == predicate)
-                    and (not fo or s.object == object)
-                    and (not fot or s.objectType == objecttype)
-                    and (not fc or s.scope == context)]
+                if ((not fo or o == object)
+                    and (not fot or t == objecttype)
+                    and (not fc or c == context)):
+                    stmts.append( Statement(s, p, o, t, c) )
+                rec = scursor.next()
+
         stmts.sort()        
         stmts = removeDupStatementsFromSortedList(stmts, asQuad, 
                                             limit=limit, offset=offset)
-        #if predicate: 
-        #    print 'get', predicate, object, stmts
         return stmts
 
     def addStatements(self, stmts):
