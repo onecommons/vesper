@@ -581,25 +581,28 @@ t.model = modelFromJson([
        'values' :  {
           'prop1' : 'foo',
           'prop2' : 3,
-          'prop3' : None
+          'prop3' : None,
+          'prop4' : True,
        }
      },
      { 'id' : '2',
        'values' :  {
           'prop1' : 'bar',
           'prop2' : None,
+          'prop3' : False,
        }
      },
     ]
 )
 
-#XXX what's up with 'null' and u'3' instead of None and 3 ? 
+t.group = 'types'
+
 t('''{*}''',
 [{'id': '1',
-  'values': {'id': '_:2', 'prop1': 'foo', 'prop2': u'3', 'prop3': 'null'}},
- {'id': '2', 'values': {'id': '_:1', 'prop1': 'bar', 'prop2': 'null'}},
- {'id': '_:2', 'prop1': 'foo', 'prop2': u'3', 'prop3': 'null'},
- {'id': '_:1', 'prop1': 'bar', 'prop2': 'null'}]    
+  'values': {'id': '_:2', 'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}},
+ {'id': '2', 'values': {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}},
+ {'id': '_:2', 'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True},
+ {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}]    
 )
 
 basic = Suite()
@@ -779,12 +782,25 @@ query='''
   where ( ?foo = bar) }
 ''')
 
+t.group = 'multivalue'
+
+t.model = RxPath.MemModel([
+ ('1', 'multivalued', 'b', 'R', ''),
+ ('1', 'multivalued', 'a', 'R', ''),
+])
+
+#XXX fails: multivalue properties overwrite each other
+t('{*}')
+
+t('{ "multivalued" : multivalued }')
+t('{ multivalued : * }')
+
 t.group = 'lists'
 
 t.model = modelFromJson([
      {
      'id' : '1',
-     'listprop' : [ 'a', 'b'] 
+     'listprop' : [ 'b', 'a'] 
      },
      {
      'id' : '2',
@@ -793,6 +809,9 @@ t.model = modelFromJson([
     ])
 
 t('{*}')
+
+t('{ "listprop" : listprop }')
+t('{ listprop : * }')
 
 import unittest
 class JQLTestCase(unittest.TestCase):
@@ -858,10 +877,10 @@ def main(cmdargs=None):
 
         if test.name:
             name = test.name
+        elif test.group:
+            name = '%s %d' % (test.group, groupcount)
         else:
             name = "%d" % i        
-        if test.group:
-            name = test.group + '.' + name
 
         if not options.quiet:
             print '*** running test:', name

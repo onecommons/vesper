@@ -230,6 +230,9 @@ def _decodeJsonRDFValue(object):
     return value, objectType
 
 def _encodeStmtObject(stmt, iscompound=False):
+    return encodeStmtObject(stmt.object, stmt.objectType, iscompound)
+    
+def encodeStmtObject(object, type, iscompound=False):    
     '''
     return a string encoding the object in one of these ways: 
     (from http://www.w3.org/TR/2006/NOTE-rdf-sparql-json-res-20061004/)
@@ -237,16 +240,15 @@ def _encodeStmtObject(stmt, iscompound=False):
     {"type":"typed-literal", "datatype":" D ", "value":" S "},
     {"type":"uri|bnode", "value":"U"", "hint":"compound"} ] },
     '''
-    type = stmt.objectType
     jsonobj = {}    
     if type == OBJECT_TYPE_RESOURCE:
-        if stmt.object.startswith(BNODE_BASE):
-            bnode = stmt.object[BNODE_BASE_LEN:]
+        if object.startswith(BNODE_BASE):
+            bnode = object[BNODE_BASE_LEN:]
             jsonobj['type'] = 'bnode'
             jsonobj['value'] = bnode
         else:
             jsonobj['type'] = 'uri'
-            jsonobj['value'] = stmt.object
+            jsonobj['value'] = object
         
         if iscompound:
             jsonobj['hint'] = 'compound'
@@ -254,13 +256,13 @@ def _encodeStmtObject(stmt, iscompound=False):
         if type.find(':') > -1:
             jsonobj['type'] = "typed-literal"
             jsonobj["datatype"] = type
-            jsonobj['value'] = stmt.object
+            jsonobj['value'] = object
         else:
             jsonobj['type'] = "literal"            
             if type != OBJECT_TYPE_LITERAL:
                 #datatype is the lang
                 jsonobj["xml:lang"] = type                    
-            jsonobj['value'] = stmt.object
+            jsonobj['value'] = object
 
     return jsonobj
 

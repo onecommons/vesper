@@ -850,7 +850,7 @@ class SimpleQueryEngine(object):
                                 hint=tupleset, 
                                 op='construct on '+subjectlabel, debug=context.debug)
                         
-                        #print '!!v eval', prop, ccontext.currentRow
+                        #print '!!v eval', prop, ccontext.currentRow, rowcolumns
                         v = flatten(prop.value.evaluate(self, ccontext),
                                     flattenTypes=Tupleset)
                         #print '####PROP', prop.name or prop.value.name, 'v', v
@@ -869,7 +869,6 @@ class SimpleQueryEngine(object):
 
         return SimpleTupleset(construct, hint=tupleset, op='construct',
                                                             debug=context.debug)
-
 
     def evalGroupBy(self, op, context):
         tupleset = context.currentTupleset
@@ -1124,7 +1123,7 @@ class SimpleQueryEngine(object):
                 refFunc = jqlAST.getQueryFuncOp('isref')
                 for row in rows:                    
                     v = row[OBJECT]
-                    #if it's object reference and not a circular reference
+                    #if it's object reference and not a circular reference                    
                     isref = refFunc.execFunc(context, v)
                     isbnode = isref and hasattr(v, 'startswith') and (v.startswith('bnode') or v.startswith('_:'))                    
                     if ( (isref and context.depth > 0) or isbnode 
@@ -1148,7 +1147,8 @@ class SimpleQueryEngine(object):
                             v = result
                             #context.constructCache[v] = v
                     elif not isinstance(v, (list,tuple)):
-                        v = [v]
+                        v = [v]                    
+                    #print 'yield', subject, row[PROPERTY], v, row
                     yield row[PROPERTY], v
 
             return SimpleTupleset(getprops,

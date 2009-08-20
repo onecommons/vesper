@@ -103,6 +103,7 @@ class Model(Tupleset):
           enumerate(('subject', 'predicate','object', 'objecttype','context')))
 
     def filter(self,conditions=None, hints=None):
+        import sjson
         kw = {}
         if conditions:
             labels = ('subject', 'predicate','object', 'objecttype','context')
@@ -110,7 +111,7 @@ class Model(Tupleset):
                 kw[labels[key] ] = value
         kw['hints'] = hints
         for stmt in self.getStatements(**kw):
-            yield stmt
+            yield (stmt[0], stmt[1], sjson.toJsonValue(stmt[2], stmt[3]), stmt[3], stmt[4])
 
     def update(self, rows):
         for row in rows:
@@ -215,9 +216,8 @@ class MemModel(Model):
         self.by_p = {}
         self.by_o = {}
         self.by_c = {}
-        if defaultStatements:
-            for stmt in defaultStatements:
-                self.addStatement(stmt)                                
+        if defaultStatements:            
+            self.addStatements(defaultStatements)
 
     def size(self):
         return len(self.by_s)
@@ -277,22 +277,25 @@ class MemModel(Model):
                      
     def addStatement(self, stmt ):
         '''add the specified statement to the model'''            
+        if not isinstance(stmt, BaseStatement):
+            stmt = Statement(*stmt)
         if stmt in self.by_c.get(stmt[4], {}).get(stmt[0], []):
-            return #statement already in
+            return False#statement already in
         self.by_s.setdefault(stmt[0], []).append(stmt)
         self.by_p.setdefault(stmt[1], []).append(stmt)
         self.by_o.setdefault(stmt[2], []).append(stmt)
         self.by_c.setdefault(stmt[4], {}).setdefault(stmt[0], []).append(stmt)
+        return True
         
     def removeStatement(self, stmt ):
         '''removes the statement'''
         stmts = self.by_s.get(stmt.subject)
         if not stmts:
-            return
+            return False
         try:
             stmts.remove(stmt)
         except ValueError:
-            return        
+            return False  
         self.by_p[stmt.predicate].remove(stmt)
         self.by_o[stmt.object].remove(stmt)
         try:
@@ -306,7 +309,8 @@ class MemModel(Model):
                 except ValueError:
                     pass
                 else:
-                    return            
+                    return True
+        return True
         
 class MultiModel(Model):
     '''
@@ -372,7 +376,7 @@ class MultiModel(Model):
                      
     def addStatement(self, statement ):
         '''add the specified statement to the model'''
-        self.models[0].addStatement( statement )
+        return self.models[0].addStatement( statement )
         
     def removeStatement(self, statement ):
         '''removes the statement'''

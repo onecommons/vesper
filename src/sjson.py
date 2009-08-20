@@ -124,7 +124,7 @@ except ImportError:
 
 from rx import RxPath    
 from rx.RxPath import Statement, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
-from rx.RxPathUtils import _encodeStmtObject
+from rx.RxPathUtils import encodeStmtObject
 import re
 
 RESOURCE_REGEX = re.compile(r'^[\w:/\.\?&\$\-_\+#\@]+$') #XXX
@@ -138,11 +138,16 @@ PROPBAG = JSON_BASE+'propseqprop'
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
 _xsdmap = { XSD+'integer': int,
-#XSD+'int': int, #including this prevent RDF round-tripping
 XSD+'double' : float,
-#XSD+'float' : float,
 JSON_BASE+'null' : lambda v: None,
  XSD+'boolean' : lambda v: v=='true' and True or False,
+}
+
+#this map prevents RDF round-tripping, only use if preserveRdfTypeInfo == False
+_xsdExtendedMap = { 
+XSD+'decimal': float, #note: decimal.Decimal is not json serializable
+XSD+'int': int, 
+XSD+'float' : float,
 }
 
 def _expandqname(qname, nsmap):
@@ -157,6 +162,19 @@ def _expandqname(qname, nsmap):
 
 _defaultBNodeGenerator = 'uuid'
 
+def toJsonValue(data, objectType, preserveRdfTypeInfo=False):
+    if len(objectType) > 1:
+        valueparse = _xsdmap.get(objectType)
+        if valueparse:
+            return valueparse(data)
+        elif preserveRdfTypeInfo:
+            return encodeStmtObject(data, objectType)
+        else:
+            valueparse = _xsdExtendedMap.get(objectType)
+            if valueparse:
+                return valueparse(data)
+    return data
+
 class sjson(object):    
     #XXX need separate output nsmap for serializing
     #this nsmap shouldn't be the default for that
@@ -168,70 +186,21 @@ class sjson(object):
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
     
-    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, scope = '', model=None):
+    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
+                            scope = '', model=None, preserveRdfTypeInfo=True):
         self._genBNode = generateBnode
         self.addOrderInfo = addOrderInfo
+        self.preserveRdfTypeInfo = preserveRdfTypeInfo
         self.scope = scope
         self.model = model
-        
-    def lookslikeUriOrQname(self, s):
-        #XXX think about customization, e.g. if number were ids
-        if not isinstance(s, (str,unicode)):        
-            return False
-        m = RESOURCE_REGEX.match(s)
-        if m is not None:
-            return s
-        return False
- 
-    def deduceObjectType(self, item):    
-        if isinstance(item, list):
-            return item, None
-        if isinstance(item, dict):
-            if 'value' not in item or len(item) != 3:
-                return item, None
-            value = item['value']
-            objectType = item.get('datatype')
-            if not objectType:
-                objectType = item.get('xml:lang')
-            if not objectType:                
-                return item, None
-            else:
-                return value, objectType 
-
-        res = self.lookslikeUriOrQname(item)
-        if res:
-            return res, OBJECT_TYPE_RESOURCE
-        elif item is None:
-            return 'null', JSON_BASE+'null'
-        elif isinstance(item, bool):
-            return (item and 'true' or 'false'), XSD+'boolean'
-        elif isinstance(item, int):
-            return unicode(item), XSD+'integer'
-        elif isinstance(item, float):
-            return unicode(item), XSD+'double'
-        else:
-            return item, OBJECT_TYPE_LITERAL
 
     def _value(self, node):
         from rx import RxPathDom
         if isinstance(node.parentNode, RxPathDom.BasePredicate):
             stmt = node.parentNode.stmt
-            if len(stmt.objectType) > 1:
-                valueparse = _xsdmap.get(stmt.objectType)
-                if valueparse:
-                    return valueparse(node.data)
-                else:
-                    return _encodeStmtObject(stmt)
+            return toJsonValue(node.data, stmt.objectType, 
+                                        self.preserveRdfTypeInfo)
         return node.data
-
-    def _blank(self):
-        if self._genBNode=='uuid':
-            return RxPath.generateBnode()
-        if self._genBNode=='counter':
-            self.bnodecounter+=1
-            return self.bnodeprefix + str(self.bnodecounter)
-        else:
-            return self._genBNode()
     
     def QName(self, prop):
         #reverse sorted so longest comes first
@@ -354,9 +323,10 @@ class sjson(object):
             #print 'adding to results', res.uri
             results[res.uri] = currentobj
             #print 'res', res, res.childNodes
+            
+            #deal with sequences first
             for p in res.childNodes:
-                prop = p.stmt.predicate                
-                if prop == PROPSEQ:
+                if p.stmt.predicate == PROPSEQ:
                     #this will replace sequences                    
                     seqprop, childlist = lists[p.stmt.object]
                     key = self.QName(seqprop)
@@ -551,6 +521,53 @@ class sjson(object):
                 else: #simple type
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )
         return m.getStatements()
+
+    def _blank(self):
+        if self._genBNode=='uuid':
+            return RxPath.generateBnode()
+        if self._genBNode=='counter':
+            self.bnodecounter+=1
+            return self.bnodeprefix + str(self.bnodecounter)
+        else:
+            return self._genBNode()
+
+    def lookslikeUriOrQname(self, s):
+        #XXX think about customization, e.g. if number were ids
+        if not isinstance(s, (str,unicode)):        
+            return False
+        m = RESOURCE_REGEX.match(s)
+        if m is not None:
+            return s
+        return False
+ 
+    def deduceObjectType(self, item):    
+        if isinstance(item, list):
+            return item, None
+        if isinstance(item, dict):
+            if 'value' not in item or len(item) != 3:
+                return item, None
+            value = item['value']
+            objectType = item.get('datatype')
+            if not objectType:
+                objectType = item.get('xml:lang')
+            if not objectType:                
+                return item, None
+            else:
+                return value, objectType 
+
+        res = self.lookslikeUriOrQname(item)
+        if res:
+            return res, OBJECT_TYPE_RESOURCE
+        elif item is None:
+            return 'null', JSON_BASE+'null'
+        elif isinstance(item, bool):
+            return (item and 'true' or 'false'), XSD+'boolean'
+        elif isinstance(item, int):
+            return unicode(item), XSD+'integer'
+        elif isinstance(item, float):
+            return unicode(item), XSD+'double'
+        else:
+            return item, OBJECT_TYPE_LITERAL
 
 def tojson(statements, options=None):
     options = options or {}
