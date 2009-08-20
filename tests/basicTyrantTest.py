@@ -60,30 +60,6 @@ class TyrantModelTestCase(BasicModelTestCase):
         stop_tyrant_server(self.tyrant)
         self.tyrant = None
 
-from rx.RxPathModelMemcache import MemCacheModel, TransactionMemCacheModel
-
-_prefixCounter = time.time()
-
-class MemCacheModelTestCase(BasicModelTestCase):    
-    
-    def getTyrantModel(self):    
-        global _prefixCounter
-        _prefixCounter += 1
-        model = MemCacheModel(prefix=str(_prefixCounter))
-        return self.getModel(model)
-
-    def getTransactionTyrantModel(self):
-        global _prefixCounter
-        _prefixCounter += 1
-        model = TransactionMemCacheModel(prefix=str(_prefixCounter))
-        return self.getModel(model)
-
-    def setUp(self):
-        pass
-        
-    def tearDown(self):
-        pass
-
 if __name__ == '__main__':
     unittest.main()
 
