@@ -114,12 +114,12 @@ def test():
     '''
     assert_json_and_back_match(src)
 
-    #test nested lists
+    #test nested lists and dups
     src = '''
     { "id" : "testid",
-    "foo" : [1,  ["nested1",
+    "foo" : [1,  1, ["nested1",
                        { "id": "nestedid", "nestedprop" : [ "nested3" ] },
-                    "nested2"],
+                    "nested2"], 1,
             3],
     "bar" : [ [] ]
     }
@@ -151,7 +151,7 @@ def test():
     includesharedrefs = [{
     "circular": "test",
     "circularlist": ["test", "test"],
-    "circularlist2": ["_:3", "_:4"],
+    "circularlist2": ["_:1", "_:2"],
     "id": "test"}]
     assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs)
     #test missing ids and exclude_blankids

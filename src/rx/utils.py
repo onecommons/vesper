@@ -53,11 +53,17 @@ def flattenSeq(seq, depth=0xFFFF, flattenTypes=None):
 def flatten(seq, to=list, depth=0xFFFF, flattenTypes=None, keepSeq=False):
     if not keepSeq and not isinstance(seq, flattenTypes or _flattenTypes):
         return seq
-    flattened = to(flattenSeq(seq, depth, flattenTypes))
-    if not keepSeq and len(flattened)==1:
-        return flattened[0]
-    else:
+    flattened = to(flattenSeq(seq, depth, flattenTypes))    
+    if keepSeq:
         return flattened
+    else:
+        size = len(flattened)
+        if not size:
+            return None    
+        elif size == 1:
+            return flattened[0]
+        else:
+            return flattened
 
 def bisect_left(a, x, cmp=cmp, lo=0, hi=None):
     """

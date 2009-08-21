@@ -3,6 +3,8 @@ from rx.RxPath import Tupleset, ColumnInfo, EMPTY_NAMESPACE
 SUBJECT = 0
 PROPERTY = 1
 OBJECT = 2
+OBJTYPE_POS = 3
+LIST_POS = 5
 
 class ResourceSet(Tupleset):
     '''

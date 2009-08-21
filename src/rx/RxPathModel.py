@@ -88,7 +88,9 @@ class Tupleset(object):
         raise TypeError('Tupleset is read only')
     
 class Model(Tupleset):
-
+    canHandleStatementWithOrder = False
+    bnodePrefix = BNODE_BASE
+    
     ### Transactional Interface ###
     autocommit = True
     
@@ -111,7 +113,7 @@ class Model(Tupleset):
                 kw[labels[key] ] = value
         kw['hints'] = hints
         for stmt in self.getStatements(**kw):
-            yield (stmt[0], stmt[1], sjson.toJsonValue(stmt[2], stmt[3]), stmt[3], stmt[4])
+            yield (stmt[0], stmt[1], sjson.toJsonValue(stmt[2], stmt[3]), stmt[3], stmt[4], stmt.listpos)
 
     def update(self, rows):
         for row in rows:
@@ -140,13 +142,14 @@ class Model(Tupleset):
         assert object is not None or objecttype
         raise NotImplementedError 
         
-    def addStatement(self, statement ):
+    def addStatement(self, statement):
         '''add the specified statement to the model'''
         raise NotImplementedError 
 
     def addStatements(self, statements):
         '''add the specified statements to the model'''
-        for s in statements:
+        lists = {}
+        for s in statements:                        
             self.addStatement(s)
         
     def removeStatement(self, statement ):

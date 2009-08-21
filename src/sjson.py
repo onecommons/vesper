@@ -123,7 +123,7 @@ except ImportError:
     import simplejson as json
 
 from rx import RxPath    
-from rx.RxPath import Statement, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
+from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
 from rx.RxPathUtils import encodeStmtObject
 import re
 
@@ -134,6 +134,7 @@ PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
 STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
+PROPSUBJECT = JSON_BASE+'propseqsubject'
 
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
@@ -189,6 +190,8 @@ class sjson(object):
     def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
                             scope = '', model=None, preserveRdfTypeInfo=True):
         self._genBNode = generateBnode
+        if generateBnode == 'uuid': #XXX hackish
+            self.bnodeprefix = RxPath.BNODE_BASE
         self.addOrderInfo = addOrderInfo
         self.preserveRdfTypeInfo = preserveRdfTypeInfo
         self.scope = scope
@@ -406,7 +409,8 @@ class sjson(object):
         return json.dumps(r.values()) #a list
 
     def to_rdf(self, json, scope = None):        
-        m = RxPath.MemModel()
+        m = RxPath.MemModel() #XXX        
+
         if scope is None:
             scope = self.scope
 
@@ -440,11 +444,11 @@ class sjson(object):
             if not val:
                 return RDF_MS_BASE+'nil'
 
-            seq = self._blank()
+            seq = self._blank() #XXX special case
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
                 RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
-                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
+                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) ) #XXX STANDALONESEQTYPE
 
             for i, item in enumerate(val):
                 item, objecttype = self.deduceObjectType(item)
@@ -487,37 +491,50 @@ class sjson(object):
                     if not val:
                         m.addStatement( Statement(id, prop, RDF_MS_BASE+'nil', 
                                                 OBJECT_TYPE_RESOURCE, scope) )
-                    elif addOrderInfo:
-                        seq = self._blank() 
-                        m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
-                            RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
-                        m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
-                            PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
-                        m.addStatement( Statement(seq, PROPBAG, prop, 
-                            OBJECT_TYPE_RESOURCE, scope) )
-                        m.addStatement( Statement(id, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
-                    
-                    for i, item in enumerate(val):
-                        #xxx handle dups, go through list twice
+                        
+                    #to handle dups, build itemdict
+                    itemdict = {}
+                    for i, item in enumerate(val):               
                         item, objecttype = self.deduceObjectType(item)
                         if isinstance(item, dict):
                             itemid, idprop = getorsetid(item)
-                            m.addStatement( Statement(id, prop, itemid, OBJECT_TYPE_RESOURCE, scope) )  
-                            if addOrderInfo:
-                                m.addStatement( Statement(seq, 
-                                    RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
-                            todo.append(item)
+                            pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))                            
+                            if pos:
+                                pos.append(i)
+                            else:
+                                itemdict[(itemid, OBJECT_TYPE_RESOURCE)] = [i]                                                                
+                                todo.append(item)
                         elif isinstance(item, list):                        
                             nestedlistid = _createNestedList(item)
-                            m.addStatement( Statement(id, prop, nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
-                            if addOrderInfo:
-                                m.addStatement( Statement(seq,
-                                    RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
+                            itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE)] = [i]                                                                                            
                         else:
-                            #simple type                            
-                            m.addStatement( Statement(id, prop, item, objecttype, scope) )
-                            if addOrderInfo:
-                                m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
+                            #simple type
+                            pos = itemdict.get( (item, objecttype) )                            
+                            if pos:
+                                pos.append(i)
+                            else:
+                                itemdict[(item, objecttype)] = [i]                                                                                            
+                    
+                    listStmts = []
+                    for (item, objecttype), pos in itemdict.items():
+                        if addOrderInfo:
+                            s = StatementWithOrder(id, prop, item, objecttype, scope, pos)
+                        else:
+                            s = Statement(id, prop, item, objecttype, scope)
+                        listStmts.append(s)
+                    
+                    m.addStatements(listStmts)
+                    
+                    if addOrderInfo and not m.canHandleStatementWithOrder:    
+                        lists = {}
+                        for s in listStmts:                            
+                            value = (s[2], s[3])            
+                            ordered  = lists.setdefault( (s[4], s[0], s[1]), [])                
+                            for p in s.listpos:
+                                ordered.append( (p, value) )
+                        if lists:
+                            self.generateListResources(m, lists)
+                                
                 else: #simple type
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )
         return m.getStatements()
@@ -568,6 +585,28 @@ class sjson(object):
             return unicode(item), XSD+'double'
         else:
             return item, OBJECT_TYPE_LITERAL
+
+    def generateListResources(self, m, lists):
+        '''
+        Generate property list resources
+        `lists` is a dictionary: (scope, subject, prop) => [(pos, (object, objectvalue))+]
+        '''
+        for (scope, subject, prop), ordered in lists.items(): 
+            #use special bnode pattern so we can find these quickly
+            seq = self.bnodeprefix + 'proplist:' + subject+';'+prop
+            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+                RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
+            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
+            m.addStatement( Statement(seq, PROPBAG, prop, 
+                OBJECT_TYPE_RESOURCE, scope) )
+            m.addStatement( Statement(seq, PROPSUBJECT, subject, 
+                OBJECT_TYPE_RESOURCE, scope) )
+            m.addStatement( Statement(subject, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
+
+            ordered.sort()
+            for pos, (item, objecttype) in ordered:
+                m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(pos+1), item, objecttype, scope) )
 
 def tojson(statements, options=None):
     options = options or {}

@@ -65,9 +65,10 @@ class BaseStatement(object):
     OBJ_POS = 2
     OBJTYPE_POS = 3
     SCOPE_POS = 4
+    LIST_POS = 5
 
 class Statement(tuple, BaseStatement):
-    __slots__ = ()
+    #__slots__ = ('listpos', )
 
     def __new__(cls, subject, predicate, object,
              objectType=OBJECT_TYPE_LITERAL, scope=''):
@@ -79,6 +80,7 @@ class Statement(tuple, BaseStatement):
     object = property(lambda self: self[2])
     objectType = property(lambda self: self[3])
     scope =  property(lambda self: self[4])
+    listpos =  None
 
 class _BaseTriple(object):
 
@@ -123,13 +125,26 @@ class MutableStatement(list, BaseStatement):
     object = property(lambda self: self[2], lambda self, x: self.__setitem__(2, x))    
     objectType = property(lambda self: self[3], lambda self, x: self.__setitem__(3, x))
     scope =  property(lambda self: self[4], lambda self, x: self.__setitem__(4, x))
-
+    listpos =  None
+    
     #def append(self, o): raise TypeError("append() not allowed")
     def extend(self, o): raise TypeError("extend() not allowed")
     def pop(self): raise TypeError("pop() not allowed")    
 
 class MutableTriple(_BaseTriple, MutableStatement):
     pass
+
+class StatementWithOrder(Statement):
+    
+    def __new__(cls, subject, predicate, object,
+             objectType=OBJECT_TYPE_LITERAL, scope='', listpos=()):        
+        obj = tuple.__new__(cls, (subject, predicate, object,
+             objectType,scope) )
+        obj.listpos = tuple(listpos)
+        return obj
+
+    def __repr__(self):
+        return 'StatementWithOrder'+repr((self+(self.listpos,)))
 
 
 class ParseException(utils.NestedException):

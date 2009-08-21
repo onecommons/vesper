@@ -312,7 +312,10 @@ class Filter(QueryOp):
         if 'propertylabel' in kw:
             self.labels.append( (kw['propertylabel'], PROPERTY) )
         if 'objectlabel' in kw:
-            self.labels.append( (kw['objectlabel'], OBJECT) )
+            objectlabel = kw['objectlabel']
+            self.labels.append( (objectlabel, OBJECT) )
+            self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
+            self.labels.append( (objectlabel+':pos', LIST_POS) )
  
     def getType(self):
         return Tupleset
@@ -325,6 +328,9 @@ class Filter(QueryOp):
                 else:
                     raise QueryException("label already used " + label)
         self.labels.append( (label, pos) )
+        if pos == OBJECT:
+            self.labels.append( (label+':type', OBJTYPE_POS) )
+            self.labels.append( (label+':pos', LIST_POS) )
 
 class Label(QueryOp):
 

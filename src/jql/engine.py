@@ -219,6 +219,7 @@ construct({ child : ?obj }, filter(?subject, 'child', ?obj))
 import jqlAST
 
 from rx import RxPath
+from rx.RxPath import RDF_MS_BASE
 from rx.utils import flattenSeq, flatten
 import operator, copy, sys, pprint, itertools
 from jql import *
@@ -723,20 +724,28 @@ def flattenOp(args, opType):
             yield a
 
 def _setConstructProp(op, pattern, prop, v, name):
-    if not isinstance(v, (list,tuple)):
-        v = [v]
-    if not v:
+    isSeq = isinstance(v, (list,tuple))
+    if v is None or (isSeq and not len(v)):
         if prop.ifEmpty == jqlAST.PropShape.omit:
             return
         elif prop.ifEmpty == jqlAST.PropShape.uselist:
-            val = v
+            if not isSeq:
+                val = [v]
+            else:
+                val = v
         elif prop.ifEmpty == jqlAST.PropShape.usenull:
             val = None #null
     elif (prop.ifSingle == jqlAST.PropShape.nolist
-            and len(v) == 1):
+                and not isSeq):
+        val = v
+    elif (prop.ifSingle == jqlAST.PropShape.nolist
+            and len(v) == 1):    
         val = flatten(v[0])
     else: #uselist
-        val = v
+        if isSeq:
+            val = v
+        else:
+            val = [v]
 
     if op.shape is op.dictShape:
         pattern[name] = val
@@ -791,7 +800,9 @@ class SimpleQueryEngine(object):
 
           for outerrow in tupleset:
             for idvalue, row in getColumns(subjectcol, outerrow):
-                i+=1
+                #if idvalue.startswith(context.initialModel.bnodePrefix+'proplist:'):
+                #    continue #skip prop list descriptor resources
+                i+=1                
                 if op.parent.offset is not None and op.parent.offset < i:
                     continue
                 context.constructStack.append(idvalue)
@@ -907,6 +918,42 @@ class SimpleQueryEngine(object):
                 debug=debug and columns),
             columns=columns, 
             hint=tupleset, op=msg + repr(joincond.position),  debug=debug)
+
+    def reorderWithListInfo(self, context, subject, name, listval):
+        #print 'reorderlsit', subject, name, listval
+        if not context.initialModel.canHandleStatementWithOrder:        
+            #statement-level list order info not supported by the model, try to find the list resource
+            pred = name #XXX convert to URI
+            #look for special bnode pattern
+            listid = context.initialModel.bnodePrefix+'proplist:'+subject+';'+pred
+            rows = context.initialModel.filter({
+                SUBJECT: listid
+            })
+            ordered = []
+            rows = list(rows)
+            #print 'reorderlist', rows
+            if rows:
+                for row in rows:
+                    predicate = row[1]
+                    if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
+                        ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
+                        ordered.append( (ordinal, row[2]) )
+                        assert row[2] in listval
+                #print 'ordered', ordered
+            else:
+                return listval
+        else:
+            listcol = context.currentTupleset.findColumnPos(name+':pos') 
+            assert listcol
+            listpositions = flatten(c[0] for c in getColumn(listcol, context.currentRow))
+            assert listpositions
+            ordered = []
+            for i, positions in enumerate(listpositions):
+                for p in positions:
+                    ordered.append( (p, listval[i]) )
+        
+        ordered.sort()        
+        return [v for p, v in ordered]                        
 
     def evalJoin(self, op, context):
         return self._evalJoin(op, context, 'i')
@@ -1110,8 +1157,16 @@ class SimpleQueryEngine(object):
                 pos = context.currentTupleset.findColumnPos(op.name)               
                 if not pos:
                     #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
-                    raise QueryException(op.name + " projection not found")
-            return flatten(c[0] for c in getColumn(pos, context.currentRow))
+                    raise QueryException(op.name + " projection not found")            
+            val = flatten((c[0] for c in getColumn(pos, context.currentRow)), keepSeq=True)
+            if len(val) > 1:
+               assert not isinstance(op.name, int)               
+               subject = context.currentRow[SUBJECT]
+               return  self.reorderWithListInfo(context, subject, op.name, val)
+            elif not val:
+                return None
+            else:
+                return val[0]
         else:
             tupleset = context.initialModel
             subject = context.currentRow[SUBJECT]
@@ -1124,8 +1179,9 @@ class SimpleQueryEngine(object):
                 for row in rows:                    
                     v = row[OBJECT]
                     #if it's object reference and not a circular reference                    
-                    isref = refFunc.execFunc(context, v)
-                    isbnode = isref and hasattr(v, 'startswith') and (v.startswith('bnode') or v.startswith('_:'))                    
+                    isref = refFunc.execFunc(context, v)                    
+                    isbnode = isref and hasattr(v, 'startswith') and (
+                                v.startswith(context.initialModel.bnodePrefix))
                     if ( (isref and context.depth > 0) or isbnode 
                                         and v not in context.constructStack):
                         #if v in context.constructCache:

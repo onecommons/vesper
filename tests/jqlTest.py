@@ -17,7 +17,9 @@ def cp(*args, **kw):
 
 def modelFromJson(model):
     model = sjson.sjson(generateBnode='counter').to_rdf(model)
-    return RxPath.MemModel(model)
+    model = RxPath.MemModel(model)
+    model.bnodePrefix = '_:'
+    return model
 
 '''
 todo: query tests:
@@ -153,7 +155,7 @@ ast=Select(Construct([
  )
 ),
 #expected rows: id, (child, parent)
-rows=[['1',
+skiprows=[['1',
     [
       ['3', '_:1', '_:1'], ['2', '_:2', '_:2']
     ]
@@ -196,7 +198,7 @@ ast=Select(
 )
 ),
 #expected results (id, (child, foo), parent)
-rows=[['1',
+skiprows=[['1',
     [
        ['3', [['bar']], '3', '_:1', '_:1'],
        ['2', [['bar']], '2', '_:2', '_:2']
@@ -223,9 +225,6 @@ syntaxtests = [
 '''
 'blah' : [foo]
 ''',
-'''
-[rdfs:comment where(rdfs:label='foo')]
-'''
 ]
 
 #XXX fix failing queries!
@@ -234,6 +233,9 @@ failing = [
 '''{* where (foo = { id = 'd' }) }''',
 
 #qnames not handled correctly: jql.QueryException: comment projection not found
+#also --printdebug raises:   File "/_dev/rx4rdf/rhizome2/src/jql/engine.py", line 237, in _colrepr
+#    colstr = ','.join( map(x,self.columns) )
+#TypeError: sequence item 0: expected string, QName found
 '''{ rdfs:comment:* where(rdfs:label='foo')}''',
 #XXX parse._joinFromConstruct() doesn't work with lists:
 '''
@@ -347,6 +349,7 @@ t.model = modelFromJson([
 
 ])
 
+t.group = 'groupby'
 # XXX * is broken: need evalProject not to assume id is SUBJECT
 skip('''{
 *,  
@@ -605,6 +608,10 @@ t('''{*}''',
  {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}]    
 )
 
+t('''{
+values : *
+}''')
+
 basic = Suite()
 basic.model = [{}, {}]
 
@@ -804,7 +811,7 @@ t.model = modelFromJson([
      },
      {
      'id' : '2',
-     'listprop' : [ 'a', ['nestedlist'], [], 'b'] 
+     'listprop' : [ 'b', ['nestedlist'], [], 'a'] 
      },     
     ])
 
@@ -910,8 +917,11 @@ def main(cmdargs=None):
             pprint.pprint(ast)
 
         if options.printrows or test.rows is not None:
-            evalAst = ast.where
-            testrows = list(jql.evalAST(evalAst, test.model))            
+            if ast:
+                evalAst = ast.where            
+                testrows = list(jql.evalAST(evalAst, test.model))
+            else:
+                testrows = None
         if options.printrows:
             print 'labels', evalAst.labels
             print 'rows:'
