@@ -72,8 +72,8 @@ skip = Suite()
 ########### basic tests ###########
 ###################################
 t.model = modelFromJson([
-        { "parent":"1", "child":"2"},
-        { "parent":"1", "child":"3"},
+        { "parent":"1", "child":"2", 'id': '_:2'},
+        { "parent":"1", "child":"3", 'id': '_:1'},
         { "id" : "1"},
         { "id" : "2", "foo" : "bar"},
         { "id" : "3", "foo" : "bar"}
@@ -83,7 +83,7 @@ t.group = 'smoke'
 t('''
 [*]
 ''',
-[['bar'], ['bar'], ['2', '1'], ['3', '1']]
+[['bar'], ['bar'], ['1', '2'], ['1', '3']]
 )
 
 #XXX: AssertionError: cant find 0 in SimpleTupleset 0xd6c650 for group by '#0' [ColInfo('', <type 'object'>), ColInfo('#0', MutableTupleset[])]
@@ -490,7 +490,7 @@ t('''{ content : *,
   
 {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
   'content': 'some text about the commons',
-  'id': '_:3'},
+  'id': '_:1'},
   ]
 )
 
@@ -499,7 +499,7 @@ t('''{ content : *,
 ''',
 [
  {'content': 'some more text about the commons', 'id': '_:2'},
- {'content': 'some text about the commons', 'id': '_:3'},
+ {'content': 'some text about the commons', 'id': '_:1'},
 ]
 )
 
@@ -518,8 +518,8 @@ t('''
 [{'content': 'some more text about the commons',
   'id': '_:2',
   'subject': 'commons'},
- {'content': 'some text about the commons', 'id': '_:3', 'subject': 'commons'},
- {'content': 'some text about rhizome', 'id': '_:1', 'subject': 'rhizome'}]
+ {'content': 'some text about the commons', 'id': '_:1', 'subject': 'commons'},
+ {'content': 'some text about rhizome', 'id': '_:3', 'subject': 'rhizome'}]
  )
 
 #find all the entries that implicitly or explicitly are tagged 'commons'
@@ -536,7 +536,7 @@ t( '''
 [{'content': 'some more text about the commons',
   'id': '_:2',
   'subject': 'commons'},
- {'content': 'some text about the commons', 'id': '_:3', 'subject': 'commons'}]
+ {'content': 'some text about the commons', 'id': '_:1', 'subject': 'commons'}]
 )
 
 #throws jql.QueryException: only equijoin supported for now
@@ -575,6 +575,7 @@ t('''
 t('''{*}''')
 
 #XXX test circularity
+t.group = 'depth'
 t('''{*
 DEPTH 1
 }''')
@@ -585,7 +586,7 @@ t.model = modelFromJson([
           'prop1' : 'foo',
           'prop2' : 3,
           'prop3' : None,
-          'prop4' : True,
+          'prop4' : True,          
        }
      },
      { 'id' : '2',
@@ -593,14 +594,23 @@ t.model = modelFromJson([
           'prop1' : 'bar',
           'prop2' : None,
           'prop3' : False,
+          'prop4' : '',
+          'prop5' : 0,
        }
      },
+    { 'id' : '3',
+       'values' : ['', 0, None, False]
+    },
+    { 'id' : '4',
+       'values' : [1,'1',1.1]
+    },
     ]
 )
 
 t.group = 'types'
 
-t('''{*}''',
+#XXX not including anoymous children
+skip('''{*}''',
 [{'id': '1',
   'values': {'id': '_:2', 'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}},
  {'id': '2', 'values': {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}},
@@ -608,6 +618,7 @@ t('''{*}''',
  {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}]    
 )
 
+#XXX not including id 3 
 t('''{
 values : *
 }''')
@@ -789,36 +800,84 @@ query='''
   where ( ?foo = bar) }
 ''')
 
+#test multivalued properties without any associated json list info
 t.group = 'multivalue'
 
 t.model = RxPath.MemModel([
  ('1', 'multivalued', 'b', 'R', ''),
  ('1', 'multivalued', 'a', 'R', ''),
+ ('1', 'multivalued', '0', 'http://www.w3.org/2001/XMLSchema#integer', ''),
+ ('1', 'multivalued', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil', 'R', ''),
+ ('1', 'singlevalue', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil', 'R', ''),
 ])
 
-#XXX fails: multivalue properties overwrite each other
-t('{*}')
+t('{*}',
+[{'id': '1', 'multivalued': [0, 'a', 'b', []], 'singlevalue': []}]
+)
 
-t('{ "multivalued" : multivalued }')
-t('{ multivalued : * }')
+t('{ "multivalued" : multivalued }',
+[{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
+
+t('{ multivalued : * }',
+[{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
 
 t.group = 'lists'
 
 t.model = modelFromJson([
      {
      'id' : '1',
-     'listprop' : [ 'b', 'a'] 
+     'listprop' : [ 'b', 'a', [[]], [{ 'foo' : 'bar'}, 'another'] ],      
+     #include enough items to expose lexigraphic sort bugs
+     'listprop2' : [-1, 0, 1,2,3,4,5,6,7,9,10,11],
+     'listprop3' : [1],
+     'listprop4' : [],
      },
      {
      'id' : '2',
-     'listprop' : [ 'b', ['nestedlist'], [], 'a'] 
+     'listprop' : [ 'b', [-1, 0, 1,2,3,4,5,6,7,9,10,11], [], 'a', 1],
+     'listprop2' : [ [ ['double nested'] ]],
+     'listprop3' : [],
+     'listprop4' : [[]],
      },     
     ])
 
-t('{*}')
+t('{*}',
+[[[]],
+ [{'foo': 'bar'}, 'another'],
+ ['double nested'],
+ [['double nested']],
+ [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
+ {'id': '1',
+  'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']],
+  'listprop2': [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
+  'listprop3': [1],
+  'listprop4': []},
+ {'id': '2',
+  'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1],
+  'listprop2': [[['double nested']]],
+  'listprop3': [],
+  'listprop4': [[]]},
+ {'foo': 'bar'}
+])
 
-t('{ "listprop" : listprop }')
-t('{ listprop : * }')
+t('{ "listprop" : listprop}',
+[{'id': '1', 'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']]},
+ {'id': '2',
+  'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1]}]
+)
+
+t('{ listprop : *, listprop2 : *, listprop3 : *, listprop4 : * }',
+[{'id': '1',
+  'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']],
+  'listprop2': [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
+  'listprop3': [1],
+  'listprop4': []},
+ {'id': '2',
+  'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1],
+  'listprop2': [[['double nested']]],
+  'listprop3': [],
+  'listprop4': [[]]}]
+)
 
 import unittest
 class JQLTestCase(unittest.TestCase):
@@ -850,14 +909,11 @@ def main(cmdargs=None):
             except:
                 options.group = args[0]
     
-    model = t.model
-    if options.printmodel:
-        print 'model', list(model)
-
     count = 0
     skipped = 0
     currentgroup = None
     groupcount = 0
+    lastmodelid = None
     for (i, test) in enumerate(flatten(t)):
         if test.group != currentgroup:
             currentgroup = test.group
@@ -892,6 +948,11 @@ def main(cmdargs=None):
         if not options.quiet:
             print '*** running test:', name
             print 'query', test.query
+
+        if options.printmodel and id(test.model) != lastmodelid:
+            lastmodelid = id(test.model)
+            print 'model'
+            pprint.pprint(list(test.model))
 
         if test.ast:
             if not test.skipParse and test.query:

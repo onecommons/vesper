@@ -348,9 +348,12 @@ class _ParseState(object):
                         #XXX same as Label case (assign label if necessary)
                         raise QueryException('join in filter not yet implemented: %s' % root)
                 if isinstance(child, Project):
-                     projectop = self._getASTForProject(child)
-                     if projectop:
+                    projectop = self._getASTForProject(child)                    
+                    if projectop:
                         projectops.append( (child, projectop) )
+                    if child is root:
+                        #don't include bare Project as filter, projectops should take of that
+                        skipRoot = True
                 elif isinstance(child, Label):
                     labels.setdefault(child.name,[]).append(child)
 
@@ -403,13 +406,13 @@ class _ParseState(object):
                     skipRoot = True #don't include this root in this join
     
             #try to consolidate the projection filters into root filter.
-            if skipRoot:
-                filter = Filter()
-            else:
+            if not skipRoot:
                 filter = Filter(root)
                 consolidateFilter(filter, projectops)
+
             for (project, projectop) in projectops:
                 parent.appendArg(projectop)
+
             if not skipRoot:
                 parent.appendArg( filter )
     

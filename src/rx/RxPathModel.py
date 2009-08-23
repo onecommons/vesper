@@ -102,7 +102,7 @@ class Model(Tupleset):
 
     ### Tupleset interface ###
     columns = tuple(ColumnInfo(l, i == 4 and object or unicode) for i, l in
-          enumerate(('subject', 'predicate','object', 'objecttype','context')))
+          enumerate(('subject', 'predicate','object', 'objecttype','context', 'listpos')))
 
     def filter(self,conditions=None, hints=None):
         import sjson

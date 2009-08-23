@@ -151,14 +151,14 @@ class ParseException(utils.NestedException):
     def __init__(self, msg = ''):                
         utils.NestedException.__init__(self, msg,useNested = True)
 
-def generateBnode(name=None):
+def generateBnode(name=None, prefix=''):
     """
     Generates blank nodes (bnodes), AKA anonymous resources
     """
     global _bNodeCounter, _sessionBNodeUUID
     _bNodeCounter += 1
-    name = name or `_bNodeCounter`    
-    return BNODE_BASE + _sessionBNodeUUID +  name
+    name = name or str(_bNodeCounter)    
+    return BNODE_BASE + prefix + _sessionBNodeUUID +  name
         
 def NTriples2Statements(stream, defaultScope='', baseuri=None,
     charencoding='utf8', incrementHook=None):

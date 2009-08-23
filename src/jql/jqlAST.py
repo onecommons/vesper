@@ -559,7 +559,7 @@ def getQueryFuncOp(name, *args):
 
 class Project(QueryOp):  
     
-    def __init__(self, fields, var=None):
+    def __init__(self, fields, var=None, constructRefs = False):
         self.varref = var 
         if not isinstance(fields, (list,tuple)):
             if str(fields).lower() == 'id':
@@ -567,9 +567,10 @@ class Project(QueryOp):
             self.fields = [ fields ]
         else:
             self.fields = fields
+        self.constructRefs = constructRefs #expand references to objects        
 
     name = property(lambda self: self.fields[-1]) #name or '*'
-
+    
     def isPosition(self):
         return isinstance(self.name, int)
 
@@ -581,6 +582,7 @@ class Project(QueryOp):
         label.__class__ = Project        
         label.fields = self.fields
         label.varref = self.varref
+        label.constructRefs = self.constructRefs
 
     def isIndependent(self):
         return False
@@ -617,6 +619,9 @@ class ConstructProp(QueryOp):
         self.nameIsFilter = nameIsFilter
 
     def appendArg(self, value):
+        if isinstance(value, Project):
+            #kind of a hack: if this is a standalone project expand object references
+            value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self
 

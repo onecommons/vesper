@@ -223,6 +223,7 @@ from rx.RxPath import RDF_MS_BASE
 from rx.utils import flattenSeq, flatten
 import operator, copy, sys, pprint, itertools
 from jql import *
+import sjson
 
 #############################################################
 #################### QueryPlan ##############################
@@ -723,9 +724,11 @@ def flattenOp(args, opType):
         else:
             yield a
 
-def _setConstructProp(op, pattern, prop, v, name):
+def _setConstructProp(shape, pattern, prop, v, name):
     isSeq = isinstance(v, (list,tuple))
-    if v is None or (isSeq and not len(v)):
+    if v == RDF_MS_BASE+'nil': #special case to force empty list
+        val = []
+    elif v is None or (isSeq and not len(v)):
         if prop.ifEmpty == jqlAST.PropShape.omit:
             return
         elif prop.ifEmpty == jqlAST.PropShape.uselist:
@@ -738,19 +741,43 @@ def _setConstructProp(op, pattern, prop, v, name):
     elif (prop.ifSingle == jqlAST.PropShape.nolist
                 and not isSeq):
         val = v
-    elif (prop.ifSingle == jqlAST.PropShape.nolist
-            and len(v) == 1):    
-        val = flatten(v[0])
+    #elif (prop.ifSingle == jqlAST.PropShape.nolist
+    #        and len(v) == 1):    
+    #    val = flatten(v[0])
     else: #uselist
         if isSeq:
             val = v
         else:
             val = [v]
-
-    if op.shape is op.dictShape:
+    
+    if shape is jqlAST.Construct.dictShape:
         pattern[name] = val
     else:
         pattern.append(val)
+
+def _getAllProps(idvalue, rows, propsAlreadyOutput):
+    props = {}
+    for row in rows:
+        propname = row[PROPERTY]
+        if propname not in propsAlreadyOutput:
+            props.setdefault(propname, []).append(row[2:]) 
+    
+    for propname, valuerows in props.items():
+        proprows = [idvalue, propname]+zip(*valuerows)
+        yield propname, proprows                    
+
+def _getList(idvalue, rows):
+    ordered = []
+    for row in rows:
+        predicate = row[PROPERTY]
+        if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
+            ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
+            ordered.append( (ordinal, row[2:]) )
+    
+    ordered.sort()
+    for (i, row) in ordered:
+        rdfprop = RDF_MS_BASE+'_'+str(i)
+        yield rdfprop, (idvalue, rdfprop) + row                    
 
 class SimpleQueryEngine(object):
     
@@ -800,8 +827,14 @@ class SimpleQueryEngine(object):
 
           for outerrow in tupleset:
             for idvalue, row in getColumns(subjectcol, outerrow):
-                #if idvalue.startswith(context.initialModel.bnodePrefix+'proplist:'):
-                #    continue #skip prop list descriptor resources
+                if idvalue.startswith(context.initialModel.bnodePrefix+'proplist:'):
+                    continue #skip prop list descriptor resources
+                elif idvalue.startswith(context.initialModel.bnodePrefix+'list:'):
+                    shape = op.listShape
+                    islist = True
+                else:
+                    shape = op.shape
+                    islist = False
                 i+=1                
                 if op.parent.offset is not None and op.parent.offset < i:
                     continue
@@ -812,24 +845,28 @@ class SimpleQueryEngine(object):
                     print 'valid outer'
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
-                pattern = op.shape()
-
+                pattern = shape()
+                allpropsOp = None
+                propsAlreadyOutput = set((sjson.PROPSEQ,)) #exclude PROPSEQ
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
-                        if prop.suppress:
+                        if prop.suppress or shape is op.listShape:
                             continue
                         #print 'cs', prop.name, idvalue
                         if op.parent.groupby:
                             continue #don't output id if groupby is specified
-                        if not prop.name: #omit 'id' if prop if name is empty
+                        if not prop.name: #omit 'id' if prop name is empty
                             continue
-                        if op.shape is op.dictShape:
+                        #suppress bnode ids #XXX make this configurable
+                        #XXX what??
+                        if idvalue.startswith(context.initialModel.bnodePrefix+'object:'):
+                            continue
+                        if shape is op.dictShape:
                             pattern[prop.name] = idvalue
-                        elif op.shape is op.listShape:
+                        elif shape is op.listShape:
                             pattern.append(idvalue)
-                    elif prop.value.name == '*':
-                        for name, value in prop.value.evaluate(self, context):                            
-                            _setConstructProp(op, pattern, prop, value, name)
+                    elif isinstance(prop.value, jqlAST.Project) and prop.value.name == '*':                        
+                        allpropsOp = prop
                     else:
                         ccontext = copy.copy(context)
                         if isinstance(prop.value, jqlAST.Select):
@@ -854,7 +891,9 @@ class SimpleQueryEngine(object):
                                 columns=rowInfoTupleset.columns,
                                 hint=v,
                                 op='nested construct value', debug=context.debug)
-                        else:                            
+                        else:   
+                            #find projections, evaluate them, error if more than one is a list
+                            #iterate through list an set currentLabel and currentValue                         
                             v = context.currentRow
                             ccontext.currentTupleset = SimpleTupleset(v,
                                 columns=rowcolumns, 
@@ -863,13 +902,37 @@ class SimpleQueryEngine(object):
                         
                         #print '!!v eval', prop, ccontext.currentRow, rowcolumns
                         v = flatten(prop.value.evaluate(self, ccontext),
-                                    flattenTypes=Tupleset)
+                                    flattenTypes=Tupleset)                        
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
                             name = flatten(jqlAST.Project(prop.name).evaluate(self, ccontext))                            
                         else:
                             name = prop.name or prop.value.name
-                        _setConstructProp(op, pattern, prop, v, name)
+                        _setConstructProp(shape, pattern, prop, v, name)
+                        if prop.value.name and isinstance(prop.value, jqlAST.Project):
+                            propsAlreadyOutput.add(prop.value.name)
+                
+                if allpropsOp:
+                    if shape is op.dictShape: 
+                        #don't overwrite keys already created
+                        propsAlreadyOutput.update(pattern.keys())
+
+                    #XXX what about scope -- should initialModel just filter by scope if set?
+                    rows = context.initialModel.filter({ SUBJECT: idvalue })
+                    if islist:
+                        propset = _getList(idvalue, rows)
+                    else:
+                        propset = _getAllProps(idvalue, rows, propsAlreadyOutput)
+                        
+                    for propname, proprows in propset:
+                        ccontext = copy.copy(context)
+                        ccontext.currentTupleset = SimpleTupleset([proprows],
+                            columns=context.initialModel.columns,
+                            op='allprop project on %s'% propname, 
+                            debug=context.debug)
+                        ccontext.currentRow = proprows
+                        value = jqlAST.Project(OBJECT, constructRefs=True).evaluate(self, ccontext)
+                        _setConstructProp(shape, pattern, allpropsOp, value, propname)                    
 
                 currentIdvalue = context.constructStack.pop()
                 assert idvalue == currentIdvalue
@@ -880,7 +943,7 @@ class SimpleQueryEngine(object):
 
         return SimpleTupleset(construct, hint=tupleset, op='construct',
                                                             debug=context.debug)
-
+    
     def evalGroupBy(self, op, context):
         tupleset = context.currentTupleset
         label = op.name         
@@ -919,11 +982,21 @@ class SimpleQueryEngine(object):
             columns=columns, 
             hint=tupleset, op=msg + repr(joincond.position),  debug=debug)
 
-    def reorderWithListInfo(self, context, subject, name, listval):
-        #print 'reorderlsit', subject, name, listval
+    def reorderWithListInfo(self, context, op, listval):
+        if isinstance(op.name, int):
+            #it's an index into a statement row
+            propname = context.currentRow[PROPERTY]
+        else:
+            propname = op.name
+        subject = context.currentRow[SUBJECT]
+        
         if not context.initialModel.canHandleStatementWithOrder:        
             #statement-level list order info not supported by the model, try to find the list resource
-            pred = name #XXX convert to URI
+            pred = propname #XXX convert to URI
+            if pred.startswith(RDF_MS_BASE+'_'):
+                #sjson parser will never generate a proplist resource for these
+                #(instead it'll create a nested list resource)
+                return (False, listval)
             #look for special bnode pattern
             listid = context.initialModel.bnodePrefix+'proplist:'+subject+';'+pred
             rows = context.initialModel.filter({
@@ -931,29 +1004,32 @@ class SimpleQueryEngine(object):
             })
             ordered = []
             rows = list(rows)
-            #print 'reorderlist', rows
             if rows:
                 for row in rows:
                     predicate = row[1]
                     if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
                         ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
                         ordered.append( (ordinal, row[2]) )
-                        assert row[2] in listval
-                #print 'ordered', ordered
+                        assert row[2] in listval, '%s not in %s' % (row[2], listval)
             else:
-                return listval
+                return (False, listval)
         else:
-            listcol = context.currentTupleset.findColumnPos(name+':pos') 
+            if isinstance(op.name, int):
+                listposLabel = LIST_POS
+            else:
+                listposLabel = propname+':pos'
+            listcol = context.currentTupleset.findColumnPos(listposLabel) 
             assert listcol
             listpositions = flatten(c[0] for c in getColumn(listcol, context.currentRow))
-            assert listpositions
+            if not listpositions: #no position info, so not a json list
+                return (False, listval)
             ordered = []
             for i, positions in enumerate(listpositions):
                 for p in positions:
                     ordered.append( (p, listval[i]) )
         
         ordered.sort()        
-        return [v for p, v in ordered]                        
+        return (True, [v for p, v in ordered])
 
     def evalJoin(self, op, context):
         return self._evalJoin(op, context, 'i')
@@ -1134,7 +1210,48 @@ class SimpleQueryEngine(object):
         opmsg = 'complexfilter:'+ str(complexargs)
         return SimpleTupleset(filterRows, hint=tupleset,columns=columns,
                 colmap=colmap, op=opmsg, debug=context.debug)
-
+    
+    def buildObject(self, context, v, handleNil):
+        if handleNil and v == RDF_MS_BASE+'nil': 
+            #special case to force empty list
+            return []
+        refFunc = jqlAST.getQueryFuncOp('isref')
+        isref = refFunc.execFunc(context, v)                    
+        isbnode = isref and hasattr(v, 'startswith') and (
+                    v.startswith(context.initialModel.bnodePrefix))
+        if ( (isref and context.depth > 0) or isbnode 
+                            and v not in context.constructStack):
+            #XXX
+            #if v in context.constructCache:
+            #    v = context.constructCache[v]
+            #    return v
+                        
+            query = jqlAST.Select(
+                        jqlAST.Construct([jqlAST.Project('*')]),
+                        jqlAST.Join())
+            ccontext = copy.copy(context)
+            ccontext.currentTupleset = SimpleTupleset([[v]], 
+                    columns=[ColumnInfo('', object)], 
+                    op='recursive project on %s'%v, 
+                    debug=context.debug)
+            if not isbnode:
+                ccontext.depth -= 1
+            result = list(query.evaluate(self, ccontext))            
+            if result:
+                assert len(result) == 1, (
+                    'only expecting one construct for %s, get %s' % (v, result))
+                obj = result[0]
+                if not isinstance(obj, dict):
+                    v = obj
+                else:
+                    #only write out dict if has more property than just the id
+                    #XXX handle case where id name isn't 'id'
+                    count = int('id' in obj) 
+                    if len(obj) > count:
+                        v = obj 
+                #context.constructCache[v] = v
+        return v                
+    
     def evalProject(self, op, context):
         '''
         Operates on current row and returns a value
@@ -1150,65 +1267,30 @@ class SimpleQueryEngine(object):
         # choose the type index. On the other hand, if that projection uses an
         # iteration join it might be nearly expensive as doing the iteration join
         # on the subject only.
-        if op.name != '*':
-            if isinstance(op.name, int):
-                pos = (op.name,)
-            else:
-                pos = context.currentTupleset.findColumnPos(op.name)               
-                if not pos:
-                    #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
-                    raise QueryException(op.name + " projection not found")            
-            val = flatten((c[0] for c in getColumn(pos, context.currentRow)), keepSeq=True)
-            if len(val) > 1:
-               assert not isinstance(op.name, int)               
-               subject = context.currentRow[SUBJECT]
-               return  self.reorderWithListInfo(context, subject, op.name, val)
-            elif not val:
-                return None
-            else:
-                return val[0]
+        assert op.name != '*'
+        if isinstance(op.name, int):
+            pos = (op.name,)
         else:
-            tupleset = context.initialModel
-            subject = context.currentRow[SUBJECT]
-
-            def getprops():
-                rows = tupleset.filter({
-                    SUBJECT:subject
-                })
-                refFunc = jqlAST.getQueryFuncOp('isref')
-                for row in rows:                    
-                    v = row[OBJECT]
-                    #if it's object reference and not a circular reference                    
-                    isref = refFunc.execFunc(context, v)                    
-                    isbnode = isref and hasattr(v, 'startswith') and (
-                                v.startswith(context.initialModel.bnodePrefix))
-                    if ( (isref and context.depth > 0) or isbnode 
-                                        and v not in context.constructStack):
-                        #if v in context.constructCache:
-                        #    v = context.constructCache[v]
-                        #    continue
-                        query = jqlAST.Select(
-                                    jqlAST.Construct([jqlAST.Project('*')]),
-                                    jqlAST.Join())
-                        ccontext = copy.copy(context)
-                        ccontext.currentTupleset = SimpleTupleset([[v]], 
-                                columns=[ColumnInfo('', object)], 
-                                op='recursive project on %s'%v, 
-                                debug=context.debug)
-                        if not isbnode:
-                            ccontext.depth -= 1
-                        result = list(query.evaluate(self, ccontext))
-                        assert len(result) == 1
-                        if len(result[0]) > 1: #has more than just id
-                            v = result
-                            #context.constructCache[v] = v
-                    elif not isinstance(v, (list,tuple)):
-                        v = [v]                    
-                    #print 'yield', subject, row[PROPERTY], v, row
-                    yield row[PROPERTY], v
-
-            return SimpleTupleset(getprops,
-                    hint=tupleset, op='project *',debug=context.debug)
+            pos = context.currentTupleset.findColumnPos(op.name)               
+            if not pos:
+                #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
+                raise QueryException("'%s' projection not found" % op.name)            
+        val = flatten((c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
+        if op.constructRefs:            
+            assert isinstance(val, list)
+            isJsonList, val = self.reorderWithListInfo(context, op, val)    
+            handleNil = isJsonList or len(val) > 1
+            val = [self.buildObject(context, v, handleNil) for v in val]
+            if isJsonList:
+                return val
+            elif not val:
+                return None #empty
+            elif len(val) == 1:
+                return val[0]
+            else:
+                return val
+        else:
+            return val
 
     def costProject(self, op, context):
         #if op.name == "*": 
@@ -1360,8 +1442,7 @@ def recurse(context, startid, propname=None):
     def getRows():
         while tovisit:
             startid = tovisit.pop()
-            yield [startid]
-            #print 'visit', startid, propname
+            yield [startid]            
             for row in context.initialModel.filter({0:startid, 1:propname}):
                 obj = row[2]
                 if obj not in tovisit:

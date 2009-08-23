@@ -121,7 +121,8 @@ def test():
                        { "id": "nestedid", "nestedprop" : [ "nested3" ] },
                     "nested2"], 1,
             3],
-    "bar" : [ [] ]
+    "bar" : [ [] ],
+    "one" : [1]
     }
     '''
     assert_json_and_back_match(src)
@@ -132,7 +133,7 @@ def test():
     "float" : 1.0,
       "integer" : 2,
       "null" : null,
-      "list" : [ 1.0, 2, null ]
+      "list" : [ 1.0, 2, null, 0, -1]
     }
     '''
     assert_json_and_back_match(src)
@@ -151,7 +152,7 @@ def test():
     includesharedrefs = [{
     "circular": "test",
     "circularlist": ["test", "test"],
-    "circularlist2": ["_:1", "_:2"],
+    "circularlist2": ["_:list:1", "_:list:2"],
     "id": "test"}]
     assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs)
     #test missing ids and exclude_blankids

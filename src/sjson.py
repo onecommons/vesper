@@ -174,7 +174,8 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False):
             valueparse = _xsdExtendedMap.get(objectType)
             if valueparse:
                 return valueparse(data)
-    return data
+    else:
+        return data
 
 class sjson(object):    
     #XXX need separate output nsmap for serializing
@@ -426,7 +427,7 @@ class sjson(object):
         #nsmapstack = [ self.nsmap.copy() ]
         nsmap = self.nsmap
         
-        def getorsetid(obj):
+        def getorsetid(obj, toplevel):
             #nsmap = nsmapstack.pop()
             nsmapprop = _expandqname('nsmap', nsmap) 
             nsmapval = obj.get(nsmapprop)
@@ -435,7 +436,8 @@ class sjson(object):
             idprop = _expandqname('id', nsmap) 
             id = obj.get(idprop)
             if id is None:
-                id = self._blank() #XXX
+                #mark bnodes for nested objects differently                
+                id = self._blank( (not toplevel and 'object:') or '')
                 obj[idprop] = id
             return id, idprop
 
@@ -444,7 +446,7 @@ class sjson(object):
             if not val:
                 return RDF_MS_BASE+'nil'
 
-            seq = self._blank() #XXX special case
+            seq = self._blank('list:')
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
                 RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
@@ -453,7 +455,7 @@ class sjson(object):
             for i, item in enumerate(val):
                 item, objecttype = self.deduceObjectType(item)
                 if isinstance(item, dict):
-                    itemid, idprop = getorsetid(item)
+                    itemid, idprop = getorsetid(item, False)
                     m.addStatement( Statement(seq,
                         RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
                     todo.append(item)
@@ -465,21 +467,27 @@ class sjson(object):
                     m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
             return seq
         
+        toplevel = True
+        todo.append('end toplevel')
         while todo:
-            obj = todo.pop()
+            obj = todo.pop(0)
+            if obj == 'end toplevel':
+                toplevel = False
+                continue
+            
             #XXX support top level lists
             assert isinstance(obj, dict), "only top-level dicts support right now"            
             #XXX if obj.nsmap: push nsmap
             #XXX propmap
             #XXX idmap
-            id, idprop = getorsetid(obj) 
+            id, idprop = getorsetid(obj, toplevel) 
             for prop, val in obj.items():
                 if prop == idprop:                    
                     continue
                 prop = _expandqname(prop, nsmap)
                 val, objecttype = self.deduceObjectType(val)
                 if isinstance(val, dict):
-                    objid, idprop = getorsetid(val) 
+                    objid, idprop = getorsetid(val, False) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
                     todo.append(val)
                 elif isinstance(val, list):
@@ -497,7 +505,7 @@ class sjson(object):
                     for i, item in enumerate(val):               
                         item, objecttype = self.deduceObjectType(item)
                         if isinstance(item, dict):
-                            itemid, idprop = getorsetid(item)
+                            itemid, idprop = getorsetid(item, False)
                             pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))                            
                             if pos:
                                 pos.append(i)
@@ -539,14 +547,14 @@ class sjson(object):
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )
         return m.getStatements()
 
-    def _blank(self):
+    def _blank(self, prefix=''):
         if self._genBNode=='uuid':
-            return RxPath.generateBnode()
+            return RxPath.generateBnode(prefix=prefix)
         if self._genBNode=='counter':
             self.bnodecounter+=1
-            return self.bnodeprefix + str(self.bnodecounter)
+            return self.bnodeprefix + prefix + str(self.bnodecounter)
         else:
-            return self._genBNode()
+            return self._genBNode(prefix)
 
     def lookslikeUriOrQname(self, s):
         #XXX think about customization, e.g. if number were ids
@@ -591,6 +599,7 @@ class sjson(object):
         Generate property list resources
         `lists` is a dictionary: (scope, subject, prop) => [(pos, (object, objectvalue))+]
         '''
+        #print 'generateListResources', lists
         for (scope, subject, prop), ordered in lists.items(): 
             #use special bnode pattern so we can find these quickly
             seq = self.bnodeprefix + 'proplist:' + subject+';'+prop
