@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import raccoon, route
 from string import Template
 from cgi import escape
@@ -144,9 +146,28 @@ def api_handler(kw, retval):
             r = dom_store.query(params['data'])
             r = list(r) # XXX
             out['data'] = r
-        elif action == 'update':
-            data = json.loads(params['data'])
-            out['changed'] = dom_store.update(data)
+        elif action == 'update':            
+            root = json.loads(params['data']) # XXX this should probably change
+            
+            query = "{*, where(%s)}" % root['where']
+            # print "querying:", query
+            target = list(dom_store.query(query))
+            
+            assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
+            target = target[0]
+            # print "target object:"
+            # print target
+            
+            updates = root['data']
+            for k in updates.keys():
+                # print "updating attribute:", k
+                target[k] = updates[k]
+                
+            # print "updated target:"
+            # print target
+            
+            changed = dom_store.update(target) # returns statements modified; not so useful
+            
         elif action == 'add':
             data = json.loads(params['data'])
             out['added'] = dom_store.add(data)

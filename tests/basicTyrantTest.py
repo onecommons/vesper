@@ -62,4 +62,3 @@ class TyrantModelTestCase(BasicModelTestCase):
 
 if __name__ == '__main__':
     main(TyrantModelTestCase)
-
