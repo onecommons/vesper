@@ -153,7 +153,7 @@ def api_handler(kw, retval):
             # print "querying:", query
             target = list(dom_store.query(query))
             
-            assert len(target) == 1 # XXX for now
+            assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]
             # print "target object:"
             # print target
