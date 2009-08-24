@@ -334,8 +334,8 @@ def main(testCaseClass):
         unittest.main()
     else:
         tc = testCaseClass(test)
-        tc.setUp()
         testfunc = getattr(tc, test)
+        tc.setUp()
         try:
             testfunc() #run test
         finally:
