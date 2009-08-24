@@ -336,8 +336,10 @@ def main(testCaseClass):
         tc = testCaseClass(test)
         tc.setUp()
         testfunc = getattr(tc, test)
-        testfunc() #run test
-        #tc.tearDown()
+        try:
+            testfunc() #run test
+        finally:
+            tc.tearDown()
 
 if __name__ == '__main__':
     main(BasicModelTestCase)
