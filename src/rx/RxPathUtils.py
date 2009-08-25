@@ -13,11 +13,7 @@ try:
 except ImportError:
     import StringIO
 
-from rx import utils
-try:
-    import json
-except ImportError:
-    import simplejson as json
+from rx import utils, json
 
 #try:
 #    from Ft.Rdf import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL    

@@ -2,12 +2,8 @@ import raccoon, route
 from string import Template
 from cgi import escape
 from optparse import OptionParser
+from rx import json
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
-    
 QUERY_PAGE = Template("""
 <html><body>
 <b>$label</b>&nbsp;|&nbsp;<a href="$link">$link_label</a>

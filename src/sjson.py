@@ -117,11 +117,8 @@ constructs items
           o we can omit as long as those objects don't need to updated or if the implementation has a way to figure out what bnode is.    
 '''
 
-try:
-    import json
-except ImportError:
-    import simplejson as json
 
+from rx import json
 from rx import RxPath    
 from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
 from rx.RxPathUtils import encodeStmtObject
