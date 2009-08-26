@@ -166,6 +166,9 @@ class QueryOp(object):
         self.args.append(arg)
         arg.parent = self
 
+    def removeArg(self, child):
+        raise QueryException('invalid operation: removeArg')
+
 class ErrorOp(QueryOp):
     def __init__(self, args, name=''):
         if not isinstance(args, (list, tuple)):
@@ -451,6 +454,25 @@ class CommunitiveBinaryOp(BooleanOp):
                     right = Constant(right)
                 self.appendArg(right)
 
+    def replaceArg(self, child, with_):
+        for i, a in enumerate(self.args):
+            if a is child:
+                self.args[i] = with_
+                return
+        raise QueryException('invalid operation')
+        
+    def removeArg(self, child):
+        if child is self.left:
+            other = self.right
+        elif child is self.right:
+            other = self.left
+        else:
+            raise QueryException('removeArg failed: not a child')
+
+        if self.parent:
+            assert other
+            self.parent.replaceArg(self, other)        
+
     def __eq__(self, other):
         '''
         Order of args don't matter because op is communitive
@@ -607,11 +629,20 @@ class PropShape(object):
     nolist = 'nolist'
 
 class ConstructProp(QueryOp):
+    nameFunc = None
     def __init__(self, name, value, ifEmpty=PropShape.usenull,
                 ifSingle=PropShape.nolist,nameIsFilter=False, nameFunc=False):
         self.name = name #if name is None (and needed) derive from value (i.e. Project)
-        self.nameFunc = nameFunc
-        self.appendArg(value)
+        if nameFunc:
+            self.nameFunc = nameFunc
+            nameFunc.parent = self
+            
+        if isinstance(value, Project):
+            #kind of a hack: if this is a standalone project expand object references
+            value.constructRefs = True
+        self.value = value #only one, replaces current if set
+        value.parent = self
+
         assert ifEmpty in (PropShape.omit, PropShape.usenull, PropShape.uselist)
         self.ifEmpty = ifEmpty
         assert ifSingle in (PropShape.nolist, PropShape.uselist)
@@ -630,7 +661,8 @@ class ConstructProp(QueryOp):
          and self.ifEmpty == other.ifEmpty and self.ifSingle == self.ifSingle)
          #and self.nameIsFilter == other.nameIsFilter)
 
-    args = property(lambda self: (self.value,))
+    #args = property(lambda self: (self.value,))
+    args = property(lambda self: [a for a in [self.value, self.nameFunc] if a])
 
 class ConstructSubject(QueryOp):
     def __init__(self, name='id', value=None, suppress=False):
@@ -723,6 +755,12 @@ class Select(QueryOp):
         op.parent = self
 
     args = property(lambda self: [a for a in [self.construct, self.where, self.groupby] if a])
+
+    def removeArg(self, child):
+        if self.where is child:
+            self.where = None
+        else:
+            raise QueryException('removeArg failed: not a child')
 
     def replaceArg(self, child, with_):
         if isinstance(child, Join):

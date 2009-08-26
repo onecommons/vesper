@@ -59,45 +59,18 @@ class _ParseState(object):
         '''
         left = where
         for prop in construct.args:
-            if prop == construct.id:
-                pass
-            else:
-                if isinstance(prop.value, Select):
-                    value = prop.value.where
-                else:
-                    value = prop.value
-                if value == Project('*'):
-                    value = None
-                
-                if prop.nameFunc:
-                    if not left:
-                        left = Project(prop.name)
-                    else:
-                        left = And(left, Project(prop.name))
-                                    
-                if prop.nameIsFilter:
-                    if value:
-                        value = Eq(Project(prop.name), value)                    
-                    else:
-                        value = Project(prop.name)
-                    prop.appendArg( Project(prop.name) )
-                    
-                    if not left:
-                        left = value
-                    else:
-                        left = And(left, value)
-                elif value:
-                    #don't want treat construct values as boolean filter
-                    #but we do want to find projections which we need to join
-                    #(but we skip project(0) -- no reason to join)
-                    for child in value.depthfirst(
-                     descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
-                        if isinstance(child, Project) and child.fields != [SUBJECT]:
-                            if not left:                            
-                                left = copy.copy( child )
-                            else:
-                                assert child
-                                left = And(left, copy.copy( child ))
+            if prop != construct.id:
+                #don't want treat construct values as boolean filter
+                #but we do want to find projections which we need to join
+                #(but we skip project(0) -- no reason to join)
+                for child in prop.depthfirst(
+                 descendPredicate=lambda op: not isinstance(op, (ResourceSetOp, Construct))):
+                    if isinstance(child, Project) and child.name != '*' and child.fields != [SUBJECT]:                            
+                        if not left:                            
+                            left = copy.copy( child )
+                        else:
+                            assert child
+                            left = And(left, copy.copy( child ))
     
                 #XXX: handle outer joins:
                 #if prop.ifEmtpy == PropShape.omit:

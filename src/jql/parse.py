@@ -235,8 +235,9 @@ def p_root(p):
         #we only want to add the join if there are no another joins for the label
         firstjoin = joins.pop()
         for join in joins:
-            join.parent.removeArg(join) #XXX
+            join.parent.removeArg(join) #XXX better support for removeArg
             firstjoin.appendArg(join)
+
         labeledjoins[label] = firstjoin
         firstjoin.name = label 
     #print 'labeledjoins', labeledjoins
@@ -382,6 +383,19 @@ def p_atom(p):
     """
     p[0] = p[1]
 
+def p_constructitem1(p):
+    '''
+    constructitem : ID COLON VAR
+    '''
+    p[0] = ConstructSubject(value=p[3][0])
+
+def p_constructitem2(p):
+    '''
+    constructitem : VAR
+    '''
+    p[0] = ConstructSubject(value=p[1][0])
+
+#must come after above rule
 def p_atom_var(p):
     """atom : VAR
     """
@@ -391,36 +405,6 @@ def p_atom_id(p):
     """atom : ID
     """
     p[0] = Project(p[1])
-
-def p_barecolumnref(p):
-    '''barecolumnref : NAME
-                    | QNAME
-                    | TIMES
-                    | URI
-                    | QSTAR
-    '''
-    p[0] = p[1]
-
-def p_columnref_trailer(p):
-    '''
-    columnreftrailer : barecolumnref
-                    | columnreftrailer PERIOD barecolumnref
-    '''
-    if len(p) == 2:
-        p[0] = [ p[1] ]
-    else:
-        p[0] = p[1]
-        p[1].append(p[3])
-
-def p_columnref(p):
-    '''
-    columnref : VAR PERIOD columnreftrailer
-              | columnreftrailer
-    '''
-    if len(p) == 2:
-        p[0] = Project(p[1])
-    else: #?var.column
-        p[0] = Project(p[3], p[1][0])
 
 def p_funcname(p):
     '''funcname : NAME
@@ -496,76 +480,74 @@ def p_join(p):
         errorlog.error("invalid join: "  +  str(e) + ' ' + repr(p[2]))
 
 def _makeConstructProp(n, v, nameIsFilter, derefName = False):
+    if n == '*':
+        n = None
+        nameIsFilter = False
+    
+    if derefName:
+        derefName = n
+        n = None
+    
     if isinstance(v, T.forcelist):
         return ConstructProp(n, v[0],
                 PropShape.uselist, PropShape.uselist, nameIsFilter, nameFunc=derefName)
     else:
         return ConstructProp(n, v, nameIsFilter=nameIsFilter, nameFunc=derefName)
 
-def p_constructitem1(p):
-    '''
-    constructitem : STRING COLON dictvalue
-    '''
-    p[0] = _makeConstructProp(p[1], p[3], False)
-
-def p_constructitem2(p):
-    '''
-    constructitem : columnname COLON dictvalue
-    '''
-    p[0] = _makeConstructProp(p[1], p[3], True)
-
 def p_constructitem3(p):
     '''
-    constructitem : ID COLON VAR
+    constructitem : expression COLON dictvalue
     '''
-    p[0] = ConstructSubject(value=p[3][0])
+    p[0] = _makeConstructProp(p[1], p[3], False, True)
 
 def p_constructitem4(p):
     '''
-    constructitem : TIMES
-    '''
-    p[0] = ConstructProp(None, Project('*'))
+    constructitem : barecolumnref
+    '''    
+    p[0] = _makeConstructProp(p[1], Project(p[1]), True, False)
 
-def p_constructitem5(p):
+def p_constructitem5(p): 
+    '''
+    constructitem : LBRACKET barecolumnref RBRACKET
+    '''
+    p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False)
+
+def p_constructitem6(p):
     '''
     constructitem : optional
     '''
     p[0] = p[1]
 
-def p_constructitem6(p):
-    '''
-    constructitem : LPAREN LPAREN columnname RPAREN RPAREN COLON dictvalue
-    '''
-    p[0] = _makeConstructProp(p[3], p[7], False, True)
-
-#def p_constructitem(p):
-#    '''
-#    constructitem : dictkey COLON dictvalue
-#                    | optional
-#                    | TIMES
-#    '''
-#    if len(p) == 2:
-#        if p[1] == '*':
-#            p[0] = ConstructProp(None, Project('*'))
-#        else:
-#            p[0] = p[1]
-#    else:
-#        p[0] = ConstructProp(p[1], p[3])
-#
-#def p_dictkey(p):
-#    '''
-#    dictkey : STRING
-#            | columnname
-#    '''
-#    p[0] = p[1]
-
-def p_columnname(p): 
-    '''
-    columnname : NAME
-               | QNAME
-               | URI
+def p_barecolumnref(p):
+    '''barecolumnref : NAME
+                    | QNAME
+                    | TIMES
+                    | URI
+                    | QSTAR
     '''
     p[0] = p[1]
+
+#IMPORTANT needs to follow "constructitem : barecolumnref" rule because of reduce/reduce conflict
+def p_columnref_trailer(p):
+    '''
+    columnreftrailer : barecolumnref
+                    | columnreftrailer PERIOD barecolumnref
+    '''
+    if len(p) == 2:
+        p[0] = [ p[1] ]
+    else:
+        p[0] = p[1]
+        p[1].append(p[3])
+
+def p_columnref(p):
+    '''
+    columnref : VAR PERIOD columnreftrailer
+              | columnreftrailer
+    '''
+    if len(p) == 2:
+        p[0] = Project(p[1])
+    else: #?var.column
+        p[0] = Project(p[3], p[1][0])
 
 def p_dictvalue(p): 
     '''

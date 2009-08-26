@@ -905,7 +905,7 @@ class SimpleQueryEngine(object):
                                     flattenTypes=Tupleset)                        
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
-                            name = flatten(jqlAST.Project(prop.name).evaluate(self, ccontext))                            
+                            name = flatten(prop.nameFunc.evaluate(self, ccontext))                            
                         else:
                             name = prop.name or prop.value.name
                         _setConstructProp(shape, pattern, prop, v, name)

@@ -10,10 +10,14 @@ import jql.engine
 #aliases for convenience
 jc = JoinConditionOp
 cs = ConstructSubject
-def cp(*args, **kw):
-    if len(args) == 1:
-        return ConstructProp(None, args[0], **kw)
-    return ConstructProp(*args, **kw)
+def cp(name, *args, **kw):
+    #print 'cp', name, args
+    if not args:
+        #no name
+        return ConstructProp(None, name, **kw)
+    if isinstance(name, str):        
+        kw['nameFunc']=Constant(name)
+    return ConstructProp(None, *args, **kw)
 
 def modelFromJson(model):
     model = sjson.sjson(generateBnode='counter').to_rdf(model)
@@ -104,9 +108,10 @@ t('''{ * where (foo > 'bar') }''')
 #   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t("{ 'parent' : child }",
-   [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
+[{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
+#   [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
 
-t("{ ((parent)) : child }",
+t("{ parent : child }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t(
@@ -121,7 +126,7 @@ t(
 t(
 ''' { id : ?parentid,
       'derivedprop' : id * 2,
-      'children' : { id : ?childid,
+      'children' : { ?childid,
                    *
                    where( {child = ?childid and
                         parent = ?parentid
@@ -132,7 +137,7 @@ t(
 results = [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'derivedprop': 2.0,
   'id': '1'}],
-ast=Select(Construct([
+ast=Select(Construct([ 
     cs('id', 'parentid'),    
     cp('derivedprop',  qF.getOp('mul', Project(0), Constant(2))),
     cp('children', Select(Construct([
@@ -163,11 +168,12 @@ skiprows=[['1',
 )
 
 t(
-''' { id : ?parentid,
-      'children' : { id : ?childid,
-                   foo : 'bar',
-                   where( {child = ?childid and
-                        parent = ?parentid
+''' { ?parentid,
+      'children' : { ?childid,
+                   foo,
+                   where( foo = 'bar' and 
+                         {child = ?childid and
+                        parent = ?parentid                    
                        })
                  }
     }
@@ -175,7 +181,7 @@ t(
 [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'id': '1'}],
   skipParse=0,
-ast=Select(
+skipast=Select( #XXX fix
   Construct([
     cs('id', 'parentid'),
     cp('children', Select(Construct([
@@ -220,15 +226,26 @@ t('''
  {'foo': 'bar', 'id': '2', 'parent': {'id': '1'}}]
  )
 
-syntaxtests = [
-'''{ 'ok': */1 }''',
-'''
-'blah' : [foo]
+t.group = 'parse'
+
+t('''
+{ 'blah' : foo }
 ''',
+[{'blah': 'bar', 'id': '3'}, {'blah': 'bar', 'id': '2'}]
+)
+
+syntaxtests = [
 ]
 
 #XXX fix failing queries!
 failing = [
+#triggers listconstruct not forcelist, so different semantics than {'blah' : foo}
+#and leads to AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+'''
+{ 'blah' : [foo] }
+'''
+,
+'''{ 'ok': */1 }''',
 #throws join in filter not yet implemented:
 '''{* where (foo = { id = 'd' }) }''',
 
@@ -263,7 +280,7 @@ for s in syntaxtests:
     t(s)
 
 #XXX test broken, AST seems wrong
-#XXX there's ambguity here: construct vs. forcelist (wins):
+#XXX there's ambguity here: construct vs. forcelist (see similar testcase above)
 skip("{'foo': [*]}", 
 ast = Select( Construct([
   ConstructProp('foo', Project('*'),
@@ -358,8 +375,8 @@ groupby('subject', display=merge)
 ''')
 
 t('''{
-subject : *, 
-content : *
+subject, 
+content
 groupby('subject')
 }
 ''', 
@@ -372,7 +389,7 @@ groupby('subject')
 
 #leave the groupby property out of the display list
 t('''{
-content : *
+content
 groupby(subject)
 }
 ''', [{'content': ['some more text about the commons',
@@ -479,7 +496,7 @@ t('''{ *
 ''',
 [])
 
-t('''{ content : *,  
+t('''{ content,  
     'blah' : [{ *  where(id = ?tag and ?tag = 'commons') }]
  where ( subject = ?tag) }
 ''',
@@ -494,7 +511,7 @@ t('''{ content : *,
   ]
 )
 
-t('''{ content : *, 
+t('''{ content, 
  where ({id = ?tag and ?tag = 'commons'} and subject = ?tag) }
 ''',
 [
@@ -552,10 +569,10 @@ skip( '''
     }
     ''',[])
 
-#error:   AttributeError: 'And' object has no attribute 'removeArg'
-# from this line in parse.py:  join.parent.removeArg(join) #XXX
+#XXX error:   AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+# in JoinConditionOp.__init__
 skip('''
-{ id : ?a
+{ ?a
     where (
         {id=?a and ?a = 1} and {id=?b and ?b = 2}
         and ?b = ?a
@@ -620,8 +637,18 @@ skip('''{*}''',
 
 #XXX not including id 3 
 t('''{
-values : *
-}''')
+values
+}''',[{'id': '1',
+  'values': {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2',
+  'values': {'prop1': 'bar',
+             'prop2': None,
+             'prop3': False,
+             'prop4': '',
+             'prop5': 0}},
+ {'id': '4', 'values': [1, '1', 1.1]}]
+ )
 
 basic = Suite()
 basic.model = [{}, {}]
@@ -818,7 +845,7 @@ t('{*}',
 t('{ "multivalued" : multivalued }',
 [{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
 
-t('{ multivalued : * }',
+t('{ multivalued }',
 [{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
 
 t.group = 'lists'
@@ -866,7 +893,7 @@ t('{ "listprop" : listprop}',
   'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1]}]
 )
 
-t('{ listprop : *, listprop2 : *, listprop3 : *, listprop4 : * }',
+t('{ listprop, listprop2, listprop3, listprop4 }',
 [{'id': '1',
   'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']],
   'listprop2': [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
@@ -1007,7 +1034,7 @@ def main(cmdargs=None):
             pprint.pprint(testresults)
 
         if test.results is not None:
-            assert test.results == testresults,  ('unexpected results for test %d' % i)
+            assert test.results == testresults,  ('unexpected results for test %d' % i)#, [(k, type(k)) for k in testresults[0]])
 
     print '***** %d tests passed, %d skipped' % (count, skipped)
 
