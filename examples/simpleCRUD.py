@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
-import raccoon, route
+import raccoon, rx.route
 from string import Template
 from cgi import escape
 from optparse import OptionParser
 from rx import json
+from rx.route import Route
+
 
 QUERY_PAGE = Template("""
 <html><body>
@@ -53,7 +55,7 @@ def store_query(q, update=False):
         except Exception, e:
             print "error saving query history!", e
 
-@route.Route("index")
+@Route("index")
 def index(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
     params = kw['_params']
@@ -82,7 +84,7 @@ def index(kw, retval):
         out = json.dumps(r,sort_keys=True, indent=4)
         return out
     
-@route.Route("update")
+@Route("update")
 def update(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
     params = kw['_params']
@@ -112,7 +114,7 @@ def update(kw, retval):
         return pformat(tmp)
 
     
-@route.Route("hist")
+@Route("hist")
 def hist(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
     buf = "<html><body>%d queries<hr>" % len(_QUERIES)
@@ -125,7 +127,7 @@ def hist(kw, retval):
     return str(buf)
 
 
-@route.Route("api/{action}")
+@Route("api/{action}")
 def api_handler(kw, retval):
     dom_store = kw['__server__'].domStore
     params = kw['_params']
@@ -179,7 +181,7 @@ def api_handler(kw, retval):
     return json.dumps(out,sort_keys=True, indent=4)
 
 actions = {
-  'http-request' : route.gensequence
+  'http-request' : rx.route.gensequence
 }
 
 # using STORAGE_URL sets modelFactory and STORAGE_PATH

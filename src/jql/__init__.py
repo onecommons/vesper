@@ -1,5 +1,6 @@
+from rx.python_shim import *
 from rx.RxPath import Tupleset, ColumnInfo, EMPTY_NAMESPACE
-
+         
 SUBJECT = 0
 PROPERTY = 1
 OBJECT = 2
