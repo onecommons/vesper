@@ -948,7 +948,8 @@ def run(vars, out=sys.stdout):
         proto_map = { # XXX don't hardcode this
             'tyrant':'rx.RxPathModelTyrant.TransactionTyrantModel',
             'rdf':'rx.RxPath.IncrementalNTriplesFileModel',
-            'mem':'rx.RxPathModel.MemModel'
+            'mem':'rx.RxPathModel.MemModel',
+            'bdb':'rx.RxPathModelBdb.TransactionBdbModel'
         }
         (proto, path) = vars['STORAGE_URL'].split('://')
         full_model = proto_map[proto].split('.')
@@ -973,7 +974,7 @@ def run(vars, out=sys.stdout):
         fac = getattr(mod, model_class)
         vars['modelFactory'] = fac
         vars['STORAGE_PATH'] = path
-    
+        
     if 'LOG_CONFIG' in vars:
         logConfig = vars['LOG_CONFIG']
         import logging.config as log_config

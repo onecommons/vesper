@@ -44,6 +44,20 @@ def _encodeValues(*args):
     '''
     return '\0'.join(map(_to_safe_str, args))
     
+def _btopen(env, file, flag='c', mode=0666,
+            btflags=0, cachesize=None, maxkeypage=None, minkeypage=None,
+            pgsize=None, lorder=None):
+
+    flags = bsddb.db.DB_CREATE # bsddb._checkflag(flag, file)
+    d = bsddb.db.DB(env)
+    if pgsize is not None: d.set_pagesize(pgsize)
+    if lorder is not None: d.set_lorder(lorder)
+    d.set_flags(btflags)
+    if minkeypage is not None: d.set_bt_minkey(minkeypage)
+    if maxkeypage is not None: d.set_bt_maxkey(maxkeypage)
+    d.open(file, dbtype=bsddb.db.DB_BTREE, flags=flags, mode=mode)
+    return bsddb._DBWithCursor(d)
+
 class BdbModel(Model):
     '''
     datastore using Berkeley DB using Python's bsddb module
@@ -68,21 +82,33 @@ class BdbModel(Model):
     
     debug=0
      
-    def __init__(self,path, defaultStatements=None, **kw):
-        import os.path
-        if path is not None:
-            root, ext = os.path.splitext(path)
-            newdb = not os.path.exists(root+'_p'+ext)        
-            pPath = root+'_p'+ext
-            sPath = root+'_s'+ext
+    def __init__(self, source, defaultStatements=None, **kw):
+        import os, os.path
+        
+        if source is not None:
+            source = os.path.abspath(source) # bdb likes absolute paths for everything
+            # source should specify a directory
+            if not os.path.exists(source):
+                os.makedirs(source)
+            assert os.path.isdir(source), "Bdb source must be a directory"
+            
+            pPath = os.path.join(source, 'pred_db')
+            sPath = os.path.join(source, 'subj_db')
+            newdb = not os.path.exists(pPath)
         else:
             newdb = True
             pPath = sPath = None
-        #note: DB_DUPSORT is faster than DB_DUP
-        self.pDb = bsddb.btopen(pPath, btflags= bsddb.db.DB_DUPSORT) 
+
+        db = bsddb.db
+        self.env = bsddb.db.DBEnv()
+        self.env.set_lk_detect(db.DB_LOCK_DEFAULT)
+        self.env.open(source, db.DB_CREATE | db.DB_INIT_LOCK | db.DB_INIT_MPOOL | db.DB_INIT_TXN)
+
+        self.pDb = _btopen(self.env, pPath, btflags=bsddb.db.DB_DUPSORT) # DB_DUPSORT is faster than DB_DUP        
         self.pDb.db.set_get_returns_none(2)
-        self.sDb = bsddb.btopen(sPath, btflags= bsddb.db.DB_DUPSORT)         
+        self.sDb = _btopen(self.env, sPath, btflags=bsddb.db.DB_DUPSORT)         
         self.sDb.db.set_get_returns_none(2)
+        
         if newdb and defaultStatements:            
             self.addStatements(defaultStatements)     
 
