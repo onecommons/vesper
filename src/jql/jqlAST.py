@@ -169,6 +169,9 @@ class QueryOp(object):
     def removeArg(self, child):
         raise QueryException('invalid operation: removeArg')
 
+    def _resolveQNames(self, nsmap):
+        pass #no op by default
+        
 class ErrorOp(QueryOp):
     def __init__(self, args, name=''):
         if not isinstance(args, (list, tuple)):
@@ -194,16 +197,16 @@ class ResourceSetOp(QueryOp):
         for a in args:
             self.appendArg(a)
 
-    def _setname(self, name):
-        if self.labels:
-            assert len(self.labels) == 1
-            if name:
-                self.labels[0] = (name,0)
-            else:
-                del self.labels[0]
-        elif name:
-            self.labels.append( (name,0) )
-
+    #def _setname(self, name):
+    #    if self.labels:
+    #        assert len(self.labels) == 1
+    #        if name:
+    #            self.labels[0] = (name,0)
+    #        else:
+    #            del self.labels[0]
+    #    elif name:
+    #        self.labels.append( (name,0) )
+    #
     #name = property(lambda self: self.labels and self.labels[0][0] or None,
     #             _setname)
 
@@ -271,6 +274,10 @@ class JoinConditionOp(QueryOp):
             self.position = position #index or label
             #self.appendArg(Eq(Project(SUBJECT),Project(self.position)) )
 
+    def _resolveQNames(self, nsmap):
+        if isinstance(self.position, tuple):
+            self.position = ':'.join(self.position) #XXX
+        
     def getPositionLabel(self):
         if isinstance(self.position, int):
             return ''
@@ -317,8 +324,13 @@ class Filter(QueryOp):
         if 'objectlabel' in kw:
             objectlabel = kw['objectlabel']
             self.labels.append( (objectlabel, OBJECT) )
-            self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
-            self.labels.append( (objectlabel+':pos', LIST_POS) )
+            if isinstance(objectlabel, tuple):
+                prefix, name = objectlabel
+                self.labels.append( ( (prefix, name +':type'), OBJTYPE_POS) )
+                self.labels.append( ( (prefix, name +':pos'), LIST_POS) )
+            else:
+                self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
+                self.labels.append( (objectlabel+':pos', LIST_POS) )
  
     def getType(self):
         return Tupleset
@@ -332,8 +344,22 @@ class Filter(QueryOp):
                     raise QueryException("label already used " + label)
         self.labels.append( (label, pos) )
         if pos == OBJECT:
-            self.labels.append( (label+':type', OBJTYPE_POS) )
-            self.labels.append( (label+':pos', LIST_POS) )
+            if isinstance(label, tuple):
+                prefix, name = label
+                self.labels.append( ( (prefix, name +':type'), OBJTYPE_POS) )
+                self.labels.append( ( (prefix, name +':pos'), LIST_POS) )
+            else:
+                self.labels.append( (label+':type', OBJTYPE_POS) )
+                self.labels.append( (label+':pos', LIST_POS) )
+
+    def _resolveQNames(self, nsmap):
+        def resolve(name):
+            if isinstance(name, tuple):
+                return ':'.join(name) #XXX
+            else:
+                return name
+
+        self.labels = [ (resolve(name), p) for (name, p) in self.labels]
 
 class Label(QueryOp):
 
@@ -583,7 +609,7 @@ class Project(QueryOp):
     
     def __init__(self, fields, var=None, constructRefs = False):
         self.varref = var 
-        if not isinstance(fields, (list,tuple)):
+        if not isinstance(fields, list):
             if str(fields).lower() == 'id':
                 fields = SUBJECT
             self.fields = [ fields ]
@@ -595,6 +621,15 @@ class Project(QueryOp):
     
     def isPosition(self):
         return isinstance(self.name, int)
+
+    def _resolveQNames(self, nsmap):
+        def resolve(name):
+            if isinstance(name, tuple):
+                return ':'.join(name) #XXX
+            else:
+                return name
+
+        self.fields = [resolve(name) for name in self.fields]
 
     def _mutateOpToThis(self, label):
         '''
@@ -742,6 +777,7 @@ class Select(QueryOp):
         self.offset = offset
         self.limit = limit
         self.depth = depth
+        self.ns = ns
 
     def appendArg(self, op):
         if (isinstance(op, ResourceSetOp)): 
