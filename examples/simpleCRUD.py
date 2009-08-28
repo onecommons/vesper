@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
 import raccoon, rx.route
+from rx.python_shim import *
 from string import Template
 from cgi import escape
 from optparse import OptionParser
-from rx import json
 from rx.route import Route
-
 
 QUERY_PAGE = Template("""
 <html><body>
