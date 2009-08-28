@@ -220,11 +220,25 @@ def _YaccProduction_getattr__(self, name):
 assert not hasattr(ply.yacc.YaccProduction,'__getattr__')
 ply.yacc.YaccProduction.__getattr__ = _YaccProduction_getattr__
 
+def resolveQNames(nsmap, root):
+    for c in root.depthfirst(descendPredicate=
+            lambda n: c is root or not isinstance(n, Select)):
+        if isinstance(c, Select):
+            if c is root:
+                if c.ns:
+                    nsmap.update(c.ns)
+            else:
+                resolveQNames(nsmap.copy(), c)
+        else:
+            c._resolveQNames(nsmap) 
+
 def p_root(p):
     '''
     root : construct
     '''
     p[0] = p[1]
+    resolveQNames({}, p[0])
+    
     #we're when done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     labeledjoins = {}
