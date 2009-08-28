@@ -330,7 +330,7 @@ class RequestProcessor(utils.object_with_threadlocals):
             self.LockFile = glock.NullLockFile #the default
 
         self.txnSvc = transactions.RaccoonTransactionService(self)
-        domStoreFactory = kw.get('domStoreFactory', DomStore.BasicDomStore)
+        domStoreFactory = kw.get('domStoreFactory', DomStore.BasicStore)
         self.domStore = domStoreFactory(self, **kw)
         self.domStore.addTrigger = self.txnSvc.addHook
         self.domStore.removeTrigger = self.txnSvc.removeHook
@@ -1002,6 +1002,14 @@ def run(vars, out=sys.stdout):
 
     return root
 
+def createStore(json, storageURL = 'mem://', idGenerator='counter'):
+    root = run(dict(
+        STORAGE_URL = storageURL,
+        STORAGE_TEMPLATE = json,       
+        EXEC_CMD_AND_EXIT = True,
+        storageTemplateOptions = dict(generateBnode=idGenerator)
+    ))
+    return root.domStore
 
 def main(argv=sys.argv[1:], out=sys.stdout):
     # mimics behavior of old main(), not really used anywhere

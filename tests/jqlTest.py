@@ -235,6 +235,11 @@ t('''
 )
 
 syntaxtests = [
+#test qnames:
+'''{ rdfs:comment:* where(rdfs:label='foo')}''',
+'''
+[rdfs:comment where(rdfs:label='foo')]
+'''
 ]
 
 #XXX fix failing queries!
@@ -249,16 +254,10 @@ failing = [
 #throws join in filter not yet implemented:
 '''{* where (foo = { id = 'd' }) }''',
 
-#qnames not handled correctly: jql.QueryException: comment projection not found
-#also --printdebug raises:   File "/_dev/rx4rdf/rhizome2/src/jql/engine.py", line 237, in _colrepr
-#    colstr = ','.join( map(x,self.columns) )
-#TypeError: sequence item 0: expected string, QName found
-'''{ rdfs:comment:* where(rdfs:label='foo')}''',
-#XXX parse._joinFromConstruct() doesn't work with lists:
-'''
-[rdfs:comment where(rdfs:label='foo')]
-''',
-"{foo: {*} }", #XXX there's ambguity here: construct vs. join (wins)
+#XXX there's ambguity here: construct vs. join (wins)
+# throws AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+"{foo: {*} }", 
+#XXXAssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
 '''
 {
 id : ?artist,

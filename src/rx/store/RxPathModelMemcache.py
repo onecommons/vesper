@@ -1,7 +1,6 @@
 __all__ = ['MemCacheModel', 'TransactionMemCacheModel']
-
+from rx.python_shim import *
 from rx.RxPathModel import *
-from rx import json
     
 class _DictHack(object):
     def __init__(self, mc, prefix):

@@ -1,7 +1,6 @@
 __all__ = ['BdbModel', 'TransactionBdbModel']
-
+from rx.python_shim import *
 from rx.RxPathModel import *
-from rx import json
 import bsddb, bsddb.db
 try:
     bsddb.db.DB_GET_BOTH_RANGE
