@@ -77,7 +77,7 @@ class DomStore(transactions.TransactionParticipant):
             source = os.path.join( requestProcessor.baseDir, source)
         return source
             
-class BasicDomStore(DomStore):
+class BasicStore(DomStore):
 
     def __init__(self, requestProcessor, modelFactory=RxPath.IncrementalNTriplesFileModel,
                  schemaFactory=RxPath.defaultSchemaClass,                 
@@ -87,7 +87,8 @@ class BasicDomStore(DomStore):
                  transactionLog = '',
                  saveHistory = False,
                  VERSION_STORAGE_PATH='',
-                 versionModelFactory=None, **kw):
+                 versionModelFactory=None,
+                 storageTemplateOptions=None, **kw):
         '''
         modelFactory is a RxPath.Model class or factory function that takes
         two parameters:
@@ -104,6 +105,7 @@ class BasicDomStore(DomStore):
         self.STORAGE_TEMPLATE = STORAGE_TEMPLATE
         self.transactionLog = transactionLog
         self.saveHistory = saveHistory
+        self.storageTemplateOptions = storageTemplateOptions
             
     def loadDom(self):        
         requestProcessor = self.requestProcessor
@@ -167,7 +169,8 @@ class BasicDomStore(DomStore):
         
         #data used to initialize a new store
         defaultStmts = RxPath.parseRDFFromString(self.STORAGE_TEMPLATE, 
-                        requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri) 
+                        requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri, 
+                        options=self.storageTemplateOptions) 
                 
         #if we're using a separate store to hold the change history, load it now
         #(it's called delmodel because it only stores removals as the history 
@@ -354,7 +357,7 @@ class BasicDomStore(DomStore):
         self.add(newStatements)
         return newStatements
 
-    def query(self, query):
+    def query(self, query, **kw):
         import jql
         return jql.runQuery(query, self.model)
         
