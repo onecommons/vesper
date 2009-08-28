@@ -163,7 +163,7 @@ class RDFDomTestCase(unittest.TestCase):
             return TransactionMemModel(parseRDFFromString(source.read(),'test:', type))
 
     def loadTyrantModel(self, source, type='nt'):
-        from rx.RxPathModelTyrant import TransactionTyrantModel
+        from rx.store.RxPathModelTyrant import TransactionTyrantModel
         
         if type == 'nt':
             type = 'ntriples'
@@ -181,7 +181,7 @@ class RDFDomTestCase(unittest.TestCase):
         return model
 
     def loadBdbModel(self, source, type='nt'):
-        from rx.RxPathModelBdb import TransactionBdbModel
+        from rx.store.RxPathModelBdb import TransactionBdbModel
         
         if type == 'nt':
             type = 'ntriples'

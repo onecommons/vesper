@@ -8,6 +8,8 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 '''
+__all__ = ['FtModel', 'TransactionFtModel', 'NTriplesFtModel', 'IncrementalNTriplesFtModel']
+
 from rx.RxPathModel import *
 
 import os.path, sys, traceback

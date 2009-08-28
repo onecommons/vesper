@@ -10,7 +10,7 @@ import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
 from modelTest import * 
-from rx.RxPathModelMemcache import MemCacheModel, TransactionMemCacheModel
+from rx.store.RxPathModelMemcache import MemCacheModel, TransactionMemCacheModel
 
 _prefixCounter = time.time()
 

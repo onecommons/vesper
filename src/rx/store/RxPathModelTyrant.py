@@ -8,6 +8,8 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 '''
+__all__ = ['TyrantModel', 'TransactionTyrantModel']
+
 from rx.RxPathModel import *
 
 try:
