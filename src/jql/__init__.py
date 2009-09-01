@@ -16,7 +16,7 @@ Now we can start querying the database. Let's start with query that retrieves al
 
  >>> datastore.query('''
  ... { * }
- ... ''',) 
+ ... ''',)
  [{},{}]
  
 Find all JSON object. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
@@ -70,12 +70,12 @@ NullType = type(None)
 class QueryException(Exception): pass
 
 def runQuery(query, model):
-    ast = buildAST(query)
+    (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
 def getResults(query, model, addChangeMap=False):
     '''
-    Returns dictionary with the following keys:
+    Returns a dict with the following keys:
         
     - `results`: the result of the query (either a list or None if the query failed)
     - `error`: An error string if the query failed or None if it succeeded
@@ -88,13 +88,27 @@ def getResults(query, model, addChangeMap=False):
        the store       
     '''
     #XXX this method still under construction
-    ast = buildAST(query)
-    try:
-        results = list(evalAST(ast, model))
-        response = dict(results=results, error=None)
-    except:
-        error = 'error running query' #XXX
-        response = dict(results=None, error=error)
+    response = {}
+    errors = []
+    
+    (ast, parseErrors) = buildAST(query)
+    errors.extend(parseErrors)
+
+    if ast != None:
+        try:
+            results = list(evalAST(ast, model))
+            response['results'] = results
+        except QueryException, qe:
+            response['results'] = None
+            errors.extend(qe.value)
+        except Exception, ex:
+            errors.extend("Exception:" + ex)
+        
+    if len(errors) > 0:
+        response['errors'] = errors
+
+    # XXX may not be valid anymore
+    """
     if addChangeMap:
         if not results:
             response['resources'] = []
@@ -102,13 +116,14 @@ def getResults(query, model, addChangeMap=False):
             if not instance(results[0], dict):
                 raise NotImplementedError('cant figure out addChangeMap')
             response['resources'] = [res['id'] for res in results]
-
+    """
     return response
 
 def buildAST(query):
+    "parse a query, returning (ast, [error messages])"
     from jql import parse
     return parse.parse(query)
-
+    
 def evalAST(ast, model, bindvars=(), explain=None, debug=False):
     #rewriteAST(ast)
     from jql import engine

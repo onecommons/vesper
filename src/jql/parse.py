@@ -33,9 +33,13 @@ querypartfunc(expression) # groupby | orderby | limit | offset
 '''
 
 from jqlAST import *
-import logging
-logging.basicConfig() #XXX only if logging hasn't already been set
+import logging, logging.handlers
 errorlog = logging.getLogger('parser')
+
+class LogCaptureHandler(logging.handlers.BufferingHandler):
+    "Simple logging handler that captures and retains log messages"
+    def shouldFlush(self, record):
+        return False        
 
 class Tag(tuple):
     __slots__ = ()
@@ -191,12 +195,14 @@ def t_linecomment(t):
     t.lexer.lineno += 1
 
 def t_error(t):
-    errorlog.error("Illegal character %s" % repr(t.value[0]))
+    # print "t_error:", t.lexpos, t.lineno, t.type, t.value
+    errorlog.error("Illegal character %s at line:%d char:%d" % (repr(t.value[0]), t.lineno, t.lexpos))
     t.lexer.skip(1)
 
 # Newlines
 def t_NEWLINE(t):
     r'(\n|\r)+'
+    # print ">>%s<< (%d %d)" % (t.value, t.value.count("\n"), t.value.count("\r"))
     t.lexer.lineno += max(t.value.count("\n"),t.value.count("\r"))
 
 # Completely ignored characters
@@ -649,8 +655,9 @@ def p_listconstructitem(p):
     p[0] = p[1]
 
 def p_error(p):
+    # print "p_error:", p.lexpos, p.lineno, p.type, p.value
     if p:
-        errorlog.error("Syntax error at '%s'" % p.value)
+        errorlog.error("Syntax error at '%s' (line %d)" % (p.value, p.lineno))
     else:
         errorlog.error("Syntax error at EOF")
 
@@ -688,5 +695,15 @@ _opmap = {
 }
 
 def parse(query, debug=False):
-    return parser.parse(query,tracking=True, debug=debug)
-
+    lexer.lineno = 1 # doesn't seem to be any way to reset the lexer?
+    
+    # create a new log handler per-parse to capture messages (should be threadsafe)
+    log_messages = LogCaptureHandler(10)
+    errorlog.addHandler(log_messages)    
+    try:
+        r = parser.parse(query,tracking=True, debug=debug)
+        # log messages should be safe to serialize
+        msgs = ["%s: %s" % (tmp.levelname, tmp.getMessage()) for tmp in log_messages.buffer]
+        return (r, msgs)
+    finally:
+        errorlog.removeHandler(log_messages)

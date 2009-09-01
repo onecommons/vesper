@@ -288,12 +288,12 @@ ast = Select( Construct([
 )
 
 #expect equivalent asts:
-t('{*,}', ast=jql.buildAST('{*}'))
+t('{*,}', ast=jql.buildAST('{*}')[0])
 
 #XXX this ast looks wrong:
 t('''{ *, 
     where(type=bar OR foo=*)
-    }''', ast=jql.buildAST("{ * where(type=bar or foo=*) }")) 
+    }''', ast=jql.buildAST("{ * where(type=bar or foo=*) }")[0]) 
 
 #expect parse errors:
 t("{*/1}", ast='error')  
@@ -982,7 +982,7 @@ def main(cmdargs=None):
 
         if test.ast:
             if not test.skipParse and test.query:
-                testast = jql.buildAST(test.query)
+                (testast, errs) = jql.buildAST(test.query)
                 #jql.rewriteAST(testast)
                 if not options.quiet: print 'comparing ast'
                 if test.ast == 'error': #expect an error
@@ -996,7 +996,7 @@ def main(cmdargs=None):
             else:
                 ast = test.ast
         else:
-            ast = jql.buildAST(test.query)
+            (ast, errs) = jql.buildAST(test.query)
             assert ast, "ast is None, parsing failed"
 
         if options.printast:
