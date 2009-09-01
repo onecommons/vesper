@@ -10,27 +10,29 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 import modelTest 
-from rx.store.RxPathModelBdb import BdbModel, TransactionBdbModel
+from rx.RxPathModel import FileModel, TransactionFileModel
 
-class BdbModelTestCase(modelTest.BasicModelTestCase):
+class FileModelTestCase(modelTest.BasicModelTestCase):
+    
+    EXT = 'json' #also supported: rdf, nt, nj, yaml 
     
     def getModel(self):
         #print 'opening', self.tmpfilename
         sys.stdout.flush()
-        model = BdbModel(self.tmpfilename)
+        model = FileModel(self.tmpfilename)
         return self._getModel(model)
 
     def getTransactionModel(self):
-        model = TransactionBdbModel(self.tmpfilename)
+        model = TransactionFileModel(self.tmpfilename)
         return self._getModel(model)
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="rhizometest")
-        self.tmpfilename = os.path.join(self.tmpdir, 'test.bdb') 
+        self.tmpfilename = os.path.join(self.tmpdir, 'test.'+self.EXT) 
         
     def tearDown(self):
-        #print 'tear down removing', self.tmpdir
-        shutil.rmtree(self.tmpdir)
+        print 'tear down removing', self.tmpdir
+        #shutil.rmtree(self.tmpdir)
 
 if __name__ == '__main__':
-    modelTest.main(BdbModelTestCase)
+    modelTest.main(FileModelTestCase)

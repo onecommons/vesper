@@ -311,8 +311,6 @@ t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
     foo = ({c='c'} and ?a)
 '''
 
-t.group = 'recurse'
-
 #xxx fix when namespace and type support is better
 SUBPROPOF = u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf'
 SUBCLASSOF = u'http://www.w3.org/2000/01/rdf-schema#subClassOf'
@@ -396,6 +394,7 @@ groupby(subject)
  {'content': 'some text about rhizome'}]
  )
 
+t.group = 'recurse'
 
 t('''{
 id : ?parent,
@@ -412,9 +411,7 @@ where (?tag in ('foo', 'commons'))
 ''',
 [{'id': 'commons', 'subsumedby': 'projects'}])
 
-#should be the same as prior query but fails with
-#jql.QueryException: can't assign id , join already labeled tag: Join:'tag'
-skip('''
+t('''
 { *
 where (id = ?tag and ?tag in ('foo', 'commons'))
 }
@@ -625,16 +622,37 @@ t.model = modelFromJson([
 
 t.group = 'types'
 
-#XXX not including anoymous children
-skip('''{*}''',
-[{'id': '1',
-  'values': {'id': '_:2', 'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}},
- {'id': '2', 'values': {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}},
- {'id': '_:2', 'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True},
- {'id': '_:1', 'prop1': 'bar', 'prop2': None, 'prop3': False}]    
+#XXX shouldn't including anoymous children in results
+t('''{*}''',
+[
+     { 'id' : '1',
+       'values' :  {
+          'prop1' : 'foo',
+          'prop2' : 3,
+          'prop3' : None,
+          'prop4' : True,          
+       }
+     },
+    { 'id' : '3',
+       'values' : ['', 0, None, False]
+    },
+     { 'id' : '2',
+       'values' :  {
+          'prop1' : 'bar',
+          'prop2' : None,
+          'prop3' : False,
+          'prop4' : '',
+          'prop5' : 0,
+       }
+     },
+    { 'id' : '4',
+       'values' : [1,'1',1.1]
+    },
+#should be here:
+{'prop1': 'bar', 'prop2': None, 'prop3': False, 'prop4': '', 'prop5': 0},
+ {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}]
 )
 
-#XXX not including id 3 
 t('''{
 values
 }''',[{'id': '1',
@@ -649,175 +667,7 @@ values
  {'id': '4', 'values': [1, '1', 1.1]}]
  )
 
-basic = Suite()
-basic.model = [{}, {}]
-
-#join on prop
-basic('''
-{
-foo : { * } #find objects whose id equals prop's value
-where (bar = 'match')
-}
-''',
-['result'],
-ast= '''ConstructOp({
-    'foo': ConstructOp({'id': Label('_construct1'), 
-                        '*': ProjectOp('*')})
-    }, JoinOp(FilterOp(None, 'bar', 'match'),
-        FilterOp(None, 'foo', None, objectlabel='_construct1')
-        )
-    )''',
-)
-
-#correlated variable reference
-basic('''
-{ id : ?parent,
-derivedprop : prop(a)/prop(b),
-children : {
-    id : ?child,
-    *
-    where({
-       child = ?child,
-       parent= ?parent
-    })
-  }
-
-where (cost > 3)
-}
-''',
-['result'],
-ast = '''ConstructOp({
-    id : Label('parent'),
-    derivedprop : NumberFunOp('/', project('a')/project('b')),
-    children : construct({
-            id : Label('child'),
-            '*' : project('*') #find all props
-        },
-      )
-    },
-     join(
-         join(
-          filter(None, eq('child'), None, objlabel='child'),
-          filter(None, eq('parent'), None, objlabel='parent')
-         ),
-         filter(None, eq('cost'), gt(3)),
-         joinon=(SUBJECT,'parent') #group child vars together per join row
-       )
-    )''',
-
-)
-
-basic(name="implicit join via attribute reference",
-query='''
-{
-id : ?parent,
-foo : ?f,
-where( foo = {
-    id : ?parent.foo
-  })
-}
-''')
-
-basic(name="implicit join via attribute reference",
-query='''
-{
-buzz : ?child.blah
-# above is equivalent to the following (but displays only ids, not objects)
-"buzz" : { id : ?child, *}
-where (buzz = ?child.blah)
-}
-''', 
-ast=Join(
-Filter(Eq('buzz',Project(PROPERTY)), Join(Filter(Eq('blah',Project(PROPERTY)) )) )
-),
-astrewrite= Join(
-    jc(Join(
-        jc(Filter(Eq('buzz',Project(PROPERTY)), subjectlabel='_1'), OBJECT),
-        jc(Filter(Eq('blah',Project(PROPERTY)), subjectlabel='blah'), SUBJECT)
-      ),
-    '_1')
-)
-###
-#=>  {
-#  id : _1
-#  where(
-#   baz = {
-#
-#      where(id = _1)
-#   }
-#   )
-#  }
-###
-)
-
-basic(name='recursive',
-query='''
-{
-id : ?a,
-'descendants' : ?b and ?c and ?d and ?e #XXX hmmm
-'descendants' : union(?b, ?c, ?d, ?e) #how about that?
-'descendants' : [?b,?c,?d,?e] #this could result in nested lists
-#this allows arbitrary constructions to be combined
-'descendants' : ?b,
-'descendants' : ?c,
-'descendants' : ?d,
-'descendants' : ?e,
-where (
-     maybe(?a parentof ?b) and
-     maybe(?b parentof ?c) and
-     maybe(?c parentof ?d) #don't execute is ?c is null/undefined
-     and maybe(?d parentof ?e)
-  )
-}
-''')
-
-   #### BerlinSPARQLBenchmark tests
-  ## see http://www4.wiwiss.fu-berlin.de/bizer/BerlinSPARQLBenchmark/spec/index.html#queriesTriple
-  #######
-
-berlin = Suite()
-berlin.model = {
-    }
-
-berlin.tests = [
-#1
- '''
-  { 
-   rdfs:label : *
-   where (
-   type = ?type,
-   bsbm:productFeature = ?f1,
-   bsbm:productFeature = ?f2,
-   bsbm:numericProp > ?x
-   )
-  }
-  ''',
- #2
-  '''
-  {
-  rdfs:label : *,
-  rdfs:comment : *, 
-   producer : { id : ?producer, rdfs:label : * },
-   dc:publisher :  ?producer,
-   feature : { rdfs:label : * },
-   optional( prop4 : *, prop5: *)
-    where (id = ?product)
-  }
-  ''',
-  #3 some specific features but not one feature
-  '''
-  where (bsbm:productFeature = ?productfeature1 and
-  bsbm:productFeature != ?productfeature2) 
-  ''',
-  #4 union of two feature sets:
-''' 
-where (feature1 or feature2)
-''',
-#5 Find products that are similar to a given product.
-'''
-'''
-]
-
+#XXX
 skip(name='labeled but no where',
 #the nested construct will not have a where clause
 #but we have a joincondition referencing that object

@@ -9,13 +9,13 @@ import unittest
 import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
-from modelTest import * 
+import modelTest
 from rx.store.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
 
 def start_tyrant_server():
     "start a local tyrant server, return a dict needed to stop & clean up"
     # tmpdir for the datafile
-    tmpdir = tempfile.mkdtemp(dir='/tmp', prefix="rhizometest")
+    tmpdir = tempfile.mkdtemp(prefix="rhizometest")
     tmpfile = os.path.join(tmpdir, 'test.tct') # extension makes it a table db
 
     port = random.randrange(9000,9999)
@@ -41,17 +41,17 @@ def stop_tyrant_server(data):
         #print "tyrant server exited"
     shutil.rmtree(data['tmpdir'])
 
-class TyrantModelTestCase(BasicModelTestCase):    
+class TyrantModelTestCase(modelTest.BasicModelTestCase):    
 
-    def getTyrantModel(self):
+    def getModel(self):
         port = self.tyrant['port']
         model = TyrantModel('127.0.0.1', port)
-        return self.getModel(model)
+        return self._getModel(model)
 
-    def getTransactionTyrantModel(self):
+    def getTransactionModel(self):
         port = self.tyrant['port']
         model = TransactionTyrantModel('127.0.0.1', port)
-        return self.getModel(model)
+        return self._getModel(model)
     
     def setUp(self):
         self.tyrant = start_tyrant_server()
@@ -61,4 +61,4 @@ class TyrantModelTestCase(BasicModelTestCase):
         self.tyrant = None
 
 if __name__ == '__main__':
-    main(TyrantModelTestCase)
+    modelTest.main(TyrantModelTestCase)

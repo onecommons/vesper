@@ -94,29 +94,3 @@ class TransactionFtModel(TransactionModel, FtModel):
     (in particular, the Memory driver).
     '''
     
-class NTriplesFtModel(FtModel):
-    def __init__(self, source='', defaultStatements=(), context='', **kw):
-        self.path, stmts, format = _loadRDFFile(source,
-                                                defaultStatements,context)
-        db = Memory.GetDb('', 'default')
-        model = Ft.Rdf.Model.Model(db)
-        stmts = [statement2Ft(stmt) for stmt in stmts]
-        model.add(stmts)
-        FtModel.__init__(self, model)    
-    
-    def commit(self, **kw):
-        self.model._driver.commit()
-        outputfile = file(self.path, "w+", -1)
-        stmts = self.model._driver._statements['default'] #get statements directly, avoid copying list
-        def mapStatements(stmts):
-            #map 4Suite's tuples to Statements
-            for stmt in stmts:                    
-                if stmt[5] == OBJECT_TYPE_UNKNOWN:
-                    objectType = OBJECT_TYPE_LITERAL
-                else:
-                    objectType = stmt[5]
-                yield (stmt[0], stmt[1], stmt[2], objectType, stmt[3])
-        writeTriples(mapStatements(stmts), outputfile)
-        outputfile.close()
-
-class IncrementalNTriplesFtModel(TransactionModel, _IncrementalNTriplesFileModelBase, NTriplesFtModel): pass

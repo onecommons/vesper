@@ -562,26 +562,49 @@ class TransactionModel(object):
 
 class TransactionMemModel(TransactionModel, MemModel): pass
 
-class NTriplesFileModel(MemModel):
+class FileModel(MemModel):
+
     def __init__(self, source='', defaultStatements=(), context='',
                                              incrementHook=None, **kw):
-        self.path, stmts, format = _loadRDFFile(source, defaultStatements,
+        ntpath, stmts, format = loadRDFFile(source, defaultStatements,
                                         context, incrementHook=incrementHook)
+        if canWriteFormat(format):
+            self.path = source
+            self.format = format            
+        else:            
+            self.path = ntpath
+            self.format = 'ntriples'
+            
         MemModel.__init__(self, stmts)    
 
     def commit(self, **kw):
         outputfile = file(self.path, "w+", -1)
-        stmts = self.getStatements(asQuad=True)
-        writeTriples(stmts, outputfile)
+        stmts = self.getStatements()
+        serializeRDF_Stream(stmts, outputfile, self.format)
         outputfile.close()
+
+class TransactionFileModel(TransactionModel, FileModel): pass
         
-class _IncrementalNTriplesFileModelBase(object):
+class IncrementalNTriplesFileModelBase(FileModel):
     '''
     Incremental save changes to an NTriples "transaction log"
     Use in a class hierarchy for Model where self has a path attribute
     and TransactionModel is preceeds this in the MRO.
     '''    
     loadNtriplesIncrementally = True
+
+    def __init__(self, source='', defaultStatements=(), context='',
+                                             incrementHook=None, **kw):
+        ntpath, stmts, format = loadRDFFile(source, defaultStatements,
+                                        context, incrementHook=incrementHook)
+        if format not in ('ntriples', 'ntjson'):
+            self.path = ntpath
+            self.format = 'ntriples'
+        else:
+            self.path = source
+            self.format = format
+        
+        MemModel.__init__(self, stmts)    
         
     def commit(self, **kw):                
         import os.path, time
@@ -605,339 +628,40 @@ class _IncrementalNTriplesFileModelBase(object):
             outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
             outputfile.close()
         else: #first time
-            super(_IncrementalNTriplesFileModelBase, self).commit()
+            super(IncrementalNTriplesFileModelBase, self).commit()
 
-class IncrementalNTriplesFileModel(TransactionModel, _IncrementalNTriplesFileModelBase, NTriplesFileModel): pass
+class IncrementalNTriplesFileModel(TransactionModel, IncrementalNTriplesFileModelBase): pass
 
-def _loadRDFFile(path, defaultStatements,context='', incrementHook=None):
+def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
     '''
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
     '''
+    
     if os.path.exists(path):
         from rx import Uri
         uri = Uri.OsPathToUri(path)
-        stmts = parseRDFFromURI(uri, scope=context,
-                                options=dict(incrementHook=incrementHook))
+        if incrementHook:
+            options = dict(incrementHook=incrementHook)
+        else:
+            options = {}
+        stmts, format = parseRDFFromURI(uri, scope=context,
+                                options=options, getType=True)
     else:
         stmts = defaultStatements
-
-    #we only support writing to a NTriples file 
+        #try to guess from extension
+        base, ext = os.path.splitext(path)
+        format = { '.nt' : 'ntriples',
+          '.nj' : 'ntjson', 
+          '.rdf' : 'rdfxml',
+          '.json' : 'sjson',
+          '.yaml' : 'yaml',
+        }.get(ext, 'unknown')        
+        
+    #some stores only support writing to a NTriples file 
     if not path.endswith('.nt'):
         base, ext = os.path.splitext(path)
         path = base + '.nt'
-        if ext == '.rdf':
-            format = 'rdfxml'
-        else:
-            format = 'unsupported'
-    else:
-        format = 'ntriples'
     
-    return path,stmts,format
+    return path, stmts,format
 
-try:
-    import RDF #import Redland RDF
-    #import RDF.RDF; RDF.RDF._debug = 1
-    
-    def node2String(node):
-        if node is None:
-            return ''
-        elif node.is_blank():
-            return BNODE_BASE + node.blank_identifier
-        elif node.is_literal():
-            literal = node.literal_value['string']
-            if not isinstance(literal, unicode):
-                return unicode(literal, 'utf8')
-            else:
-                return literal
-        else:
-            return unicode(node.uri)
-
-    def URI2node(uri): 
-        if isinstance(uri, unicode):
-            uri = uri.encode('utf8')
-        if uri.startswith(BNODE_BASE):
-            label = uri[BNODE_BASE_LEN:]
-            return RDF.Node(blank=label)
-        else:
-            return RDF.Node(uri_string=uri)
-
-    def object2node(object, objectType):
-        if objectType == OBJECT_TYPE_RESOURCE:
-            return URI2node(object)
-        else:
-            if isinstance(object, unicode):
-                object = object.encode('utf8')
-            if isinstance(objectType, unicode):
-                objectType = objectType.encode('utf8')
-                
-            kwargs = { 'literal':object }
-            if objectType and objectType != OBJECT_TYPE_LITERAL:
-                if objectType.find(':') > -1:
-                    kwargs['datatype'] = RDF.Uri(objectType)
-                    kwargs['language'] = None
-                elif len(objectType) > 1: #must be a language id
-                    kwargs['language'] = objectType                    
-            return RDF.Node(**kwargs)            
-        
-    def statement2Redland(statement):
-        object = object2node(statement.object, statement.objectType)
-        return RDF.Statement(URI2node(statement.subject),
-                             URI2node(statement.predicate), object)
-
-    def redland2Statements(redlandStatements, defaultScope=''):
-        '''convert result of find_statements or find_statements_context to Statements'''
-        for result in redlandStatements:
-            if isinstance(result, tuple):
-                stmt, context = result
-            else:
-                stmt = result
-                context = None
-
-            if stmt.object.is_literal():
-                language = stmt.object.literal_value.get('language')
-                if language:
-                    objectType = language
-                else:
-                    datatype = stmt.object.literal_value.get('datatype')
-                    if datatype:
-                        objectType = str(datatype)
-                    else:
-                        objectType = OBJECT_TYPE_LITERAL
-            else:
-                objectType = OBJECT_TYPE_RESOURCE
-            yield Statement(node2String(stmt.subject), node2String(stmt.predicate),                            
-                            node2String(stmt.object), objectType=objectType,
-                            scope=node2String(context) or defaultScope)
-        
-    class RedlandModel(Model):
-        '''
-        wrapper around Redland's RDF.Model
-        '''
-        def __init__(self, redlandModel):
-            self.model = redlandModel
-
-        def commit(self):
-            self.model.sync()
-
-        def rollback(self):
-            pass
-                    
-        def getStatements(self, subject=None, predicate=None, object=None,
-                          objecttype=None,context=None, asQuad=True, hints=None):
-            ''' Return all the statements in the model that match the given arguments.
-            Any combination of subject and predicate can be None, and any None slot is
-            treated as a wildcard that matches any value in the model.'''
-            if subject:
-                subject = URI2node(subject)            
-            if predicate:
-                predicate = URI2node(predicate)
-            if object is not None:
-                if objecttype is None:
-                    #ugh... we need to do two separate queries
-                    objecttypes = (OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL)
-                else:
-                    objecttypes = (objecttype,)
-            else:
-                objecttypes = (None,)
-
-            redlandStmts = []
-            for objecttype in objecttypes:
-                if object is not None:
-                    redlandObject = object2node(object, objecttype)
-                else:
-                    redlandObject = None
-            
-                if context or not asQuad:
-                    if context:
-                        redlandContext = URI2node(context)
-                    else:
-                        redlandContext = None
-                
-                    redlandStmts.append(self.model.find_statements(
-                                    RDF.Statement(subject, predicate, redlandObject),
-                                        context=redlandContext) )
-                    defaultContext = context
-                else:
-                    #search across all contexts                
-                    redlandStmts.append(self.model.find_statements_context(
-                                RDF.Statement(subject, predicate, redlandObject)) )
-                    defaultContext = ''
-
-            statements = list( utils.flattenSeq([redland2Statements(rstmts, defaultContext)
-                                         for rstmts in redlandStmts]) )
-            #statements = list( redland2Statements(redlandStmts, defaultContext))
-            statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
-                         
-        def addStatement(self, statement):
-            '''add the specified statement to the model'''
-            if statement.scope:
-                context = URI2node(statement.scope)
-            else:
-                context = None            
-            self.model.add_statement(statement2Redland(statement),
-                                      context=context)
-
-        def removeStatement(self, statement):
-            '''removes the statement'''
-            if statement.scope:
-                context = URI2node(statement.scope)
-            else:
-                context = None            
-            self.model.remove_statement(statement2Redland(statement),
-                                        context=context)
-
-    class RedlandHashBdbModel(TransactionModel, RedlandModel):
-        def __init__(self, source='', defaultStatements=(),**kw):
-            if os.path.exists(source + '-sp2o.db'):
-                storage = RDF.HashStorage(source,
-                                    options="hash-type='bdb',contexts='yes'")
-                model = RDF.Model(storage)
-            else:
-                # Create a new BDB store
-                storage = RDF.HashStorage(source,
-                        options="new='yes',hash-type='bdb',contexts='yes'")
-                model = RDF.Model(storage)                
-                for stmt in defaultStatements:
-                    if stmt.scope:
-                        context = URI2node(stmt.scope)
-                    else:
-                        context = None
-                    model.add_statement( statement2Redland(stmt),context=context)
-                model.sync()
-            super(RedlandHashBdbModel, self).__init__(model)
-
-    class RedlandHashMemModel(TransactionModel, RedlandModel):
-        def __init__(self, source='dummy', defaultStatements=(),**kw):
-            # Create a new hash memory store
-            storage = RDF.HashStorage(source,
-                    options="new='yes',hash-type='memory',contexts='yes'")
-            model = RDF.Model(storage)
-            super(RedlandHashMemModel, self).__init__(model)
-            for stmt in defaultStatements:
-                self.addStatement(stmt)
-            model.sync()
-            
-
-except ImportError:
-    log.debug("Redland not installed")
-
-try:
-    import rdflib
-    from rdflib.Literal import Literal
-    from rdflib.BNode import BNode
-    from rdflib.URIRef import URIRef
-    
-    def statement2rdflib(statement):
-        if statement.objectType == OBJECT_TYPE_RESOURCE:            
-            object = RDFLibModel.URI2node(statement.object)
-        else:
-            kwargs = {}
-            if statement.objectType.find(':') > -1:
-                kwargs['datatype'] = statement.objectType
-            elif len(statement.objectType) > 1: #must be a language id
-                kwargs['lang'] = statement.objectType
-            object = Literal(statement.object, **kwargs)            
-        return (RDFLibModel.URI2node(statement.subject),
-                RDFLibModel.URI2node(statement.predicate), object)
-
-    def rdflib2Statements(rdflibStatements, defaultScope=''):
-        '''RDFLib triple to Statement'''
-        for (subject, predicate, object) in rdflibStatements:
-            if isinstance(object, Literal):                
-                objectType = object.language or object.datatype or OBJECT_TYPE_LITERAL
-            else:
-                objectType = OBJECT_TYPE_RESOURCE            
-            yield Statement(RDFLibModel.node2String(subject),
-                            RDFLibModel.node2String(predicate),
-                            RDFLibModel.node2String(object),
-                            objectType=objectType, scope=defaultScope)
-
-    class RDFLibModel(Model):
-        '''
-        wrapper around rdflib's TripleStore
-        '''
-
-        def node2String(node):
-            if isinstance(node, BNode):
-                return BNODE_BASE + unicode(node[2:])
-            else:
-                return unicode(node)
-        node2String = staticmethod(node2String)
-        
-        def URI2node(uri): 
-            if uri.startswith(BNODE_BASE):
-                return BNode('_:'+uri[BNODE_BASE_LEN:])
-            else:
-                return URIRef(uri)
-        URI2node = staticmethod(URI2node)
-
-        def object2node(object, objectType):
-            if objectType == OBJECT_TYPE_RESOURCE:            
-                return URI2node(object)
-            else:
-                kwargs = {}
-                if objectType.find(':') > -1:
-                    kwargs['datatype'] = objectType
-                elif len(objectType) > 1: #must be a language id
-                    kwargs['lang'] = objectType
-                return Literal(object, **kwargs)                                
-        object2node = staticmethod(object2node)
-        
-        def __init__(self, tripleStore):
-            self.model = tripleStore
-
-        def commit(self):
-            pass
-
-        def rollback(self):
-            pass
-                    
-        def getStatements(self, subject = None, predicate = None, object=None,
-                          objecttype=None, asQuad=True, hints=None):
-            ''' Return all the statements in the model that match the given arguments.
-            Any combination of subject and predicate can be None, and any None slot is
-            treated as a wildcard that matches any value in the model.'''
-            if subject:
-                subject = self.URI2node(subject)
-            if predicate:
-                predicate = self.URI2node(predicate)
-            if object is not None:
-                object = object2node(object, objectType)
-            statements = list( rdflib2Statements( self.model.triples((subject, predicate, object)) ) )
-            statements.sort()
-            return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
-                         
-        def addStatement(self, statement ):
-            '''add the specified statement to the model'''            
-            self.model.add( statement2rdflib(statement) )
-
-        def removeStatement(self, statement ):
-            '''removes the statement'''
-            self.model.remove( statement2rdflib(statement))
-
-    class RDFLibFileModel(RDFLibModel):
-        def __init__(self,source='', defaultStatements=(), context='', **kw):
-            ntpath, stmts, format = _loadRDFFile(source, defaultStatements,context)
-            if format == 'unsupported':                
-                self.format = 'nt'
-                self.path = ntpath
-            else:
-                self.format = (format == 'ntriples' and 'nt') or (
-                               format == 'rdfxml' and 'xml') or 'error'
-                assert self.format != 'error', 'unexpected format'
-                self.path = source
-                
-            from rdflib.TripleStore import TripleStore                                    
-            RDFLibModel.__init__(self, TripleStore())
-            for stmt in stmts:
-                self.addStatement( stmt )             
-    
-        def commit(self):
-            self.model.save(self.path, self.format)
-
-    class TransactionalRDFLibFileModel(TransactionModel, RDFLibFileModel): pass
-        
-except ImportError:
-    log.debug("rdflib not installed")

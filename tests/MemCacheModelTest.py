@@ -9,31 +9,30 @@ import unittest
 import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
-from modelTest import * 
+import modelTest
 from rx.store.RxPathModelMemcache import MemCacheModel, TransactionMemCacheModel
 
 _prefixCounter = time.time()
 
-class MemCacheModelTestCase(BasicModelTestCase):    
+class MemCacheModelTestCase(modelTest.BasicModelTestCase):   
     
-    def getTyrantModel(self):    
-        global _prefixCounter
-        _prefixCounter += 1
-        model = MemCacheModel(prefix=str(_prefixCounter))
-        return self.getModel(model)
+    def getModel(self):    
+        model = MemCacheModel(prefix=str(self._prefixCounter))
+        return self._getModel(model)
 
-    def getTransactionTyrantModel(self):
-        global _prefixCounter
-        _prefixCounter += 1
-        model = TransactionMemCacheModel(prefix=str(_prefixCounter))
-        return self.getModel(model)
+    def getTransactionModel(self):
+        model = TransactionMemCacheModel(prefix=str(self._prefixCounter))
+        return self._getModel(model)
 
     def setUp(self):
-        pass
+        global _prefixCounter
+        _prefixCounter += 1
+        self._prefixCounter = _prefixCounter
+        print 'count', self._prefixCounter
         
     def tearDown(self):
         pass
 
 if __name__ == '__main__':
-    main(MemCacheModelTestCase)
+    modelTest.main(MemCacheModelTestCase)
 

@@ -6,8 +6,7 @@ try:
     bsddb.db.DB_GET_BOTH_RANGE
 except AttributeError:
     #you have an old version of bsddb
-    import _bsddb
-    bdbver = _bsddb.version()
+    bdbver = bsddb.db.version()
     if bdbver < (4,6):    
         bsddb.db.DB_GET_BOTH_RANGE = 12
     else:

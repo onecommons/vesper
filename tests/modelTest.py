@@ -18,8 +18,10 @@ def random_name(length):
 
 class BasicModelTestCase(unittest.TestCase):
     "Tests basic features of the tyrant model class"
+    
+    persistentStore = True
 
-    def getModel(self, model):
+    def _getModel(self, model):
         if testHistory:
             from rx import RxPath, RxPathGraph
             modelUri = RxPath.generateBnode()
@@ -31,17 +33,19 @@ class BasicModelTestCase(unittest.TestCase):
         else:
             return model
 
-    def getTyrantModel(self):
+    def getModel(self):
         model = MemModel()
-        return self.getModel(model)
+        self.persistentStore = False
+        return self._getModel(model)
 
-    def getTransactionTyrantModel(self):
+    def getTransactionModel(self):
         model = TransactionMemModel()
-        return self.getModel(model)
+        self.persistentStore = False
+        return self._getModel(model)
     
     def testStore(self):
         "basic storage test"
-        model = self.getTyrantModel()
+        model = self.getModel()
 
         # confirm a randomly created subject does not exist
         subj = random_name(12)
@@ -53,7 +57,7 @@ class BasicModelTestCase(unittest.TestCase):
         model.addStatement(s1)
 
     def testGetStatements(self):
-        model = self.getTyrantModel()
+        model = self.getModel()
                         
         stmts = [Statement('s', 'p', 'o', 'en', 'c'),
         Statement('s', 'p', 'o', 'en', 'c1'),
@@ -116,7 +120,7 @@ class BasicModelTestCase(unittest.TestCase):
 
     def testRemove(self):
         "basic removal test"
-        model = self.getTyrantModel()
+        model = self.getModel()
 
         # set up the model with one randomly named statement
         subj = random_name(12)
@@ -135,7 +139,7 @@ class BasicModelTestCase(unittest.TestCase):
 
     def testSetBehavior(self):
         "confirm model behaves as a set"
-        model = self.getTyrantModel()
+        model = self.getModel()
 
         s1 = Statement("sky", "is", "blue")
         s2 = Statement("sky", "has", "clouds")
@@ -173,7 +177,7 @@ class BasicModelTestCase(unittest.TestCase):
 
     def testQuads(self):
         "test (somewhat confusing) quad behavior"
-        model = self.getTyrantModel()
+        model = self.getModel()
 
         # add 3 identical statements with differing contexts
         statements = [Statement("one", "two", "three", "fake", "100"),
@@ -193,7 +197,7 @@ class BasicModelTestCase(unittest.TestCase):
     
     def testHints(self):
         "test limit and offset hints"
-        model = self.getTyrantModel()
+        model = self.getModel()
         
         # add 20 statements, subject strings '01' to '20'
         model.addStatements([Statement("%02d" % x, "obj", "pred") for x in range(1,21)])
@@ -212,7 +216,7 @@ class BasicModelTestCase(unittest.TestCase):
 
     def testTransactionCommitAndRollback(self):
         "test simple commit and rollback on a single model instance"
-        model = self.getTransactionTyrantModel()
+        model = self.getTransactionModel()
 
         s1 = Statement("sky", "is", "blue")
         s2 = Statement("sky", "has", "clouds")
@@ -235,12 +239,13 @@ class BasicModelTestCase(unittest.TestCase):
 
     def testTransactionIsolationCommit(self):
         "test commit transaction isolation across 2 models"
-        modelA = self.getTransactionTyrantModel()
-        modelB = self.getTransactionTyrantModel()
-
-        statements = [Statement("one", "equals", "one"),
-                      Statement("two", "equals", "two"),
-                      Statement("three", "equals", "three")]
+        modelA = self.getTransactionModel()
+        modelB = self.getTransactionModel()
+        
+        #include spaces in value so it looks like a literal, not a resource
+        statements = [Statement("one", "equals", " one "),
+                      Statement("two", "equals", " two "),
+                      Statement("three", "equals", " three ")]
 
         # confirm models are empty
         r1a = modelA.getStatements()
@@ -259,11 +264,19 @@ class BasicModelTestCase(unittest.TestCase):
         r3a = modelA.getStatements()
         r3b = modelB.getStatements()
         self.assertEqual(set(statements), set(r3a), set(r3b))
-
+        
+        #reload the data
+        if not self.persistentStore:
+            return
+            
+        modelC = self.getTransactionModel()
+        r3c = modelC.getStatements()
+        self.assertEqual(set(statements), set(r3c))
+        
     def testTransactionIsolationRollback(self):
         "test rollback transaction isolation across 2 models"
-        modelA = self.getTransactionTyrantModel()
-        modelB = self.getTransactionTyrantModel()
+        modelA = self.getTransactionModel()
+        modelB = self.getTransactionModel()
 
         statements = [Statement("one", "equals", "one"),
                       Statement("two", "equals", "two"),
@@ -287,23 +300,25 @@ class BasicModelTestCase(unittest.TestCase):
         r3b = modelB.getStatements()
         self.assertEqual(set(), set(r3a), set(r3b))
 
-    def testBigInsert(self):
-        model = self.getTyrantModel()
-        print 'start big insert'
+    def testInsert(self):
+        model = self.getModel()
+        print 'start insert with %s objects (-b to change)' % BIG 
         start = time.time()
-        for i in xrange(10000):
+        
+        for i in xrange(BIG):
             subj = random_name(12)
             for j in xrange(7):
                 model.addStatement(Statement(subj, 'pred'+str(j), 'obj'+str(j)) )
-        print 'added 70,000 statements in', time.time() - start, 'seconds'
+        print 'added %s statements in %s seconds' % (BIG * 7, time.time() - start)
         
         try:
-            if hasattr(model, 'close'):
+            if self.persistentStore and hasattr(model, 'close'):
                 print 'closing'
                 sys.stdout.flush()
+                start = time.time()
                 model.close()
-                print 're-opening'            
-                model = self.getTyrantModel()
+                print 'closed in %s seconds, re-opening' % (time.time() - start)
+                model = self.getModel()
         except:
             import traceback
             traceback.print_exc()
@@ -314,24 +329,31 @@ class BasicModelTestCase(unittest.TestCase):
         sys.stdout.flush()
         start = time.time()
         stmts = model.getStatements()
-        print 'got 70,000 statements in', time.time() - start, 'seconds'
-        self.assertEqual(len(stmts), 70000)
+        print 'got %s statements in %s seconds' % (BIG * 7, time.time() - start)
+        self.assertEqual(len(stmts), BIG * 7)
         
         start = time.time()
         lastSubject = None
         for i, s in enumerate(stmts):
-            if i > 10000: 
+            if i > BIG: 
                 break
             if s[0] != lastSubject:
                 lastSubject = s[0]
                 self.assertEqual(len(model.getStatements(s[0])), 7)
-        print 'did 10,000 subject lookups in', time.time() - start, 'seconds'
+        print 'did %s subject lookups in %s seconds' % (BIG, time.time() - start)
 
+BIG = 100 #10000
 def main(testCaseClass):
+    if '-b' in sys.argv:
+        i = sys.argv.index("-b")
+        global BIG
+        BIG = int(sys.argv[i+1])
+        del sys.argv[i:i+2]
+    
     try:
         test=sys.argv[sys.argv.index("-r")+1]
     except (IndexError, ValueError):
-        unittest.main()
+        unittest.main(testCaseClass.__module__)
     else:
         tc = testCaseClass(test)
         testfunc = getattr(tc, test)

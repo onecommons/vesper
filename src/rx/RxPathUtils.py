@@ -13,7 +13,8 @@ try:
 except ImportError:
     import StringIO
 
-from rx import utils, json
+from rx import utils
+from rx.python_shim import *
 
 #try:
 #    from Ft.Rdf import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL    
@@ -328,18 +329,27 @@ Encode a nodeset of RxPath resource nodes as JSON, using this format:
     #    add "rdf:rest" and add listIds 
     out += '}'
     return out
-    
+
 def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
-                       options=None):
+                       options=None, getType=False):
     '''
     returns an iterator of Statements
     
     type can be anyone of the following:
-        "rdfxml", "ntriples", "sjson" and "unknown"
+        "rdfxml", "ntriples", "sjson", "yaml", and "unknown"
     If Redland is installed "turtle" and "rss-tag-soup" will also work.
 
     baseuri is the base URI to be used for relative URIs in the RDF source
-    '''
+    '''    
+    stmts, type = _parseRDFFromString(contents, baseuri, type, scope,
+                       options)
+    if getType:
+        return stmts, type
+    else:
+        return stmts
+
+def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
+                       options=None):
     from rx import RxPath
     if scope is None: scope = ''  #workaround 4suite bug
     options = options or {}
@@ -397,11 +407,11 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                     #maybe its n3 or turtle, but we can't detect that
                     #but we'll try rxml_zml
                     type = 'rxml_zml'
-                    
+                            
         if type in ['ntriples', 'ntjson']:
             #use our parser
             return NTriples2Statements(StringIO.StringIO(contents), scope,
-                                       baseuri, **options)    
+                                       baseuri, **options), type
         elif type == 'rxml_xml' or type == 'rxml_zml':
             if type == 'rxml_zml':
                 from rx import zml
@@ -410,13 +420,13 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 if not (start.startswith('<rx>') or start.startswith('<rx:rx')):
                     contents ='<rx:rx>'+ contents+'</rx:rx>'
             from rx import rxml            
-            return rxml.rx2statements(StringIO.StringIO(contents), scope=scope)
+            return rxml.rx2statements(StringIO.StringIO(contents), scope=scope), type
         elif type == 'turtle' or type == 'rss-tag-soup':
             try: #only redland's parser supports these
                 import RDF
                 parser=RDF.Parser(type)
                 stream = parser.parse_string_as_stream(contents, baseuri)
-                return RxPath.redland2Statements(stream, scope) 
+                return RxPath.redland2Statements(stream, scope), type 
             except ImportError:
                 raise ParseException("RDF parse error: "+ type+
                     " is only supported by Redland, which isn't installed")
@@ -439,13 +449,13 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 contentsStream.name = baseuri 
                 ts.parse(contentsStream)
                 return RxPath.rdflib2Statements(
-                            ts.triples( (None, None, None)),scope)
+                            ts.triples( (None, None, None)),scope), type
             except ImportError:
                 try: #try redland's parser
                     import RDF
                     parser=RDF.Parser('rdfxml')
                     stream = parser.parse_string_as_stream(contents, baseuri)
-                    return RxPath.redland2Statements(stream, scope) 
+                    return RxPath.redland2Statements(stream, scope), type 
                 except ImportError:
                     #fallback to 4Suite's obsolete parser
                     try:
@@ -456,22 +466,26 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                         #resolve relative URLs, so we now need to reset the scope
                         for s in statements:
                             s.scope = scope
-                        return statements
+                        return statements, type
                     except ImportError:
                         raise ParseException("no RDF/XML parser installed")
         elif type == 'json':            
-            return _parseRDFJSON(contents, scope)
-        elif type == 'sjson':
+            return _parseRDFJSON(contents, scope), type
+        elif type == 'sjson' or type == 'yaml':
             import sjson
             if isinstance(contents, str):
-                contents = json.loads(contents)
+                if type == 'yaml':
+                    import yaml
+                    content = yaml.safe_load(contents)
+                else:
+                    contents = json.loads(contents)    
 
             options['scope'] = scope
             #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
                 options['generateBnode']=generateBnode
             
-            return sjson.tostatements(contents, options)
+            return sjson.tostatements(contents, options), type
         else:
             raise ParseException('unsupported type: ' + type)
     except:
@@ -479,7 +493,7 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
         raise ParseException()
 
 def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
-                    options=None):
+                    options=None, getType=False):
     'returns an iterator of Statements'
     options = options or {}
     if not modelbaseuri:
@@ -494,7 +508,7 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream = urllib2.urlopen(uri)
     contents = stream.read()
     stream.close()
-    return parseRDFFromString(contents, modelbaseuri, type, scope, options)
+    return parseRDFFromString(contents, modelbaseuri, type, scope, options, getType)
      
 def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass=None):
     from rx import RxPath, RxPathSchema
@@ -502,12 +516,19 @@ def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass
     #default to no inferencing:
     return RxPath.createDOM(model, uri2prefixMap or {}, modelUri=uri,
                         schemaClass = schemaClass or RxPathSchema.BaseSchema) 
-        
+
 def serializeRDF(statements, type, uri2prefixMap=None,
+                         fixUp=None, fixUpPredicate=None):
+    stringIO = StringIO.StringIO()
+    serializeRDF_Stream(statements, stringIO, type, uri2prefixMap=uri2prefixMap,
+                         fixUp=fixUp, fixUpPredicate=fixUpPredicate)
+    return stringIO.getvalue()
+    
+def serializeRDF_Stream(statements, stream, type, uri2prefixMap=None,
                          fixUp=None, fixUpPredicate=None):
     '''    
     type can be one of the following:
-        "rdfxml", "ntriples", "ntjson", "json", or "sjson"
+        "rdfxml", "ntriples", "ntjson", "json", "yaml", or "sjson"
     '''
     from rx import RxPath
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
@@ -520,11 +541,10 @@ def serializeRDF(statements, type, uri2prefixMap=None,
             ts = rdflib.TripleStore.TripleStore()
             if uri2prefixMap:
                 ts.ns_prefix_map = uri2prefixMap
-            stringIO = StringIO.StringIO()
+            
             for stmt in statements:
                 ts.add( RxPath.statement2rdflib(stmt) )                    
-            ts.serialize(format='xml', stream=stringIO)            
-            return stringIO.getvalue()
+            ts.serialize(format='xml', stream=stream)
         except ImportError:
             try: #try redland's parser
                 import RDF
@@ -536,7 +556,8 @@ def serializeRDF(statements, type, uri2prefixMap=None,
                     for uri,prefix in uri2prefixMap.items():
                         if prefix != 'rdf': #avoid duplicate ns attribute bug
                             serializer.set_namespace(prefix.encode('utf8'), uri)
-                return serializer.serialize_model_to_string(model)
+                out = serializer.serialize_model_to_string(model)
+                stream.write(out)
             except ImportError:
                 try:
                     #fall back to 4Suite
@@ -550,31 +571,50 @@ def serializeRDF(statements, type, uri2prefixMap=None,
                     from Ft.Rdf.Serializers.Dom import Serializer as DomSerializer
                     serializer = DomSerializer()
                     outdoc = serializer.serialize(model, nsMap = uri2prefixMap)
-                    stringIO = StringIO.StringIO()
                     from Ft.Xml.Lib.Print import PrettyPrint
-                    PrettyPrint(outdoc, stream=stringIO)
-                    return stringIO.getvalue()
+                    PrettyPrint(outdoc, stream=stream)
                 except ImportError:
                     raise ParseException("no RDF/XML serializer installed")
     elif type == 'ntriples':
-        stringIO = StringIO.StringIO()
-        writeTriples(statements, stringIO)
-        return stringIO.getvalue()
+        writeTriples(statements, stream)
     elif type == 'ntjson':
-        stringIO = StringIO.StringIO()
-        writeTriples(statements, stringIO, writejson=True)
-        return stringIO.getvalue()
-    elif type == 'sjson':
+        writeTriples(statements, stream, writejson=True)
+    elif type == 'sjson' or type == 'yaml':
         import sjson 
         #XXX use uri2prefixMap
-        return json.dumps( sjson.tojson(statements) )
+        return json.dump( sjson.tojson(statements),stream)
+    elif type == 'yaml':
+        import sjson, yaml 
+        #XXX use uri2prefixMap
+        return yaml.safe_dump( sjson.tojson(statements), stream)
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]
         nodes = [node for node in rdfDom.childNodes
                      if node.uri in subjects and not node.isCompound()]
-        return _encodeRDFAsJson(nodes)
-        
+        out = _encodeRDFAsJson(nodes)
+        stream.write(out)
+
+def canWriteFormat(format):
+    if format in ('ntriples', 'ntjson', 'json', 'sjson'):
+        return True
+    elif format == 'yaml':
+        try:
+            import yaml
+            return True
+        except ImportError:
+            return False
+    elif format == 'rdfxml':
+        for pkg in ('rdflib.TripleStore', 'RDF', 'Ft.Rdf.Serializers.Dom'):        
+            try:
+                __import__(pkg)
+                return True
+            except ImportError:
+                pass
+        return False
+    else:
+        return False
+    
 #see w3.org/TR/rdf-testcases/#ntriples 
 #todo: assumes utf8 encoding and not string escapes for unicode 
 Removed = object()

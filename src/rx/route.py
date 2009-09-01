@@ -50,7 +50,7 @@ class Router(object):
 
 routes = Router()
 
-def Route(path, **vars):
+def Route(path, routes = routes, **vars):
     def _route(f):
         f = routes.add_route(path, f, **vars)
         return f
