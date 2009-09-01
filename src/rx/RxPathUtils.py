@@ -341,8 +341,7 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
 
     baseuri is the base URI to be used for relative URIs in the RDF source
     '''    
-    stmts, type = _parseRDFFromString(contents, baseuri, type, scope,
-                       options)
+    stmts, type = _parseRDFFromString(contents, baseuri, type, scope, options)
     if getType:
         return stmts, type
     else:
@@ -364,9 +363,9 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
         while type == 'unknown':
             if isinstance(contents, (list, tuple)):
                 if not contents:
-                    return contents
+                    return contents, 'statements'
                 if isinstance(contents[0], (tuple, BaseStatement)):
-                    return contents #looks like already a list of statements
+                    return contents, 'statements' #looks like already a list of statements
                 #otherwise assume sjson
                 type='sjson' 
                 break
@@ -376,7 +375,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             
             startcontents = contents[:256].lstrip()
             if not startcontents: #empty
-                return []
+                return [], 'statements'
                 
             if startcontents[0] in '{[':
                 type='sjson' #assume sjson
