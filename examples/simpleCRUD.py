@@ -79,7 +79,6 @@ def index(kw, retval):
         store_query(postdata)
 
         r = dom_store.query(postdata)
-        r = list(r)
         out = json.dumps(r,sort_keys=True, indent=4)
         return out
     

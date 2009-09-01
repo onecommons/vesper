@@ -359,5 +359,4 @@ class BasicStore(DomStore):
 
     def query(self, query, **kw):
         import jql
-        return jql.runQuery(query, self.model)
-        
+        return jql.getResults(query, self.model)

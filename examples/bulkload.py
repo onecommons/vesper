@@ -12,14 +12,14 @@ except ImportError:
 _LOAD=None
 _DUMP=None
 
-# QUERY = "{*}"
-QUERY = """{
-'installid' : <appdir:installation_id>,
-'name': <appdir:name>,
-'value': <appdir:value>,
-groupby(<appdir:installation_id>)
-}
-"""
+QUERY = "{*}"
+# QUERY = """{
+# 'installid' : <appdir:installation_id>,
+# 'name': <appdir:name>,
+# 'value': <appdir:value>,
+# groupby(<appdir:installation_id>)
+# }
+# """
 
 @raccoon.Action
 def testaction(kw, retval):
@@ -35,8 +35,14 @@ def testaction(kw, retval):
         else:
             print "opening", _DUMP
             f = open(_DUMP, 'w')
-            data = list(dom_store.query(QUERY))
-            json.dump(data, f, sort_keys=True, indent=4)
+            data = dom_store.query(QUERY)
+            print data
+            if 'errors' in data:
+                print " ERROR "
+                for x in data['errors']:
+                    print x
+            res = data['results']
+            json.dump(res, f, sort_keys=True, indent=4)
             f.close()
             print "data dumped to", _DUMP
 
