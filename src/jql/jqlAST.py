@@ -596,8 +596,6 @@ qF.addFunc('mul', lambda a, b: float(a)*float(b), NumberType)
 qF.addFunc('div', lambda a, b: float(a)/float(b), NumberType)
 qF.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
 qF.addFunc('negate', lambda a: -float(a), NumberType)
-#XXX not so lame isref
-qF.addFunc('isref', lambda a: a and True or False, BooleanType)
 
 def addQueryfunc(*args, **kw):
     qF.addFunc(*args, **kw)
