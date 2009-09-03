@@ -1048,6 +1048,9 @@ class SimpleQueryEngine(object):
         args = sorted(op.args, key=lambda arg: arg.op.cost(self, context))
         if not args:
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
+            #tmpop = jqlAST.JoinConditionOp(
+            #    jqlAST.Filter(jqlAST.Not(
+            #        jqlAST.getQueryFuncOp('isbnode', jqlAST.Project(0)))))
             tmpop.parent = op
             args = [tmpop]
 
@@ -1216,9 +1219,9 @@ class SimpleQueryEngine(object):
             #special case to force empty list
             return []
         refFunc = jqlAST.getQueryFuncOp('isref')
-        isref = refFunc.execFunc(context, v)                    
-        isbnode = isref and hasattr(v, 'startswith') and (
-                    v.startswith(context.initialModel.bnodePrefix))
+        isref = refFunc.execFunc(context, v)    
+        bnodeFunc = jqlAST.getQueryFuncOp('isbnode') 
+        isbnode = bnodeFunc.execFunc(context, v)           
         if ( (isref and context.depth > 0) or isbnode 
                             and v not in context.constructStack):
             #XXX
@@ -1453,3 +1456,10 @@ def recurse(context, startid, propname=None):
     return SimpleTupleset(getRows, columns=columns, op='recurse', hint=startid, debug=context.debug)
 
 jqlAST.addQueryfunc('recurse', recurse, Tupleset, needsContext=True)
+
+def isBnode(context, v):    
+    return hasattr(v, 'startswith') and (
+                v.startswith(context.initialModel.bnodePrefix))
+                    
+jqlAST.addQueryfunc('isbnode', isBnode, BooleanType, needsContext=True)
+jqlAST.addQueryfunc('isref', lambda a: a and True or False, BooleanType)

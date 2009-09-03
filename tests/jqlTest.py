@@ -648,7 +648,7 @@ t('''{*}''',
     { 'id' : '4',
        'values' : [1,'1',1.1]
     },
-#should be here:
+#shouldn't be here:
 {'prop1': 'bar', 'prop2': None, 'prop3': False, 'prop4': '', 'prop5': 0},
  {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}]
 )

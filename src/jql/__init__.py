@@ -7,7 +7,7 @@ First let's create a store with some JSON. For readability, we'll use native Pyt
 
  >>> import raccoon
  >>> datastore = raccoon.createStore({
- ...    'foo' : 'bar'
+ ...    "foo" : "bar"
  ... })
 
 The sjson module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default ``createStore`` will use a simple in-memory store.
@@ -19,7 +19,7 @@ Now we can start querying the database. Let's start with query that retrieves al
  ... ''',)
  [{},{}]
  
-Find all JSON object. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
+Find all JSON objects. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
 
  >>> datastore.query('''
  ... { foo, bar }

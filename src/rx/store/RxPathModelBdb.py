@@ -114,6 +114,7 @@ class BdbModel(Model):
             self.addStatements(defaultStatements)     
 
     def close(self):
+        #XXX should self.env be closed too?
         self.pDb.close()
         self.sDb.close()
         
