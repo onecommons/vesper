@@ -22,7 +22,12 @@ def queryAction(kw, retval):
     else:
         kw['_status'] = 404
         return template % 'not found!'
-                                        
-actions = { 'http-request' : [updateAction, queryAction]
+
+@Action 
+def recordUpdates(kw, retval):
+    kw['__server__'].updateResults = kw
+                                            
+actions = { 'http-request' : [updateAction, queryAction],
+'after-commit' : [recordUpdates]
         }
 

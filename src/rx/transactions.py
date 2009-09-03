@@ -306,7 +306,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                     jsorep = sjson.tojson(stmts)
                 kw = {'_added' : jsorep }
                 #new resource detection is optional since it can be expensive
-                if self.server.newResourceTrigger:
+                if self.server.domStore.newResourceTrigger:
                     kw['_newResources'] = state.newResources
                 self._runActions('before-add', kw)
 
@@ -322,7 +322,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                     jsorep = sjson.tojson(stmts)
                 kw = {'_removed' : jsorep }
                 #new resource detection is optional since it can be expensive
-                if self.server.newResourceTrigger:
+                if self.server.domStore.newResourceTrigger:
                     kw['_newResources'] = state.newResources                                             
                 self._runActions('before-remove', kw)
     
@@ -332,11 +332,14 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
             state = self.state
             kw = state.kw.copy()
             if morekw is None:                
-                morekw = { '_added' : sjson.tojson(state.additions),
-                           '_removed' : sjson.tojson(state.removals)
+                morekw = { 
+                '_addedStatements' : state.additions,
+                '_removedStatements' : state.removals,         
+                '_added' : sjson.tojson(state.additions),
+                '_removed' : sjson.tojson(state.removals)
                          }
                 #new resource detection is optional since it can be expensive
-                if self.server.newResourceTrigger:
+                if self.server.domStore.newResourceTrigger:
                     morekw['_newResources'] = state.newResources            
 
             kw.update(morekw)

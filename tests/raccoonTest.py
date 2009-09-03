@@ -60,9 +60,21 @@ class RaccoonTestCase(unittest.TestCase):
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)
+        
+        self.assertEquals(root.updateResults['_added'], [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
+        self.assertEquals(root.updateResults['_addedStatements'], [('a_resource', 'comment', 'page content.', 'L', ''), ('a_resource', 'label', 'foo', 'R', '')])
+        self.assertEquals(root.updateResults['_removedStatements'], [])
+        self.assertEquals(root.updateResults['_removed'], [])        
 
+        root.updateResults = {}
         result = root.runActions('http-request', dict(_name='jj'))        
         self.assertEquals('<html><body>not found!</body></html>', result)
+
+        self.failUnless('_addedStatements' not in root.updateResults)
+        self.failUnless('_added' not in root.updateResults)
+        self.failUnless('_removedStatements' not in root.updateResults)
+        self.failUnless('_removed' not in root.updateResults)
+        
 
 if __name__ == '__main__':
     import sys    
