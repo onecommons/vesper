@@ -1,0 +1,31 @@
+* {
+	font: 12pt "Lucida Grande", Lucida, Verdana, sans-serif;
+}
+.container {
+	width: 100%;
+}
+.topbar {
+	font-weight: bold;
+	font-size: 16pt;
+	font-variant: small-caps;
+}
+.query {
+	display: block;
+	float: left;
+	width: 69%;
+	min-width:300px;
+}
+.query_input {
+	width: 95%;
+	height: 300px;
+	padding: 5px;
+	margin: 5px;
+}
+.hist {
+	display: block;
+	float: right;
+	width:  29%;
+	padding: 5px;
+	background-color: #ececec;
+	border: thin solid darkgrey;
+}

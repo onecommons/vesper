@@ -1,0 +1,18 @@
+<html>
+<head>    
+    <title>history</title>
+</head>
+<body>
+${len(queries)} queries
+<br><br>
+% for (i,q) in enumerate(queries):
+ ${i}. <a href="/?hist=${i}">${q|h}</a><br><br>
+% endfor
+<hr>
+${len(updates)} updates
+<br><br>
+% for (i,q) in enumerate(updates):
+ ${i}. <a href="/update?hist=${i}">${q|h}</a><br><br>
+% endfor
+
+</body></html>

@@ -655,9 +655,9 @@ def p_listconstructitem(p):
     p[0] = p[1]
 
 def p_error(p):
-    # print "p_error:", p.lexpos, p.lineno, p.type, p.value
+    print "p_error:", p.lexpos, p.lineno, p.type, p.value
     if p:
-        errorlog.error("Syntax error at '%s' (line %d)" % (p.value, p.lineno))
+        errorlog.error("Syntax error at '%s' (line %d char %d)" % (p.value, p.lineno, p.lexpos))
     else:
         errorlog.error("Syntax error at EOF")
 
