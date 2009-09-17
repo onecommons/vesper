@@ -451,11 +451,9 @@ class IterationJoin(Join):
     def filter(self, conditions=None, hints=None):
         for left, right in joinTuples(self.left, self.right, self.joinFunc):
             row = left + right
-            flatrow = row #flatten(row, flattenTypes=ColGroup)
-            #print 'Imatch', hex(id(self)), flatrow, 'filter', conditions
             if conditions:
                 for key, value in conditions.iteritems():
-                    if flatten(flatrow[key]) != value: #XXX
+                    if flatten(row[key]) != value: #XXX
                         #print '@@@@skipped@@@', row[key], '!=', repr(value), flatten(row[key])
                         break
                 else:
@@ -679,13 +677,28 @@ def groupbyOrdered(tupleset, groupby, debug=False):
 class Union(RxPath.Tupleset):
     '''
     Corresponds to a nodeset containing nodes of different node types
-    '''
-    def __init__(self, tuplesets=None,op='',unique=True):
+    '''    
+    def __init__(self, tuplesets=None,op='',unique=True, columns=None,
+                                                    msg='', debug=False):
         tuplesets = tuplesets or []
         self.tuplesets = tuplesets #set of tuplesets
-        self.op=op #for debugging
         self.unique = unique
-    
+        self.columns = columns
+        self.msg = msg
+        self.debug = debug
+        if debug:
+            self._filter = self.filter
+            self.filter = self._debugFilter
+
+    def _debugFilter(self, conditions=None, hints=None):
+        results = tuple(self._filter(conditions, hints))        
+        print self.__class__.__name__,hex(id(self)), '('+self.msg+')', 'on', \
+            self.tuplesets, 'cols', _colrepr(self), 'filter:', repr(conditions), 'results:'
+        pprint.pprint(results)
+        [validateRowShape(self.columns, r) for r in results]
+        for row in results:
+            yield row
+
     def filter(self, conditions=None, hints=None):
         if self.unique:
             index = set()
@@ -696,16 +709,16 @@ class Union(RxPath.Tupleset):
                 if index is None:
                     yield row
                     continue
-                key = hash(flatten(row, to=tuple))
+                key = keyfunc(row) #hash(flatten(row, to=tuple))
                 if key not in index:
                     index.add(key)
                     yield row
 
-    def toStatements(self, context):
-        return Union([t.toStatements(context) for t in self.tuplesets],op='UNION toStatements')
-        
-    def explain(self, out, indent=''):        
-        print >>out, indent, 'Union', hex(id(self)),'for', self.op, 'with:'
+    def __repr__(self):
+        return self.__class__.__name__+' '+ hex(id(self))+' with: '+ self.msg
+
+    def explain(self, out, indent=''): 
+        print >>out, indent, repr(self), _colrepr(self)
         indent += ' '*4
         for t in self.tuplesets:
             t.explain(out,indent)
@@ -713,6 +726,14 @@ class Union(RxPath.Tupleset):
 #############################################################
 ################ Evaluation Engine ##########################
 #############################################################
+
+def getNullRows(columns):
+    nullrows = [None] * len(columns)
+    for i, c in enumerate(columns):        
+        if isinstance(c.type, Tupleset):
+            nullrows[i] = MutableTupleset([getNullRows(c.type.columns)])
+    return nullrows
+
 #for associative ops: (a op b) op c := a op b op c
 def flattenOp(args, opType):
     if isinstance(args, jqlAST.QueryOp):
@@ -1032,27 +1053,50 @@ class SimpleQueryEngine(object):
         return (True, [v for p, v in ordered])
 
     def evalJoin(self, op, context):
-        return self._evalJoin(op, context, 'i')
+        return self._evalJoin(op, context)
 
-    def evalExcept(self, op, context):
+    #def evalExcept(self, op, context):                
         #Note: actually an antijoin not except: doesn't compare whole row,
-        #just join key        
-        return self._evalJoin(op, context, 'a')
+        #just join key
+        #anit-join (?id in not { foo = 1})
+    #    return self._evalJoin(op, context, 'a')
+
+    #def evalSemiJoin(self, op, context):
+        #semi-join (?id in { foo = 1})
+    #    return self._evalJoin(op, context, 's') 
 
     def evalUnion(self, op, context):
-        #semi-join
-        return self._evalJoin(op, context, 's') 
- 
-    def _evalJoin(self, op, context, jointype):
+        #foo = 1 or bar = 2
+        #Union(filter(foo=1), filter(bar=2)) 
+        #columns: subject foo bar
+        #merge join, add null if match isn't found
+        #args = self.consolidateJoins(args)
+        for joincond in op.args:
+            assert isinstance(joincond, jqlAST.JoinConditionOp)
+            result = joincond.op.evaluate(self, context)
+            assert isinstance(result, Tupleset)
+
+            current = self._groupby(result, joincond,debug=context.debug)
+         
+    def _evalJoin(self, op, context):
         #XXX context.currentTupleset isn't set when returned
-        args = sorted(op.args, key=lambda arg: arg.op.cost(self, context))
-        if not args:
+        args = sorted(op.args, key=lambda arg: 
+                #put outer joins last
+                (arg.join == 'l', arg.op.cost(self, context)) )
+        
+        if not args or args[0].join == 'l':
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
             #tmpop = jqlAST.JoinConditionOp(
             #    jqlAST.Filter(jqlAST.Not(
             #        jqlAST.getQueryFuncOp('isbnode', jqlAST.Project(0)))))
             tmpop.parent = op
-            args = [tmpop]
+            args.insert(0, tmpop)
+        
+        #else:
+        #   combine separate filters into one filter
+        #   by default, filters that are operating on the same projection
+        #   engine subclasses that support table-based stores will combine projections on the same table
+        #   args = self.consolidateJoins(args)
 
         #evaluate each op, then join on results
         #XXX optimizations:
@@ -1065,7 +1109,6 @@ class SimpleQueryEngine(object):
         #lslice = slice( joincond.position, joincond.position+1)
         #rslice = slice( 0, 1) #curent tupleset is a
         #current = MergeJoin(result, current, lslice,rslice)
-
         previous = None
         while args:
             joincond = args.pop(0)
@@ -1079,15 +1122,15 @@ class SimpleQueryEngine(object):
             if previous:
                 def bindjoinFunc(jointype, current):
                     '''
-                    jointypes: inner, outer, semi- and anti-
-                    '''                    
-                    if jointype=='o':
-                        nullrows = [None] * len(current.columns)
+                    jointypes: inner, left outer, semi- and anti-
+                    '''
+                    if jointype=='l':
+                        nullrows = getNullRows(current.columns)
                     elif jointype=='a':
                         nullrows = [] #no match, so include leftRow
                     else:
                         nullrows = None
-
+                    
                     def joinFunc(leftRow, rightTable, lastRow):
                         match = False
                         for row in rightTable.filter({0 : leftRow[0]},
@@ -1108,7 +1151,13 @@ class SimpleQueryEngine(object):
                 assert current.columns and len(current.columns) >= 1
                 assert previous.columns is not None
                 #columns: (left + right)
-                columns = previous.columns + current.columns
+                jointype = joincond.join
+                if jointype in ('i','l'):
+                    columns = previous.columns + current.columns
+                elif jointype in ('a','s'):
+                    columns = previous.columns
+                else:
+                    assert False, 'unknown jointype: '+ jointype                
                 previous = IterationJoin(previous, current,
                                 bindjoinFunc(jointype, current),
                                 columns,joincond.name,debug=context.debug)

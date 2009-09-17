@@ -226,6 +226,45 @@ t('''
  {'foo': 'bar', 'id': '2', 'parent': {'id': '1'}}]
  )
 
+t.group = 'outer'
+
+t('''{
+ foo,
+ omitnull(
+   notthere
+ )
+}
+''',
+[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}])
+
+t('''{
+ omitnull(
+   foo,
+ )
+}
+''',
+[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
+{'id': '_:2'}, {'id': '_:1'}])
+
+#XXX fails because notthere is evaluated before foo and there's no 
+t('''{
+ omitnull(
+   foo,
+   notthere
+ )
+}
+''',
+[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
+{'id': '_:2'}, {'id': '_:1'}]
+)
+
+#XXX join from foo property masks outer join 
+skip('''{
+    foo 
+    where(maybe foo = 1)
+    }
+''')
+
 t.group = 'parse'
 
 t('''
@@ -291,7 +330,7 @@ ast = Select( Construct([
 t('{*,}', ast=jql.buildAST('{*}')[0])
 
 #XXX this ast looks wrong:
-t('''{ *, 
+skip('''{ *, 
     where(type=bar OR foo=*)
     }''', ast=jql.buildAST("{ * where(type=bar or foo=*) }")[0]) 
 
@@ -309,6 +348,27 @@ t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
     foo = (a and b)
     foo = {c='c'}
     foo = ({c='c'} and ?a)
+'''
+
+#XXX some more (maybe redundent) tests:
+'''
+{foo : bar} #construct foo, where foo = bar
+{"foo" : "bar"} #construct "foo" : "bar"
+{"foo" : bar}  #construct foo, value of bar property (on this object)
+#construct foo where value of baz on another object
+{foo : ?child.baz
+    where ({ id=?child, bar="dd"})
+}
+
+#construct foo with a value as the ?child object but only matching baz property
+{'foo' : { id : ?child, * }
+    where ( foo = ?child.baz)
+}
+
+#same as above, but only child id as the value
+{'foo' : ?child
+    where ( foo = ?child.baz)
+}
 '''
 
 #xxx fix when namespace and type support is better

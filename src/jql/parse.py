@@ -1,35 +1,5 @@
 '''
-basic structure of a jql query:
-
-construct = {
-columnname | string : expression | [expression?] | construct
-*
-where(
-    (expression,) |
-    (columname = expression,)+
-)
-
-querypartfunc(expression) # groupby | orderby | limit | offset
-}
-
-{foo : bar} #construct foo, where foo = bar
-{"foo" : "bar"} #construct "foo" : "bar"
-{"foo" : bar}  #construct foo, value of bar property (on this object)
-#construct foo where value of baz on another object
-{foo : ?child.baz
-    where ({ id=?child, bar="dd"})
-}
-
-#construct foo with a value as the ?child object but only matching baz property
-{'foo' : { id : ?child, * }
-    where ( foo = ?child.baz)
-}
-
-#same as above, but only child id as the value
-{'foo' : ?child
-    where ( foo = ?child.baz)
-}
-
+parse JQL 
 '''
 
 from jqlAST import *
@@ -60,7 +30,7 @@ class _Env (object):
         tagclass = self._tagobjs.get(attr)
         if not tagclass:
             #create a new subclass of Tag with attr as its name
-            tagclass = type(Tag)(attr, (Tag,), {})
+            tagclass = type(Tag)(attr, (Tag,), {'__slots__' : ()})
             self._tagobjs[attr] = tagclass
         return tagclass
 
@@ -85,7 +55,7 @@ import ply.yacc
 ###########
 
 reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NS',
-           'ID', 'OPTIONAL', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH','GROUPBY', 'ORDERBY')
+           'ID', 'OMITNULL', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH','GROUPBY', 'ORDERBY')
 
 tokens = reserved + (
     # Literals (identifier, integer constant, float constant, string constant, char const)
@@ -215,7 +185,7 @@ lexer = ply.lex.lex(errorlog=errorlog) #, debug=1) #, optimize=1)
 def _YaccProduction_getattr__(self, name):
     if name == 'jqlState':
         import jql.rewrite
-        parseState = jql.rewrite._ParseState()
+        parseState = jql.rewrite._ParseState(T)
         self.jqlState = parseState
         return parseState
     else:
@@ -363,6 +333,11 @@ def p_expression_uminus(p):
     else:
         p[0] = p[2]
 
+def p_expression_andmaybe(p):
+    'expression : expression AND MAYBE expression'    
+    p[4].maybe = True
+    p[0] = And(p[1], p[4])
+
 def p_expression_notop(p):
     'expression : NOT expression'
     p[0] = Not(p[2])
@@ -461,6 +436,18 @@ def p_arglist(p):
     else:
         p[0] = [p[1]]
 
+def p_constructitemlist_optional(p):
+    """    
+    constructitemlist : constructitemlist COMMA optional
+                      | optional
+    listconstructitemlist : listconstructitemlist COMMA optional
+                          | optional
+    """
+    if len(p) == 4:
+        p[0] = p[1] + p[3]
+    else:
+        p[0] = p[1]
+
 def p_constructoplist(p):
     """
     constructoplist : constructoplist constructop
@@ -471,7 +458,7 @@ def p_constructoplist(p):
 def p_arglist_empty(p):
     """
     arglist : empty
-    constructitemlist : constructempty
+    constructitemlist : empty
     constructoplist : empty
     listconstructitemlist : empty
     """
@@ -532,11 +519,11 @@ def p_constructitem5(p):
     '''
     p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False)
 
-def p_constructitem6(p):
-    '''
-    constructitem : optional
-    '''
-    p[0] = p[1]
+#def p_constructitem6(p):
+#    '''
+#    constructitem : optional
+#    '''
+#    p[0] = p[1]
 
 def p_barecolumnref(p):
     '''barecolumnref : NAME
@@ -582,8 +569,8 @@ def p_dictvalue(p):
 
 def p_optional(p):
     '''
-    optional : OPTIONAL LPAREN constructitemlist RPAREN
-             | OPTIONAL LPAREN constructitemlist COMMA RPAREN
+    optional : OMITNULL LPAREN constructitemlist RPAREN
+             | OMITNULL LPAREN constructitemlist COMMA RPAREN
     '''
     for i, prop in enumerate(p[3]):
         if isinstance(prop, ConstructSubject):
@@ -591,7 +578,6 @@ def p_optional(p):
             errorlog.error('subject spec not allowed in Optional')
         else:
             prop.ifEmpty = PropShape.omit
-            #XXX jc.join = 'outer'
     p[0] = p[3]
 
 def p_constructop1(p):
@@ -611,11 +597,12 @@ def p_constructop2(p):
     '''
     p[0] = T.constructop(p[1], p[2])
 
-#def p_constructop2(p):
-#    '''
-#    constructop : WHERE
-#    '''
-#    p[0] = p[1]
+def p_constructop3(p):
+    '''
+    constructop : WHERE LPAREN MAYBE expression RPAREN
+    '''
+    p[4].maybe = True
+    p[0] = T.constructop(p[1], p[4])
     
 def p_dictconstruct(p):
     '''
@@ -655,7 +642,7 @@ def p_listconstructitem(p):
     p[0] = p[1]
 
 def p_error(p):
-    print "p_error:", p.lexpos, p.lineno, p.type, p.value
+    #print "p_error:", p.lexpos, p.lineno, p.type, p.value
     if p:
         errorlog.error("Syntax error at '%s' (line %d char %d)" % (p.value, p.lineno, p.lexpos))
     else:
@@ -663,12 +650,6 @@ def p_error(p):
 
 def p_empty(p):
     'empty :'
-    pass
-
-def p_constructempty(p):
-    'constructempty :'
-    #redundant rule just to make it obvious that the related reduce/reduce
-    #conflict is harmless
     pass
 
 parser = ply.yacc.yacc(start="root", errorlog=errorlog)#, debug=True)

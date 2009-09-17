@@ -50,6 +50,7 @@ class QueryOp(object):
     labels = ()
     name = None
     value = None #evaluation results maybe cached here
+    maybe = False
 
     def _setparent(self, parent_):
         parents = [id(self)]
@@ -239,8 +240,12 @@ class JoinConditionOp(QueryOp):
     '''
     helper op
     '''
-    INNER = 'inner'
-    RIGHTOUTER = 'right outer'
+    INNER = 'i'
+    LEFTOUTER = 'l'
+    #RIGHTOUTER = 'r'
+    #FULLOUTER = 'f'
+    ANTI = 'a'
+    SEMI = 's'
 
     def __init__(self, op, position=SUBJECT, join=INNER):
         self.op = op
@@ -743,7 +748,7 @@ class Construct(QueryOp):
         self.shape = shape
 
     def appendArg(self, op):
-        assert isinstance(op, QueryOp)
+        assert isinstance(op, QueryOp), op
         if not isinstance(op, (ConstructSubject, ConstructProp)):
             op = ConstructProp(None, op)
         super(Construct, self).appendArg(op)

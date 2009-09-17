@@ -2,11 +2,12 @@ from jqlAST import *
 import copy
 
 class _ParseState(object):
-    def __init__(self):
+    def __init__(self, parseEnv):
         self.labeledjoins = {}
         self.labeledjoinorder = []
         self.labelreferences = {}
         self._anonJoinCounter = 0
+        self.T = parseEnv
 
     def addLabeledJoin(self, name, join):
         if join.name:
@@ -65,19 +66,19 @@ class _ParseState(object):
                 #(but we skip project(0) -- no reason to join)
                 for child in prop.depthfirst(
                  descendPredicate=lambda op: not isinstance(op, (ResourceSetOp, Construct))):
-                    if isinstance(child, Project) and child.name != '*' and child.fields != [SUBJECT]:                            
+                    if isinstance(child, Project) and child.name != '*' and child.fields != [SUBJECT]:
+                        if prop.ifEmpty == PropShape.omit:
+                            child.maybe = True                                              
                         if not left:                            
                             left = copy.copy( child )
                         else:
                             assert child
                             left = And(left, copy.copy( child ))
     
-                #XXX: handle outer joins:
-                #if prop.ifEmtpy == PropShape.omit:
-                #    jointype = JoinConditionOp.RIGHTOUTER
-                #else:
-                #    jointype = JoinConditionOp.INNER
-                #join.appendArg(JoinConditionOp(filter, SUBJECT,jointype))
+                #treat ommittable properties as outer joins:
+                if prop.ifEmpty == PropShape.omit:
+                    for a in prop.args:
+                        a.maybe = True
         
         if groupby:
             project = copy.copy(groupby.args[0])
@@ -125,7 +126,7 @@ class _ParseState(object):
             #sort by order of labeled join appearence
             #XXX is that enough for correctness? what about sibling joins?
             conditions.sort(key=labelkey)        
-            for label, (op, pred) in conditions:
+            for label, (op, pred), joinType in conditions:
                 labeledjoin = labeledjoins.get(label)
                 if not labeledjoin:
                     if label in skipped:
@@ -146,7 +147,7 @@ class _ParseState(object):
                         #print 'op moved', op
                         #print 'to', labeledjoin
                         self.joinMoved(op, op.parent, labeledjoin)                    
-                    labeledjoin.appendArg(JoinConditionOp(op, pred))
+                    labeledjoin.appendArg(JoinConditionOp(op, pred, join=joinType))
                     #print 'from', from_
                 currentjoin = labeledjoin
     
@@ -240,14 +241,6 @@ class _ParseState(object):
         We also need to make sure that filter which apply individual statements
         (id, property, value) triples appear before filters that apply to more than
         one statement and so operate on the simple filter results.
-    
-        filters to test:
-        foo = (?a or ?b)
-        foo = (a or b)
-        foo = (?a and ?b)
-        foo = (a and b)
-        foo = {c='c'}
-        foo = ({c='c'} and ?a)
         '''
         cmproots = []
         to_visit = []
@@ -261,13 +254,14 @@ class _ParseState(object):
             parent, v = to_visit.pop()
             if id(v) not in visited:
                 visited.add( id(v) )
-    
+                                                
                 notcount = 0
                 while isinstance(v, Not):
                     notcount += 1
                     assert len(v.args) == 1
                     v = v.args[0]
                 
+                #map And and Or to Join and Union
                 optype = self.logicalops.get(type(v))
                 if optype:
                     if notcount % 2: #odd # of nots
@@ -300,6 +294,12 @@ class _ParseState(object):
         for parent, root in cmproots:
             #first add filter or join conditions that correspond to the columnrefs
             #(projections) that appear in the expression
+
+            if root.maybe:
+                #jointype needs to be applied to all join conditions
+                joinType = JoinConditionOp.LEFTOUTER
+            else:
+                joinType = JoinConditionOp.INNER
     
             #look for Project ops but don't descend into ResourceSetOp (Join) ops
             projectops = []
@@ -344,7 +344,7 @@ class _ParseState(object):
                         if parentjoin and childjoin:
                             joincond = (childjoin, b.name) #(op to join with, join pred)
                             labelreferences.setdefault(parentjoin, []).append(
-                                                (b.name, joincond) )
+                                                (b.name, joincond, joinType) )
                         else:
                             #XXX handle the case where joins that the labels are 
                             #associated with have not been encountered yet  
@@ -359,6 +359,7 @@ class _ParseState(object):
                     child = ops[0] #XXX need to worry about expressions like foo(?a, ?a) ?
                     if root == Eq(Project(SUBJECT), Label(child.name)):
                         #its a declaration like id = ?label
+                        #XXX need to worry about outer join? 
                         self.addLabeledJoin(labelname, parent)                        
                     else: #label reference
                         child.__class__ = Constant #hack so label is treated as independant
@@ -375,7 +376,7 @@ class _ParseState(object):
                         Project(SUBJECT)._mutateOpToThis(child)
                         #print 'adding labelref', labelname, 'joincond', joincond, 'parent', parent
                         labelreferences.setdefault(parent, []).append(
-                                                            (labelname, joincond) )
+                                                            (labelname, joincond, joinType) )
                     skipRoot = True #don't include this root in this join
     
             #try to consolidate the projection filters into root filter.
@@ -384,10 +385,10 @@ class _ParseState(object):
                 consolidateFilter(filter, projectops)
 
             for (project, projectop) in projectops:
-                parent.appendArg(projectop)
+                parent.appendArg(JoinConditionOp(projectop, join=joinType))
 
             if not skipRoot:
-                parent.appendArg( filter )
+                parent.appendArg( JoinConditionOp(filter, join=joinType) )
     
         #XXX remove no-op and redundant filters
         assert newexpr
