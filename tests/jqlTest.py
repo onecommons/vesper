@@ -246,7 +246,6 @@ t('''{
 [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
 {'id': '_:2'}, {'id': '_:1'}])
 
-#XXX fails because notthere is evaluated before foo and there's no 
 t('''{
  omitnull(
    foo,
@@ -257,6 +256,24 @@ t('''{
 [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
 {'id': '_:2'}, {'id': '_:1'}]
 )
+
+#test list construction
+t('''[
+ foo,
+ omitnull(
+   notthere
+ )
+]
+''',
+[['bar'], ['bar']])
+
+t('''[
+ omitnull(
+   foo,
+ )
+]
+''',
+[['bar'], ['bar'], [], []])
 
 #XXX join from foo property masks outer join 
 skip('''{
@@ -823,16 +840,30 @@ class JQLTestCase(unittest.TestCase):
 import logging
 logging.basicConfig() 
 
+def listgroups():
+    currentgroup = None
+    count = 0
+    for test in flatten(t):
+        count += 1
+        if test.group != currentgroup:
+            if currentgroup: print currentgroup, count
+            currentgroup = test.group
+            count = 0
+
+
 def main(cmdargs=None):
     from optparse import OptionParser
     
     usage = "usage: %prog [options] [group name] [number]"
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
-        ('printdebug', 0), ('printrows', 0), ('quiet',0)]:
+        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
+    if options.listgroups:
+        listgroups()
+        return
     options.num = -1
     options.group = None
     if args and args[0] != 'null':

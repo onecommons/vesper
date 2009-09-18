@@ -438,10 +438,10 @@ def p_arglist(p):
 
 def p_constructitemlist_optional(p):
     """    
-    constructitemlist : constructitemlist COMMA optional
-                      | optional
-    listconstructitemlist : listconstructitemlist COMMA optional
-                          | optional
+    constructitemlist : constructitemlist COMMA dictoptional
+                      | dictoptional
+    listconstructitemlist : listconstructitemlist COMMA listoptional
+                          | listoptional
     """
     if len(p) == 4:
         p[0] = p[1] + p[3]
@@ -519,12 +519,6 @@ def p_constructitem5(p):
     '''
     p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False)
 
-#def p_constructitem6(p):
-#    '''
-#    constructitem : optional
-#    '''
-#    p[0] = p[1]
-
 def p_barecolumnref(p):
     '''barecolumnref : NAME
                     | QNAME
@@ -569,8 +563,10 @@ def p_dictvalue(p):
 
 def p_optional(p):
     '''
-    optional : OMITNULL LPAREN constructitemlist RPAREN
+    dictoptional : OMITNULL LPAREN constructitemlist RPAREN
              | OMITNULL LPAREN constructitemlist COMMA RPAREN
+    listoptional : OMITNULL LPAREN listconstructitemlist RPAREN
+             | OMITNULL LPAREN listconstructitemlist COMMA RPAREN
     '''
     for i, prop in enumerate(p[3]):
         if isinstance(prop, ConstructSubject):
@@ -635,11 +631,8 @@ def p_listconstruct(p):
 def p_listconstructitem(p):
     '''
     listconstructitem : expression
-                      | optional
     '''
-    #XXX should dictvalue:
-    #p[0] = makeConstructProp(None, p[1], False)
-    p[0] = p[1]
+    p[0] = _makeConstructProp(None, p[1], False)
 
 def p_error(p):
     #print "p_error:", p.lexpos, p.lineno, p.type, p.value
