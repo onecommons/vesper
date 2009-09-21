@@ -724,6 +724,71 @@ class Union(RxPath.Tupleset):
             t.explain(out,indent)
 
 #############################################################
+################ Query Functions ############################
+#############################################################
+
+class QueryFuncs(object):
+
+    SupportedFuncs = {
+        (EMPTY_NAMESPACE, 'true') :
+          jqlAST.QueryFuncMetadata(lambda *args: True, BooleanType, None, True,
+                            lambda *args: 0),
+        (EMPTY_NAMESPACE, 'false') :
+          jqlAST.QueryFuncMetadata(lambda *args: False, BooleanType, None, True,
+                            lambda *args: 0),
+    }
+
+    def addFunc(self, name, func, type=None, cost=None, needsContext=False):
+        if isinstance(name, (unicode, str)):
+            name = (EMPTY_NAMESPACE, name)
+        if cost is None or callable(cost):
+            costfunc = cost
+        else:
+            costfunc = lambda *args: cost
+        self.SupportedFuncs[name] = jqlAST.QueryFuncMetadata(func, type, 
+                            costFunc=costfunc, needsContext=needsContext)
+
+    def getOp(self, name, *args):
+        if isinstance(name, (unicode, str)):
+            name = (EMPTY_NAMESPACE, name)
+        funcMetadata = self.SupportedFuncs[name]
+        return funcMetadata.opFactory(name,funcMetadata,*args)
+
+    def __init__(self):
+        #add basic functions
+        self.addFunc('add', lambda a, b: float(a)+float(b), NumberType)
+        self.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
+        self.addFunc('mul', lambda a, b: float(a)*float(b), NumberType)
+        self.addFunc('div', lambda a, b: float(a)/float(b), NumberType)
+        self.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
+        self.addFunc('negate', lambda a: -float(a), NumberType)
+
+def recurse(context, startid, propname=None):
+    '''
+    Starting with the given id, follow the given property
+    '''
+    #XXX expand propname
+    #XXX add unittest for circularity
+    tovisit = [startid]
+
+    def getRows():
+        while tovisit:
+            startid = tovisit.pop()
+            yield [startid]            
+            for row in context.initialModel.filter({0:startid, 1:propname}):
+                obj = row[2]
+                if obj not in tovisit:
+                    yield [obj]
+                    tovisit.append(obj)
+
+    columns = [ColumnInfo('', object)]
+    return SimpleTupleset(getRows, columns=columns, op='recurse', hint=startid, debug=context.debug)
+
+def isBnode(context, v):    
+    return hasattr(v, 'startswith') and (
+                v.startswith(context.initialModel.bnodePrefix))
+
+#############################################################
 ################ Evaluation Engine ##########################
 #############################################################
 
@@ -802,6 +867,11 @@ def _getList(idvalue, rows):
 
 class SimpleQueryEngine(object):
     
+    queryFunctions = QueryFuncs() 
+    queryFunctions.addFunc('recurse', recurse, Tupleset, needsContext=True)
+    queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
+    queryFunctions.addFunc('isref', lambda a: a and True or False, BooleanType)
+
     def evalSelect(self, op, context):
         if op.where:
             context.currentTupleset = op.where.evaluate(self, context)
@@ -1088,7 +1158,7 @@ class SimpleQueryEngine(object):
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
             #tmpop = jqlAST.JoinConditionOp(
             #    jqlAST.Filter(jqlAST.Not(
-            #        jqlAST.getQueryFuncOp('isbnode', jqlAST.Project(0)))))
+            #        self.queryFunctions.getOp('isbnode', jqlAST.Project(0)))))
             tmpop.parent = op
             args.insert(0, tmpop)
         
@@ -1267,9 +1337,9 @@ class SimpleQueryEngine(object):
         if handleNil and v == RDF_MS_BASE+'nil': 
             #special case to force empty list
             return []
-        refFunc = jqlAST.getQueryFuncOp('isref')
+        refFunc = self.queryFunctions.getOp('isref')
         isref = refFunc.execFunc(context, v)    
-        bnodeFunc = jqlAST.getQueryFuncOp('isbnode') 
+        bnodeFunc = self.queryFunctions.getOp('isbnode') 
         isbnode = bnodeFunc.execFunc(context, v)           
         if ( (isref and context.depth > 0) or isbnode 
                             and v not in context.constructStack):
@@ -1483,32 +1553,3 @@ class SimpleQueryEngine(object):
         return 1
         return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
 
-def recurse(context, startid, propname=None):
-    '''
-    Starting with the given id, follow the given property
-    '''
-    #XXX expand propname
-    #XXX add unittest for circularity
-    tovisit = [startid]
-
-    def getRows():
-        while tovisit:
-            startid = tovisit.pop()
-            yield [startid]            
-            for row in context.initialModel.filter({0:startid, 1:propname}):
-                obj = row[2]
-                if obj not in tovisit:
-                    yield [obj]
-                    tovisit.append(obj)
-
-    columns = [ColumnInfo('', object)]
-    return SimpleTupleset(getRows, columns=columns, op='recurse', hint=startid, debug=context.debug)
-
-jqlAST.addQueryfunc('recurse', recurse, Tupleset, needsContext=True)
-
-def isBnode(context, v):    
-    return hasattr(v, 'startswith') and (
-                v.startswith(context.initialModel.bnodePrefix))
-                    
-jqlAST.addQueryfunc('isbnode', isBnode, BooleanType, needsContext=True)
-jqlAST.addQueryfunc('isref', lambda a: a and True or False, BooleanType)

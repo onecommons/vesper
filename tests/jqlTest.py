@@ -10,6 +10,7 @@ import jql.engine
 #aliases for convenience
 jc = JoinConditionOp
 cs = ConstructSubject
+qF = jql.engine.SimpleQueryEngine.queryFunctions
 def cp(name, *args, **kw):
     #print 'cp', name, args
     if not args:
@@ -83,27 +84,22 @@ t.model = modelFromJson([
         { "id" : "3", "foo" : "bar"}
     ])
 
+#XXX: consider that unreferenced anonymous object are left out of results
+#XXX: consider that an id'd object with no properties is left out
+
 t.group = 'smoke'
 t('''
 [*]
 ''',
-[['bar'], ['bar'], ['1', '2'], ['1', '3']]
+[['bar'], ['bar']]
 )
-
-#XXX: AssertionError: cant find 0 in SimpleTupleset 0xd6c650 for group by '#0' [ColInfo('', <type 'object'>), ColInfo('#0', MutableTupleset[])]
-skip('''
-{
-groupby('id', display=merge)
-}
-''')
 
 t('{*}',
 [{'foo': 'bar', 'id': '3'},
- {'foo': 'bar', 'id': '2'},
- {'child': '2', 'id': '_:2', 'parent': '1'},
- {'child': '3', 'id': '_:1', 'parent': '1'}])
+ {'foo': 'bar', 'id': '2'}
+])
 
-t('''{ * where (foo > 'bar') }''')
+t('''{ * where ( foo > 'bar') }''', [])
 
 #   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
@@ -441,6 +437,14 @@ t.model = modelFromJson([
 ])
 
 t.group = 'groupby'
+
+#XXX: AssertionError: cant find 0 in SimpleTupleset 0xd6c650 for group by '#0' [ColInfo('', <type 'object'>), ColInfo('#0', MutableTupleset[])]
+skip('''
+{
+groupby('id', display=merge)
+}
+''')
+
 # XXX * is broken: need evalProject not to assume id is SUBJECT
 skip('''{
 *,  
@@ -529,7 +533,7 @@ skip(ast=
 Select(Construct([cp(Project('*'))]),
 Join(
     JoinConditionOp(
-      Filter(In(Project(0), jql.jqlAST.qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
+      Filter(In(Project(0), qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
           ),               
      JoinConditionOp(
       Join(
@@ -551,7 +555,7 @@ Join(
     JoinConditionOp(
       Join(
         JoinConditionOp(
-            Filter(In(Project(0), jql.jqlAST.qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
+            Filter(In(Project(0), qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
                        )
         ,name='@1') 
         ,'subject')
@@ -725,9 +729,7 @@ t('''{*}''',
     { 'id' : '4',
        'values' : [1,'1',1.1]
     },
-#shouldn't be here:
-{'prop1': 'bar', 'prop2': None, 'prop3': False, 'prop4': '', 'prop5': 0},
- {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}]
+ ]
 )
 
 t('''{
@@ -795,11 +797,7 @@ t.model = modelFromJson([
     ])
 
 t('{*}',
-[[[]],
- [{'foo': 'bar'}, 'another'],
- ['double nested'],
- [['double nested']],
- [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
+[
  {'id': '1',
   'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']],
   'listprop2': [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
@@ -809,8 +807,7 @@ t('{*}',
   'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1],
   'listprop2': [[['double nested']]],
   'listprop3': [],
-  'listprop4': [[]]},
- {'foo': 'bar'}
+  'listprop4': [[]]}
 ])
 
 t('{ "listprop" : listprop}',

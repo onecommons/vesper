@@ -178,23 +178,9 @@ def t_NEWLINE(t):
 # Completely ignored characters
 t_ignore = ' \t\x0c'
 
-lexer = ply.lex.lex(errorlog=errorlog) #, debug=1) #, optimize=1)
+#lexer = ply.lex.lex(errorlog=errorlog, optimize=1) #, debug=1) 
 
 # Parsing rules
-
-def _YaccProduction_getattr__(self, name):
-    if name == 'jqlState':
-        import jql.rewrite
-        parseState = jql.rewrite._ParseState(T)
-        self.jqlState = parseState
-        return parseState
-    else:
-        raise AttributeError, name
-
-#there doesn't seem to be an decent way to store glabal parse state
-#so monkey patch the "p" so that a state object is created upon first reference
-assert not hasattr(ply.yacc.YaccProduction,'__getattr__')
-ply.yacc.YaccProduction.__getattr__ = _YaccProduction_getattr__
 
 def resolveQNames(nsmap, root):
     for c in root.depthfirst(descendPredicate=
@@ -218,7 +204,7 @@ def p_root(p):
     #we're when done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     labeledjoins = {}
-    for label, joins in p.jqlState.labeledjoins.items():
+    for label, joins in p.parser.jqlState.labeledjoins.items():
         if not joins:
             continue
         #construct that only have id labels will not have a join
@@ -232,10 +218,12 @@ def p_root(p):
         firstjoin.name = label 
     #print 'labeledjoins', labeledjoins
     #print 'refs', p.jqlState.labelreferences
-    p.jqlState._buildJoinsFromReferences(labeledjoins)
-    if not p[0].where:
-        p[0].appendArg( Join() )
-    #print 'root where', p[0].where
+    p.parser.jqlState._buildJoinsFromReferences(labeledjoins)
+    if not p[0].where or not p[0].where.args:        
+        p[0].appendArg( Join(Filter(Not(
+            p.parser.qF.getOp('isbnode',Project(0)))
+            )) 
+        )
 
 def p_construct(p):
     '''
@@ -269,8 +257,8 @@ def p_construct(p):
             raise QueryException("bad group by expression")
                 
         defaults['groupby'] = groupby = GroupBy(arg)
-
-    where = defaults['where'] = p.jqlState._joinFromConstruct(op, defaults['where'], groupby)
+    
+    where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, defaults['where'], groupby)
     #XXX add support for ns constructop    
     
     p[0] = Select(op, **defaults)
@@ -323,13 +311,14 @@ def p_expression_binop(p):
               | expression AND expression
               | expression OR expression
     """
-    p[0] = _opmap[p[2].upper()](p[1], p[3])
+    op = _mapOp(p[2].upper(), p.parser.qF)
+    p[0] = op(p[1], p[3])
 
 def p_expression_uminus(p):
     '''expression : MINUS expression %prec UMINUS
                   | PLUS expression %prec UPLUS'''
     if p[1] == '-':
-        p[0] = qF.getOp('negate',p[2])
+        p[0] = p.parser.qF.getOp('negate',p[2])
     else:
         p[0] = p[2]
 
@@ -410,7 +399,7 @@ def p_funcname(p):
 def p_funccall(p):
     "funccall : funcname LPAREN arglist RPAREN"
     try:
-        p[0] = qF.getOp(p[1], *p[3])
+        p[0] = p.parser.qF.getOp(p[1], *p[3])
     except KeyError:
         msg = "unknown function " + p[1]
         p[0] = ErrorOp(p[3], msg)
@@ -479,7 +468,7 @@ def p_keyword_argument(p):
 def p_join(p):
     "join : LBRACE expression RBRACE"
     try:
-        p[0] = p.jqlState.makeJoinExpr(p[2])
+        p[0] = p.parser.jqlState.makeJoinExpr(p[2])
     except QueryException, e:
         import traceback
         traceback.print_exc()#file=sys.stdout)
@@ -645,37 +634,85 @@ def p_empty(p):
     'empty :'
     pass
 
-parser = ply.yacc.yacc(start="root", errorlog=errorlog)#, debug=True)
+#parser = ply.yacc.yacc(start="root", errorlog=errorlog, optimize=1)#, debug=True)
 
 ####parse-tree-to-ast mapping ####
+def _mapOp(op, qF):
+    _opmap = {
+    "AND" : And,
+    "OR" : Or,
+    "NOT" : Not,
+    "IN" : In,
+    "=" : Eq,
+    "==" : Eq,
+    '!=' : lambda *args: Not(Eq(*args)),
+    '<' : lambda *args: Cmp('<',*args),
+    '>' : lambda *args: Cmp('>',*args),
+    '<=' : lambda *args: Cmp('<=',*args),
+    '>=' : lambda *args: Cmp('>=',*args),
+    '+' : lambda *args: qF.getOp('add',*args),
+    '-' : lambda *args: qF.getOp('sub',*args),
+    '*' : lambda *args: qF.getOp('mul',*args),
+    '/' : lambda *args: qF.getOp('div',*args),
+    '%' : lambda *args: qF.getOp('mod',*args),
+    }
+    return _opmap[op]
 
-_opmap = {
-"AND" : And,
-"OR" : Or,
-"NOT" : Not,
-"IN" : In,
-"=" : Eq,
-"==" : Eq,
-'!=' : lambda *args: Not(Eq(*args)),
-'<' : lambda *args: Cmp('<',*args),
-'>' : lambda *args: Cmp('>',*args),
-'<=' : lambda *args: Cmp('<=',*args),
-'>=' : lambda *args: Cmp('>=',*args),
-'+' : lambda *args: qF.getOp('add',*args),
-'-' : lambda *args: qF.getOp('sub',*args),
-'*' : lambda *args: qF.getOp('mul',*args),
-'/' : lambda *args: qF.getOp('div',*args),
-'%' : lambda *args: qF.getOp('mod',*args),
-}
+def buildparser():
+    try:
+        import jql.lextab
+        lextab=jql.lextab
+    except ImportError:
+        print 'Warning: jql.lextab not found, generating local lextab.py'
+        lextab = 'lextab'
+        
+    lexer = ply.lex.lex(errorlog=errorlog, lextab=lextab, optimize=1) #, debug=1)     
 
-def parse(query, debug=False):
-    lexer.lineno = 1 # doesn't seem to be any way to reset the lexer?
+    try:
+        import jql.parsetab
+        tabmodule=jql.parsetab
+    except ImportError:
+        print 'Warning: jql.parsetab not found, generating local parsetab.py'
+        tabmodule = 'parsetab'
+
+    try:
+        parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)
+    except AttributeError:
+        #yacc.write_table throws AttributeError: 'module' object has no attribute 'split'
+        #because its expecting a string not a module
+        #this happens when the jql.parsetab is out of data
+        tabmodule = 'parsetab'
+        print 'Warning: jql.parsetab was out of date, generating local parsetab.py'
+        parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)
+
+    return lexer, parser
+
+#each thread needs its own lexer and parser
+import threading
+threadlocals = threading.local()
+
+def parse(query, functions, debug=False):
+    try:
+        lexer = threadlocals.lexer
+        parser= threadlocals.parser
+    except AttributeError:
+        #create a new parser for this thread
+        lexer, parser = buildparser()
+        threadlocals.lexer, threadlocals.parser = lexer, parser
+        
+    lexer.lineno = 1 #XXX report ply bug: there doesn't seem to be any way to reset the lexer?
     
     # create a new log handler per-parse to capture messages (should be threadsafe)
     log_messages = LogCaptureHandler(10)
     errorlog.addHandler(log_messages)    
     try:
-        r = parser.parse(query,tracking=True, debug=debug)
+        import jql.rewrite
+        parseState = jql.rewrite._ParseState(T)        
+        parser.jqlState = parseState
+        parser.qF = functions
+        
+        #XXX only turn tracking on if there's an error
+        r = parser.parse(query,lexer, tracking=True, debug=debug)
         # log messages should be safe to serialize
         msgs = ["%s: %s" % (tmp.levelname, tmp.getMessage()) for tmp in log_messages.buffer]
         return (r, msgs)

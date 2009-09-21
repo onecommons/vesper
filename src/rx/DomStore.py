@@ -158,6 +158,11 @@ class BasicStore(DomStore):
         if isinstance(self.schema, RxPath.Model):
             self.model = self.schema
 
+        #hack!
+        if self.storageTemplateOptions and self.storageTemplateOptions.get(
+                                            'generateBnode') == 'counter':
+            model.bnodePrefix = '_:'
+
     def setupHistory(self, source):
         requestProcessor = self.requestProcessor
         if self.saveHistory:
@@ -203,7 +208,7 @@ class BasicStore(DomStore):
         else:
             model = None
             lastScope = None
-            
+        
         return model, defaultStmts, revisionModel, lastScope
 
     def isDirty(self, txnService):

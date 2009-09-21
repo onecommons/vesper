@@ -121,8 +121,8 @@ def getResults(query, model, addChangeMap=False):
 
 def buildAST(query):
     "parse a query, returning (ast, [error messages])"
-    from jql import parse
-    return parse.parse(query)
+    from jql import parse, engine
+    return parse.parse(query, engine.SimpleQueryEngine.queryFunctions)
     
 def evalAST(ast, model, bindvars=(), explain=None, debug=False):
     #rewriteAST(ast)

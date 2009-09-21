@@ -567,47 +567,6 @@ class QueryFuncMetadata(object):
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
-class QueryFuncs(object):
-
-    SupportedFuncs = {
-        (EMPTY_NAMESPACE, 'true') :
-          QueryFuncMetadata(lambda *args: True, BooleanType, None, True,
-                            lambda *args: 0),
-        (EMPTY_NAMESPACE, 'false') :
-          QueryFuncMetadata(lambda *args: False, BooleanType, None, True,
-                            lambda *args: 0),
-    }
-
-    def addFunc(self, name, func, type=None, cost=None, needsContext=False):
-        if isinstance(name, (unicode, str)):
-            name = (EMPTY_NAMESPACE, name)
-        if cost is None or callable(cost):
-            costfunc = cost
-        else:
-            costfunc = lambda *args: cost
-        self.SupportedFuncs[name] = QueryFuncMetadata(func, type, 
-                            costFunc=costfunc, needsContext=needsContext)
-
-    def getOp(self, name, *args):
-        if isinstance(name, (unicode, str)):
-            name = (EMPTY_NAMESPACE, name)
-        funcMetadata = self.SupportedFuncs[name]
-        return funcMetadata.opFactory(name,funcMetadata,*args)
-        
-qF = QueryFuncs() #todo: SupportedFuncs should be per query engine and schema handler
-qF.addFunc('add', lambda a, b: float(a)+float(b), NumberType)
-qF.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
-qF.addFunc('mul', lambda a, b: float(a)*float(b), NumberType)
-qF.addFunc('div', lambda a, b: float(a)/float(b), NumberType)
-qF.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
-qF.addFunc('negate', lambda a: -float(a), NumberType)
-
-def addQueryfunc(*args, **kw):
-    qF.addFunc(*args, **kw)
-    
-def getQueryFuncOp(name, *args):
-    return qF.getOp(name, *args)
-
 class Project(QueryOp):  
     
     def __init__(self, fields, var=None, constructRefs = False):
