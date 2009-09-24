@@ -1,3 +1,21 @@
+'''
+Test can be added to the test suite by calling:
+ 
+t(query=None, result=None, **kw)
+
+where kw can be one of these (shown with defaults):
+
+ast=None if set, assert ast matches
+rows=None if set, assert intermediate rows match
+skip=False
+skipParse=False don't parse query, use given AST instead
+model=None Execute the query with this model
+name=None name this test 
+group=None add this test to the given group
+
+If any of these attributes are set on `t` they will used as the default value for subsequent calls to `t`. For example, setting `t.model` will apply that model to any test added if the test doesn't specify a model.
+'''
+
 import jql, sjson
 from jql.jqlAST import *
 from rx import RxPath
@@ -20,10 +38,14 @@ def cp(name, *args, **kw):
         kw['nameFunc']=Constant(name)
     return ConstructProp(None, *args, **kw)
 
-def modelFromJson(model):
-    model = sjson.sjson(generateBnode='counter').to_rdf(model)
+_models = {}
+def modelFromJson(modelsrc, modelname=None):
+    model = sjson.sjson(generateBnode='counter').to_rdf(modelsrc)
     model = RxPath.MemModel(model)
     model.bnodePrefix = '_:'
+    if not modelname:
+        modelname = 'model%s' % (len(_models)+1)
+    _models[id(model)] = (modelsrc, modelname)
     return model
 
 '''
@@ -44,7 +66,7 @@ class Test(object):
     def __init__(self, attrs):
         self.__dict__.update(attrs)
 
-class Suite(object):
+class Suite(object):    
     defaults = dict(ast=None, rows=None, result=None, skip=False,
                 skipParse=False, model=None, name=None, query=None, group=None)
 
@@ -88,6 +110,7 @@ t.model = modelFromJson([
 #XXX: consider that an id'd object with no properties is left out
 
 t.group = 'smoke'
+
 t('''
 [*]
 ''',
@@ -101,11 +124,8 @@ t('{*}',
 
 t('''{ * where ( foo > 'bar') }''', [])
 
-#   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
-
 t("{ 'parent' : child }",
 [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
-#   [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
 
 t("{ parent : child }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
@@ -223,6 +243,11 @@ t('''
  )
 
 t.group = 'outer'
+t.groupdoc = '''
+option (outer joins)
+====================
+
+'''
 
 t('''{
  foo,
@@ -732,6 +757,32 @@ t('''{*}''',
  ]
 )
 
+#make sure rows with null values aren't filtered out when proper 
+t('''{ prop3 }''',
+[{'prop3': False}, {'prop3': None}]) 
+
+#XXX shouldn't match null values for next two but it currently does
+skip('''{  prop3 where (prop3) }''', [])
+skip('''{  * where (prop3) }''',[])
+
+#XXX implement exists()
+skip('''{ prop3 where( exists(prop3) ) }''',
+[{'prop3': False}, {'prop3': None}]) 
+
+skip('''{  * where ( exists(prop3) ) }''',
+[{'prop1': 'bar', 'prop2': None, 'prop3': False, 'prop4': '', 'prop5': 0},
+ {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}])
+
+#model = firstmodel
+skip('''
+{
+'foo_or_child' : foo or child
+where (exists(foo) or exists(child)) 
+}
+''', 
+[{'id': '2', 'foo_or_child': 'bar'}, {'id': '_:1', 'foo_or_child': '1'}])
+
+
 t('''{
 values
 }''',[{'id': '1',
@@ -837,6 +888,34 @@ class JQLTestCase(unittest.TestCase):
 import logging
 logging.basicConfig() 
 
+from string import Template
+
+_printedmodels = []
+_lastgroupdoc = None
+def printdocs(test):
+    if not test.doc:
+        return
+    if test.groupdoc and test.groupdoc != _lastgroupdoc:
+        print test.groupdoc
+        _lastgroupdoc = test.groupdoc
+    modelsrc, modelname = _models[id(test.model)]    
+    if id(test.model) in _printedmodels:    
+        createmodel = ''
+    else:
+        _printedmodels.append(id(test.model))
+        modelformatted = pprint.pformat(modelsrc).replace('\n', '\n ... ')  
+        createmodel = Template("""
+ >>> $modelname = raccoon.createStore('''$modelformatted''')
+""").substitute(locals())
+    doc = test.doc
+    result = pprint.pformat(test.results).replace('\n', '\n ')     
+    queryformatted = test.query.replace('\n', '\n ... ')  
+    print Template("""
+$doc$createmodel
+ >>> ${modelname}.query('''$queryformatted''')
+$result
+""").substitute(locals())
+
 def listgroups():
     currentgroup = None
     count = 0
@@ -854,7 +933,7 @@ def main(cmdargs=None):
     usage = "usage: %prog [options] [group name] [number]"
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
-        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0)]:
+        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0), ('printdocs',0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
@@ -908,7 +987,12 @@ def main(cmdargs=None):
             name = '%s %d' % (test.group, groupcount)
         else:
             name = "%d" % i        
-
+        
+        if options.printdocs:
+            options.quiet = True
+            printdocs(test)
+            continue
+        
         if not options.quiet:
             print '*** running test:', name
             print 'query', test.query
@@ -966,6 +1050,7 @@ def main(cmdargs=None):
                                                     debug=options.printdebug))
         else:
             testresults = None
+        
         if not options.quiet:        
             print "Construct Results:"
             pprint.pprint(testresults)

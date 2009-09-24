@@ -751,7 +751,11 @@ class QueryFuncs(object):
     def getOp(self, name, *args):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
+        funcMetadata = self.SupportedFuncs.get(name)
+        if not funcMetadata:
+            raise QueryException('query function not defined: ' + str(name))
         funcMetadata = self.SupportedFuncs[name]
+        
         return funcMetadata.opFactory(name,funcMetadata,*args)
 
     def __init__(self):
@@ -762,6 +766,7 @@ class QueryFuncs(object):
         self.addFunc('div', lambda a, b: float(a)/float(b), NumberType)
         self.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
         self.addFunc('negate', lambda a: -float(a), NumberType)
+        self.addFunc('bool', lambda a: bool(a), BooleanType)
 
 def recurse(context, startid, propname=None):
     '''
@@ -1125,10 +1130,7 @@ class SimpleQueryEngine(object):
     def evalJoin(self, op, context):
         return self._evalJoin(op, context)
 
-    #def evalExcept(self, op, context):                
-        #Note: actually an antijoin not except: doesn't compare whole row,
-        #just join key
-        #anit-join (?id in not { foo = 1})
+    #def evalNotExists(self, op, context):                
     #    return self._evalJoin(op, context, 'a')
 
     #def evalSemiJoin(self, op, context):
@@ -1260,7 +1262,7 @@ class SimpleQueryEngine(object):
                 continue
             value = other.evaluate(self, context)
             simplefilter[proj.name] = value
-            complexargs.pop()
+            complexargs.pop()        
         return simplefilter, complexargs
 
     def evalFilter(self, op, context):
@@ -1530,6 +1532,39 @@ class SimpleQueryEngine(object):
 
     def costNot(self, op, context):
         return 1
+
+    def evalOr(self, op, context):
+        '''
+        Return left value if left evaluates to true, otherwise return right value.
+        '''
+        left = op.args[0]
+        lvalue = left.evaluate(self, context)
+        if lvalue:
+            return lvalue
+        right = op.args[1]
+        rvalue = right.evaluate(self, context)
+        return rvalue
+        
+    def costOr(self, op, context):
+        return 1
+        return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
+
+    def evalAnd(self, op, context):
+        '''
+        Return right value if both left and right are true otherwise return False
+        '''
+        left = op.args[0]
+        lvalue = left.evaluate(self, context)
+        right = op.args[1]
+        rvalue = right.evaluate(self, context)
+        if lvalue and rvalue:
+            return rvalue
+        else:
+            return False
+        
+    def costAnd(self, op, context):
+        return 1
+        return reduce(operator.add, [a.cost(self, context) for a in op.args], 0.0)
 
     def evalIn(self, op, context):
         left = op.args[0]

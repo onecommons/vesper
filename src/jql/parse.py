@@ -221,7 +221,7 @@ def p_root(p):
     p.parser.jqlState._buildJoinsFromReferences(labeledjoins)
     if not p[0].where or not p[0].where.args:        
         p[0].appendArg( Join(Filter(Not(
-            p.parser.qF.getOp('isbnode',Project(0)))
+            p.parser.jqlState.getFuncOp('isbnode',Project(0)))
             )) 
         )
 
@@ -311,14 +311,14 @@ def p_expression_binop(p):
               | expression AND expression
               | expression OR expression
     """
-    op = _mapOp(p[2].upper(), p.parser.qF)
+    op = p.parser.jqlState.mapOp(p[2].upper())
     p[0] = op(p[1], p[3])
 
 def p_expression_uminus(p):
     '''expression : MINUS expression %prec UMINUS
                   | PLUS expression %prec UPLUS'''
     if p[1] == '-':
-        p[0] = p.parser.qF.getOp('negate',p[2])
+        p[0] = p.parser.jqlState.getFuncOp('negate',p[2])
     else:
         p[0] = p[2]
 
@@ -399,7 +399,7 @@ def p_funcname(p):
 def p_funccall(p):
     "funccall : funcname LPAREN arglist RPAREN"
     try:
-        p[0] = p.parser.qF.getOp(p[1], *p[3])
+        p[0] = p.parser.jqlState.getFuncOp(p[1], *p[3])
     except KeyError:
         msg = "unknown function " + p[1]
         p[0] = ErrorOp(p[3], msg)
@@ -637,27 +637,6 @@ def p_empty(p):
 #parser = ply.yacc.yacc(start="root", errorlog=errorlog, optimize=1)#, debug=True)
 
 ####parse-tree-to-ast mapping ####
-def _mapOp(op, qF):
-    _opmap = {
-    "AND" : And,
-    "OR" : Or,
-    "NOT" : Not,
-    "IN" : In,
-    "=" : Eq,
-    "==" : Eq,
-    '!=' : lambda *args: Not(Eq(*args)),
-    '<' : lambda *args: Cmp('<',*args),
-    '>' : lambda *args: Cmp('>',*args),
-    '<=' : lambda *args: Cmp('<=',*args),
-    '>=' : lambda *args: Cmp('>=',*args),
-    '+' : lambda *args: qF.getOp('add',*args),
-    '-' : lambda *args: qF.getOp('sub',*args),
-    '*' : lambda *args: qF.getOp('mul',*args),
-    '/' : lambda *args: qF.getOp('div',*args),
-    '%' : lambda *args: qF.getOp('mod',*args),
-    }
-    return _opmap[op]
-
 def buildparser():
     try:
         import jql.lextab
@@ -707,9 +686,8 @@ def parse(query, functions, debug=False):
     errorlog.addHandler(log_messages)    
     try:
         import jql.rewrite
-        parseState = jql.rewrite._ParseState(T)        
+        parseState = jql.rewrite._ParseState(functions)        
         parser.jqlState = parseState
-        parser.qF = functions
         
         #XXX only turn tracking on if there's an error
         r = parser.parse(query,lexer, tracking=True, debug=debug)

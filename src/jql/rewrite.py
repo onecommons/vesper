@@ -2,12 +2,36 @@ from jqlAST import *
 import copy
 
 class _ParseState(object):
-    def __init__(self, parseEnv):
+    def __init__(self, functions):
         self.labeledjoins = {}
         self.labeledjoinorder = []
         self.labelreferences = {}
         self._anonJoinCounter = 0
-        self.T = parseEnv
+        self.functions = functions
+
+    def mapOp(self, op):
+        _opmap = {
+        "AND" : And,
+        "OR" : Or,
+        "NOT" : Not,
+        "IN" : In,
+        "=" : Eq,
+        "==" : Eq,
+        '!=' : lambda *args: Not(Eq(*args)),
+        '<' : lambda *args: Cmp('<',*args),
+        '>' : lambda *args: Cmp('>',*args),
+        '<=' : lambda *args: Cmp('<=',*args),
+        '>=' : lambda *args: Cmp('>=',*args),
+        '+' : lambda *args: self.getFuncOp('add',*args),
+        '-' : lambda *args: self.getFuncOp('sub',*args),
+        '*' : lambda *args: self.getFuncOp('mul',*args),
+        '/' : lambda *args: self.getFuncOp('div',*args),
+        '%' : lambda *args: self.getFuncOp('mod',*args),
+        }
+        return _opmap[op]
+
+    def getFuncOp(self, name, *args):
+        return self.functions.getOp(name, *args)
 
     def addLabeledJoin(self, name, join):
         if join.name:
@@ -69,11 +93,12 @@ class _ParseState(object):
                     if isinstance(child, Project) and child.name != '*' and child.fields != [SUBJECT]:
                         if prop.ifEmpty == PropShape.omit:
                             child.maybe = True                                              
+                        cchild = copy.copy( child )
                         if not left:                            
-                            left = copy.copy( child )
+                            left = cchild
                         else:
                             assert child
-                            left = And(left, copy.copy( child ))
+                            left = And(left, cchild )
     
                 #treat ommittable properties as outer joins:
                 if prop.ifEmpty == PropShape.omit:
@@ -327,6 +352,14 @@ class _ParseState(object):
                     if child is root:
                         #don't include bare Project as filter, projectops should take of that
                         skipRoot = True
+                        #XXX enable this but we need to implement EXIST() 
+                        #and _joinFromConstruct use exists instead of a raw Project
+                        #because we don't want to filter out False values
+                        #if isinstance(projectop, Filter):
+                            #this was bare reference to a property field
+                            #we want this to only include rows when the property value evaluates to true
+                        #    assert len(child.fields) == 1 and not child.varref
+                        #    projectop.appendArg(self.getFuncOp('bool', Project(PROPERTY) ))
                 elif isinstance(child, Label):
                     labels.setdefault(child.name,[]).append(child)
 
