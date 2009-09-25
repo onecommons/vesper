@@ -54,7 +54,7 @@ import ply.yacc
 #### TOKENS
 ###########
 
-reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NS',
+reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NS', 'ASC', 'DESC',
            'ID', 'OMITNULL', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH','GROUPBY', 'ORDERBY')
 
 tokens = reserved + (
@@ -242,7 +242,7 @@ def p_construct(p):
     op = Construct(props, shape)
 
     defaults = dict(where = None, ns = {}, offset = None, limit = None,
-                    groupby = None, depth=None)
+                    groupby = None, depth=None, orderby=None)
     if len(p[1]) > 1 and p[1][1]:
         for constructop in p[1][1]:
             defaults[ constructop[0].lower() ] = constructop[1]
@@ -419,6 +419,8 @@ def p_arglist(p):
                       | constructop
     listconstructitemlist : listconstructitemlist COMMA listconstructitem
                           | listconstructitem
+    sortexplist : sortexplist COMMA sortexp
+                 | sortexp
     """
     if len(p) == 4:
         p[0] = p[1] + [p[3]]
@@ -450,6 +452,7 @@ def p_arglist_empty(p):
     constructitemlist : empty
     constructoplist : empty
     listconstructitemlist : empty
+    sortexplist : empty
     """
     p[0] = []
 
@@ -569,7 +572,6 @@ def p_constructop1(p):
     '''
     constructop : WHERE LPAREN expression RPAREN
                 | GROUPBY LPAREN arglist RPAREN
-                | ORDERBY LPAREN arglist RPAREN
                 | NS LPAREN arglist RPAREN
     '''
     p[0] = T.constructop(p[1], p[3])
@@ -588,6 +590,25 @@ def p_constructop3(p):
     '''
     p[4].maybe = True
     p[0] = T.constructop(p[1], p[4])
+
+def p_constructop4(p):
+    '''
+    constructop : ORDERBY LPAREN sortexplist RPAREN
+    '''
+    p[0] = OrderBy(p[3])
+
+def p_orderbyexp_1(p):
+    '''
+    sortexp : expression
+            | expression ASC
+    '''
+    p[0] = SortExp(p[1])
+
+def p_orderbyexp_2(p):
+    '''
+    sortexp : expression DESC
+    '''
+    p[0] = SortExp(p[1], True)
     
 def p_dictconstruct(p):
     '''

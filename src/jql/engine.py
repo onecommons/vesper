@@ -1093,7 +1093,7 @@ class SimpleQueryEngine(object):
 
         #columns = [ColumnInfo('construct', object)]            
         return SimpleTupleset(construct, hint=tupleset, op='construct', #columns=columns, 
-                                        columns=columns, debug=context.debug)
+                                                    debug=context.debug)
     
     def evalGroupBy(self, op, context):
         tupleset = context.currentTupleset

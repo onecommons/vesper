@@ -732,10 +732,10 @@ class OrderBy(QueryOp):
         self.args = []
         for arg in args:
             if not isinstance(arg, OrderExp):
-                arg = OrderExp(arg)
+                arg = SortExp(arg)
             self.appendArg(arg)
 
-class OrderExp(QueryOp):    
+class SortExp(QueryOp):    
     def __init__(self, expression, desc=False):
         self.exp = expression
         self.asc = not desc
