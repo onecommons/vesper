@@ -147,6 +147,7 @@ class QueryContext(object):
         self.debug=debug
         self.depth=depth
         self.constructStack = []
+        self.engine = None
 
     def __copy__(self):
         copy = QueryContext(self.initialModel, self.ast, self.explain, 
@@ -155,6 +156,7 @@ class QueryContext(object):
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow
         copy.constructStack = self.constructStack
+        copy.engine = self.engine
         return copy
 
     def __repr__(self):

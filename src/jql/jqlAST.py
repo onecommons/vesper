@@ -557,13 +557,14 @@ class QueryFuncMetadata(object):
       }
 
     def __init__(self, func, type=None, opFactory=None, isIndependent=True,
-                                            costFunc=None, needsContext=False):
+                                    costFunc=None, needsContext=False, lazy=False):
         self.func = func
         self.type = type or ObjectType
         self.isIndependent = isIndependent
         self.opFactory  = opFactory or self.factoryMap.get(self.type, AnyFuncOp)
         self.costFunc = costFunc
-        self.needsContext = needsContext
+        self.needsContext = needsContext or lazy
+        self.lazy = lazy
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
@@ -725,17 +726,36 @@ class GroupBy(QueryOp):
         self.appendArg(arg)
 
     name = property(lambda self: self.args[0].name)
-        
+
+class OrderBy(QueryOp):    
+    def __init__(self, *args):
+        self.args = []
+        for arg in args:
+            if not isinstance(arg, OrderExp):
+                arg = OrderExp(arg)
+            self.appendArg(arg)
+
+class OrderExp(QueryOp):    
+    def __init__(self, expression, desc=False):
+        self.exp = expression
+        self.asc = not desc
+
+    args = property(lambda self: self.exp)
+
 class Select(QueryOp):
     where = None
     groupby = None
+    orderby=None
+    skipEmbeddedBNodes = False
 
-    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None):
+    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None, orderby=None):
         self.appendArg(construct)
         if where:
             self.appendArg(where)
         if groupby:
             self.appendArg(groupby)
+        if orderby:
+            self.appendArg(orderby)
         self.offset = offset
         self.limit = limit
         self.depth = depth
@@ -748,11 +768,13 @@ class Select(QueryOp):
             self.construct = op #only one, replaces current if set
         elif (isinstance(op, GroupBy)):
             self.groupby = op #only one, replaces current if set
+        elif (isinstance(op, OrderBy)):
+            self.orderby = op #only one, replaces current if set
         else:
             raise QueryException('bad ast: Select doesnt take %s' % type(op))
         op.parent = self
 
-    args = property(lambda self: [a for a in [self.construct, self.where, self.groupby] if a])
+    args = property(lambda self: [a for a in [self.construct, self.where, self.groupby, self.orderby] if a])
 
     def removeArg(self, child):
         if self.where is child:

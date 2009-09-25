@@ -219,11 +219,11 @@ def p_root(p):
     #print 'labeledjoins', labeledjoins
     #print 'refs', p.jqlState.labelreferences
     p.parser.jqlState._buildJoinsFromReferences(labeledjoins)
-    if not p[0].where or not p[0].where.args:        
-        p[0].appendArg( Join(Filter(Not(
-            p.parser.jqlState.getFuncOp('isbnode',Project(0)))
-            )) 
-        )
+    select = p[0]
+    if not select.where or not select.where.args:
+        #top level queries without a filter (e.g. {*}) 
+        #should not include anyonmous objects that have already appeared 
+        select.skipEmbeddedBNodes = True
 
 def p_construct(p):
     '''

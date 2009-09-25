@@ -152,7 +152,7 @@ def test():
     includesharedrefs = [{
     "circular": "test",
     "circularlist": ["test", "test"],
-    "circularlist2": ["_:list:1", "_:list:2"],
+    "circularlist2": ["_:j:e:list:test:1", "_:j:e:list:test:2"],
     "id": "test"}]
     assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs)
     #test missing ids and exclude_blankids

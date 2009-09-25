@@ -114,12 +114,14 @@ t.group = 'smoke'
 t('''
 [*]
 ''',
-[['bar'], ['bar']]
+[['bar'], ['bar'], ['1', '2'], ['1', '3']]
 )
 
 t('{*}',
 [{'foo': 'bar', 'id': '3'},
- {'foo': 'bar', 'id': '2'}
+ {'foo': 'bar', 'id': '2'},
+ {'child': '2', 'id': '_:2', 'parent': '1'},
+ {'child': '3', 'id': '_:1', 'parent': '1'} 
 ])
 
 t('''{ * where ( foo > 'bar') }''', [])
@@ -483,8 +485,7 @@ content
 groupby('subject')
 }
 ''', 
-[{'content': ['some more text about the commons',
-              'some text about the commons'],
+[{'content': ['some text about the commons', 'some more text about the commons'],
   'subject': 'commons'},
   {'content': 'some text about rhizome', 'subject': 'rhizome'}
 ]
@@ -495,8 +496,9 @@ t('''{
 content
 groupby(subject)
 }
-''', [{'content': ['some more text about the commons',
-              'some text about the commons']},
+''', [{'content': ['some text about the commons',
+              'some more text about the commons',
+              ]},
  {'content': 'some text about rhizome'}]
  )
 
@@ -603,13 +605,13 @@ t('''{ content,
  where ( subject = ?tag) }
 ''',
 [
- {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
-  'content': 'some more text about the commons',
-  'id': '_:2'},
-  
 {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
   'content': 'some text about the commons',
-  'id': '_:1'},
+  },
+
+ {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+  'content': 'some more text about the commons',
+  },  
   ]
 )
 
@@ -617,8 +619,8 @@ t('''{ content,
  where ({id = ?tag and ?tag = 'commons'} and subject = ?tag) }
 ''',
 [
- {'content': 'some more text about the commons', 'id': '_:2'},
- {'content': 'some text about the commons', 'id': '_:1'},
+{'content': 'some text about the commons'},
+ {'content': 'some more text about the commons'}, 
 ]
 )
 
@@ -634,11 +636,11 @@ t('''
         )
     }
     ''',
-[{'content': 'some more text about the commons',
-  'id': '_:2',
+[
+ {'content': 'some text about the commons', 'subject': 'commons'},
+{'content': 'some more text about the commons',
   'subject': 'commons'},
- {'content': 'some text about the commons', 'id': '_:1', 'subject': 'commons'},
- {'content': 'some text about rhizome', 'id': '_:3', 'subject': 'rhizome'}]
+ {'content': 'some text about rhizome', 'subject': 'rhizome'}]
  )
 
 #find all the entries that implicitly or explicitly are tagged 'commons'
@@ -652,10 +654,9 @@ t( '''
         )
     }
     ''',
-[{'content': 'some more text about the commons',
-  'id': '_:2',
+[{'content': 'some text about the commons',
   'subject': 'commons'},
- {'content': 'some text about the commons', 'id': '_:1', 'subject': 'commons'}]
+ {'content': 'some more text about the commons', 'subject': 'commons'}]
 )
 
 #throws jql.QueryException: only equijoin supported for now
@@ -759,7 +760,7 @@ t('''{*}''',
 
 #make sure rows with null values aren't filtered out when proper 
 t('''{ prop3 }''',
-[{'prop3': False}, {'prop3': None}]) 
+[{'prop3': None}, {'prop3': False}]) 
 
 #XXX shouldn't match null values for next two but it currently does
 skip('''{  prop3 where (prop3) }''', [])
@@ -828,7 +829,7 @@ t('{ multivalued }',
 [{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
 
 t.group = 'lists'
-
+print 'make list model'
 t.model = modelFromJson([
      {
      'id' : '1',
