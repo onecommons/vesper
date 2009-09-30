@@ -4,7 +4,7 @@ parse JQL
 
 from jqlAST import *
 import logging, logging.handlers
-errorlog = logging.getLogger('parser')
+#errorlog = logging.getLogger('parser')
 
 class LogCaptureHandler(logging.handlers.BufferingHandler):
     "Simple logging handler that captures and retains log messages"
@@ -54,8 +54,9 @@ import ply.yacc
 #### TOKENS
 ###########
 
-reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NS', 'ASC', 'DESC',
-           'ID', 'OMITNULL', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH','GROUPBY', 'ORDERBY')
+reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', #'NS', 
+           'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
+           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'INCLUDE', 'EXCLUDE')
 
 tokens = reserved + (
     # Literals (identifier, integer constant, float constant, string constant, char const)
@@ -73,7 +74,7 @@ tokens = reserved + (
     'LBRACE', 'RBRACE',
     'COMMA', 'PERIOD', 'COLON',
 
-    'URI', 'VAR', 'QNAME', 'QSTAR'
+    'PROPSTRING', 'VAR', 'QNAME', 'QSTAR'
 )
 
 # Operators
@@ -127,8 +128,8 @@ def t_STRING(t):
     t.value = t.value[1:-1]
     return t
 
-def t_URI(t):
-    r'''<(([a-zA-Z][0-9a-zA-Z+\-\.]*:)/{0,2}[0-9a-zA-Z;/?:@&=+$\.\-_!~*'()%]+)?(\#[0-9a-zA-Z;/?:@&=+$\.\-_!~*'()%]*)?>'''
+def t_PROPSTRING(t):
+    r'''(?:<(?:[^<>\n\r\\]|(?:<>)|(?:\\x[0-9a-fA-F]+)|(?:\\.))*>)'''
     t.value = t.value[1:-1]
     return t
 
@@ -166,7 +167,7 @@ def t_linecomment(t):
 
 def t_error(t):
     # print "t_error:", t.lexpos, t.lineno, t.type, t.value
-    errorlog.error("Illegal character %s at line:%d char:%d" % (repr(t.value[0]), t.lineno, t.lexpos))
+    t.lexer.errorlog.error("Illegal character %s at line:%d char:%d" % (repr(t.value[0]), t.lineno, t.lexpos))
     t.lexer.skip(1)
 
 # Newlines
@@ -196,7 +197,7 @@ def resolveQNames(nsmap, root):
 
 def p_root(p):
     '''
-    root : construct
+    root : topconstruct
     '''
     p[0] = p[1]
     resolveQNames({}, p[0])
@@ -225,26 +226,30 @@ def p_root(p):
         #should not include anyonmous objects that have already appeared 
         select.skipEmbeddedBNodes = True
 
-def p_construct(p):
+def p_construct0(p):
     '''
+    topconstruct : dictconstruct
+                | listconstruct
+                | valueconstruct
+
     construct : dictconstruct
                 | listconstruct
     '''
-
-    if isinstance(p[1], T.listconstruct):
-        shape = Construct.listShape
-    elif isinstance(p[1], T.dictconstruct):
-        shape = Construct.dictShape
-    else:
-        assert 0, 'unexpected token'
-
-    props = p[1][0]
+    assert isinstance(p[1], T.construct)
+    shape = {
+    '{' : Construct.dictShape,
+    '[' : Construct.listShape, 
+    '(' : Construct.valueShape   
+    }[ p[1][0] ]
+    
+    label = p[1][1]
+    props = p[1][2]
     op = Construct(props, shape)
-
     defaults = dict(where = None, ns = {}, offset = None, limit = None,
                     groupby = None, depth=None, orderby=None)
-    if len(p[1]) > 1 and p[1][1]:
-        for constructop in p[1][1]:
+
+    if len(p[1]) > 3 and p[1][3]:
+        for constructop in p[1][3]:
             defaults[ constructop[0].lower() ] = constructop[1]
 
     groupby = defaults['groupby']
@@ -258,6 +263,9 @@ def p_construct(p):
                 
         defaults['groupby'] = groupby = GroupBy(arg)
     
+    if label:
+        assert isinstance(label, T.var)
+        op.id.appendArg( Label(label[0]) )
     where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, defaults['where'], groupby)
     #XXX add support for ns constructop    
     
@@ -367,26 +375,31 @@ def p_atom(p):
     """
     p[0] = p[1]
 
-def p_constructitem1(p):
-    '''
-    constructitem : ID COLON VAR
-    '''
-    p[0] = ConstructSubject(value=p[3][0])
+#def p_constructitem2(p):
+#    '''
+#    constructitem : VAR
+#    listconstructitem : VAR
+#    '''
+#    p[0] = ConstructSubject(value=p[1][0])
 
-def p_constructitem2(p):
-    '''
-    constructitem : VAR
-    '''
-    p[0] = ConstructSubject(value=p[1][0])
-
-#must come after above rule
+##next one must come after above rule so that they take priority
 def p_atom_var(p):
-    """atom : VAR
+    """
+    atom : VAR
     """
     p[0] = Label(p[1][0])
 
+#next one must come after above rule so that it takes priority
+def p_constructitem6(p):
+    '''
+    constructitem : ID
+    '''    
+    p[0] = _makeConstructProp(p[1], Project(0), True, False)
+
+
 def p_atom_id(p):
-    """atom : ID
+    """
+    atom : ID
     """
     p[0] = Project(p[1])
 
@@ -403,7 +416,7 @@ def p_funccall(p):
     except KeyError:
         msg = "unknown function " + p[1]
         p[0] = ErrorOp(p[3], msg)
-        errorlog.error(msg)
+        p.parser.errorlog.error(msg)
 
 def p_arglist(p):
     """    
@@ -420,24 +433,28 @@ def p_arglist(p):
     listconstructitemlist : listconstructitemlist COMMA listconstructitem
                           | listconstructitem
     sortexplist : sortexplist COMMA sortexp
-                 | sortexp
+                | sortexp
+    barecolumnreflist : barecolumnreflist COMMA barecolumnref
+                      | barecolumnref 
+    arrayindexlist : arrayindexlist COMMA arrayindex
+                   | arrayindex
     """
     if len(p) == 4:
         p[0] = p[1] + [p[3]]
     else:
         p[0] = [p[1]]
 
-def p_constructitemlist_optional(p):
-    """    
-    constructitemlist : constructitemlist COMMA dictoptional
-                      | dictoptional
-    listconstructitemlist : listconstructitemlist COMMA listoptional
-                          | listoptional
-    """
-    if len(p) == 4:
-        p[0] = p[1] + p[3]
-    else:
-        p[0] = p[1]
+#def p_constructitemlist_optional(p):
+#    """    
+#    constructitemlist : constructitemlist COMMA dictoptional
+#                      | dictoptional
+#    listconstructitemlist : listconstructitemlist COMMA listoptional
+#                          | listoptional
+#    """
+#    if len(p) == 4:
+#        p[0] = p[1] + p[3]
+#    else:
+#        p[0] = p[1]
 
 def p_constructoplist(p):
     """
@@ -453,6 +470,8 @@ def p_arglist_empty(p):
     constructoplist : empty
     listconstructitemlist : empty
     sortexplist : empty
+    barecolumnreflist : empty
+    arrayindexlist : empty
     """
     p[0] = []
 
@@ -476,7 +495,7 @@ def p_join(p):
         import traceback
         traceback.print_exc()#file=sys.stdout)
         p[0] = ErrorOp(p[2], "Invalid Join")
-        errorlog.error("invalid join: "  +  str(e) + ' ' + repr(p[2]))
+        p.parser.errorlog.error("invalid join: "  +  str(e) + ' ' + repr(p[2]))
 
 def _makeConstructProp(n, v, nameIsFilter, derefName = False):
     if n == '*':
@@ -511,11 +530,43 @@ def p_constructitem5(p):
     '''
     p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False)
 
+def p_constructitem_include(p): 
+    '''
+    constructitem : INCLUDE dictconstruct
+    listconstructitem : INCLUDE listconstruct
+    '''
+    p[0] = _makeConstructProp(None, p[2], False)
+
+def p_constructitem_exclude1(p): 
+    '''
+    constructitem : EXCLUDE barecolumnreflist
+    listconstructitem : EXCLUDE arrayindexlist    
+    '''
+    p[0] = p[2] #_makeConstructProp(None, p[2], False)
+
+def p_constructitem_exclude2(p): 
+    '''     
+    constructitem : EXCLUDE barecolumnreflist NAME expression
+    listconstructitem : EXCLUDE arrayindexlist NAME expression 
+    '''
+    if p[3].lower() != 'if':
+        #we don't want IF to be a keyword so do this check manually
+        p.parser.errorlog.error('syntax error in EXCLUDE, missing "if"')
+    exp = p[4]
+    p[0] = p[2] #_makeConstructProp(None, p[2], False)
+
+def p_arrayindex(p):
+    '''
+    arrayindex : INT
+                | TIMES
+    '''
+    p[0] = p[1]
+    
 def p_barecolumnref(p):
     '''barecolumnref : NAME
                     | QNAME
                     | TIMES
-                    | URI
+                    | PROPSTRING
                     | QSTAR
     '''
     p[0] = p[1]
@@ -553,27 +604,27 @@ def p_dictvalue(p):
     else:
         p[0] = p[1]
 
-def p_optional(p):
-    '''
-    dictoptional : OMITNULL LPAREN constructitemlist RPAREN
-             | OMITNULL LPAREN constructitemlist COMMA RPAREN
-    listoptional : OMITNULL LPAREN listconstructitemlist RPAREN
-             | OMITNULL LPAREN listconstructitemlist COMMA RPAREN
-    '''
-    for i, prop in enumerate(p[3]):
-        if isinstance(prop, ConstructSubject):
-            p[3][i] = ErrorOp(prop, "Subject in Optional")
-            errorlog.error('subject spec not allowed in Optional')
-        else:
-            prop.ifEmpty = PropShape.omit
-    p[0] = p[3]
+#def p_optional(p):
+#    '''
+#    dictoptional : OMITNULL LPAREN constructitemlist RPAREN
+#             | OMITNULL LPAREN constructitemlist COMMA RPAREN
+#    listoptional : OMITNULL LPAREN listconstructitemlist RPAREN
+#             | OMITNULL LPAREN listconstructitemlist COMMA RPAREN
+#    '''
+#    for i, prop in enumerate(p[3]):
+#        if isinstance(prop, ConstructSubject):
+#            p[3][i] = ErrorOp(prop, "Subject in Optional")
+#            p.parser.errorlog.error('subject spec not allowed in Optional')
+#        else:
+#            prop.ifEmpty = PropShape.omit
+#    p[0] = p[3]
 
 def p_constructop1(p):
     '''
     constructop : WHERE LPAREN expression RPAREN
                 | GROUPBY LPAREN arglist RPAREN
-                | NS LPAREN arglist RPAREN
     '''
+    #           | NS LPAREN arglist RPAREN
     p[0] = T.constructop(p[1], p[3])
 
 def p_constructop2(p):
@@ -597,6 +648,12 @@ def p_constructop4(p):
     '''
     p[0] = OrderBy(p[3])
 
+def p_constructop5(p):
+    '''
+    constructop : MERGEALL
+    '''
+    p[0] = T.constructop(p[1])
+
 def p_orderbyexp_1(p):
     '''
     sortexp : expression
@@ -610,7 +667,7 @@ def p_orderbyexp_2(p):
     '''
     p[0] = SortExp(p[1], True)
     
-def p_dictconstruct(p):
+def XXXp_dictconstruct(p):
     '''
     dictconstruct : LBRACE constructitemlist RBRACE
                   | LBRACE constructitemlist constructoplist RBRACE
@@ -624,19 +681,51 @@ def p_dictconstruct(p):
     else:
         p[0] = T.dictconstruct( p[2 ], p[4])
 
-def p_listconstruct(p):
+def p_constructlist(p):
     '''
-    listconstruct : LBRACKET listconstructitemlist RBRACKET
-        | LBRACKET listconstructitemlist constructoplist RBRACKET
-        | LBRACKET listconstructitemlist COMMA constructoplist RBRACKET
-        | LBRACKET listconstructitemlist COMMA constructoplist COMMA RBRACKET
+    dictconstructlist : constructitemlist constructoplist 
+                      | constructitemlist COMMA constructoplist
+                      | constructitemlist COMMA constructoplist COMMA
+
+    listconstructlist : listconstructitemlist constructoplist 
+                      | listconstructitemlist COMMA constructoplist
+                      | listconstructitemlist COMMA constructoplist COMMA    
+    '''
+    if len(p) == 3:
+        p[0] = [ p[1], p[2] ]
+    else:
+        p[0] = [p[1], p[3]]
+
+def p_construct(p):
+    '''
+    dictconstruct : LBRACE VAR COMMA dictconstructlist RBRACE
+                  | LBRACE VAR dictconstructlist RBRACE
+                  | LBRACE dictconstructlist RBRACE
+
+    listconstruct : LBRACKET VAR COMMA listconstructlist RBRACKET
+                  | LBRACKET VAR listconstructlist RBRACKET
+                  | LBRACKET listconstructlist RBRACKET
     '''
     if len(p) == 4:
-        p[0] = T.listconstruct( p[2], None)
+        p[0] = T.construct(p[1], None, *p[2])
     elif len(p) == 5:
-        p[0] = T.listconstruct( p[2], p[3])
+        p[0] = T.construct(p[1], p[2], *p[3])
     else:
-        p[0] = T.listconstruct( p[2], p[4])
+        assert len(p) == 6
+        p[0] = T.construct(p[1], p[2 ], *p[4])
+
+def p_valueconstruct(p):
+    '''
+    valueconstruct :  LPAREN expression constructoplist RPAREN        
+                    | LPAREN expression COMMA constructoplist RPAREN
+                    | LPAREN expression COMMA constructoplist COMMA RPAREN
+    '''
+    props = [_makeConstructProp(None, p[2], False)]
+    
+    if len(p) == 5:
+        p[0] = T.construct('(', None, props, p[3])
+    else:
+        p[0] = T.construct('(', None, props, p[4])
 
 def p_listconstructitem(p):
     '''
@@ -647,9 +736,9 @@ def p_listconstructitem(p):
 def p_error(p):
     #print "p_error:", p.lexpos, p.lineno, p.type, p.value
     if p:
-        errorlog.error("Syntax error at '%s' (line %d char %d)" % (p.value, p.lineno, p.lexpos))
+        p.lexer.errorlog.error("Syntax error at '%s' (line %d char %d)" % (p.value, p.lineno, p.lexpos))
     else:
-        errorlog.error("Syntax error at EOF")
+        p.lexer.errorlog.error("Syntax error at EOF")
 
 def p_empty(p):
     'empty :'
@@ -658,51 +747,68 @@ def p_empty(p):
 #parser = ply.yacc.yacc(start="root", errorlog=errorlog, optimize=1)#, debug=True)
 
 ####parse-tree-to-ast mapping ####
-def buildparser():
+def buildparser(errorlog=None, debug=0):
+    if not errorlog:
+        import sys
+        errorlog = ply.yacc.PlyLogger(sys.stderr)
+
     try:
         import jql.lextab
         lextab=jql.lextab
     except ImportError:
-        print 'Warning: jql.lextab not found, generating local lextab.py'
+        if not debug: errorlog.warning('jql.lextab not found, generating local lextab.py')
         lextab = 'lextab'
-        
-    lexer = ply.lex.lex(errorlog=errorlog, lextab=lextab, optimize=1) #, debug=1)     
-
+    
+    if debug:
+        lexer = ply.lex.lex(errorlog=errorlog, debug=1)
+    else:
+        lexer = ply.lex.lex(errorlog=errorlog, lextab=lextab, optimize=1)
+    lexer.errorlog=errorlog
+    
     try:
         import jql.parsetab
         tabmodule=jql.parsetab
     except ImportError:
-        print 'Warning: jql.parsetab not found, generating local parsetab.py'
+        if not debug: errorlog.warning('jql.parsetab not found, generating local parsetab.py')
         tabmodule = 'parsetab'
 
     try:
-        parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)
+        if debug:
+            parser = ply.yacc.yacc(start="root", errorlog=errorlog)
+        else:
+            parser = ply.yacc.yacc(start="root", errorlog=errorlog,
+                                        tabmodule=tabmodule, optimize=1)
+        parser.errorlog=errorlog
     except AttributeError:
         #yacc.write_table throws AttributeError: 'module' object has no attribute 'split'
         #because its expecting a string not a module
         #this happens when the jql.parsetab is out of data
         tabmodule = 'parsetab'
-        print 'Warning: jql.parsetab was out of date, generating local parsetab.py'
+        errorlog.warning('jql.parsetab was out of date, generating local parsetab.py')
         parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)
+        parser.errorlog = errorlog
 
     return lexer, parser
 
 #each thread needs its own lexer and parser
-import threading
+import threading, thread
 threadlocals = threading.local()
 
 def parse(query, functions, debug=False):
+    #get a separate logger for each thread so that concurrent parsing doesn't
+    #intermix messages        
+    errorlog=logging.getLogger('parser.%s' % thread.get_ident())
     try:
         lexer = threadlocals.lexer
         parser= threadlocals.parser
     except AttributeError:
         #create a new parser for this thread
-        lexer, parser = buildparser()
+        lexer, parser = buildparser(errorlog=errorlog)
         threadlocals.lexer, threadlocals.parser = lexer, parser
         
     lexer.lineno = 1 #XXX report ply bug: there doesn't seem to be any way to reset the lexer?
     
-    # create a new log handler per-parse to capture messages (should be threadsafe)
+    # create a new log handler per-parse to capture messages
     log_messages = LogCaptureHandler(10)
     errorlog.addHandler(log_messages)    
     try:

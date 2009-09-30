@@ -827,8 +827,8 @@ def _setConstructProp(shape, pattern, prop, v, name):
     if v == RDF_MS_BASE+'nil': #special case to force empty list
         val = []
     elif v is None or (isSeq and not len(v)):
-        if prop.ifEmpty == jqlAST.PropShape.omit:
-            return
+        if prop.ifEmpty == jqlAST.PropShape.omit:            
+            return pattern
         elif prop.ifEmpty == jqlAST.PropShape.uselist:
             if not isSeq:
                 val = [v]
@@ -850,8 +850,12 @@ def _setConstructProp(shape, pattern, prop, v, name):
     
     if shape is jqlAST.Construct.dictShape:
         pattern[name] = val
-    else:
+    elif shape is jqlAST.Construct.listShape:        
         pattern.append(val)
+    else:        
+        pattern = val
+
+    return pattern
 
 def _getAllProps(idvalue, rows, propsAlreadyOutput):
     props = {}
@@ -1001,7 +1005,9 @@ class SimpleQueryEngine(object):
                 propsAlreadyOutput = set((sjson.PROPSEQ,)) #exclude PROPSEQ
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
-                        if prop.suppress or shape is op.listShape:
+                        if shape is op.listShape:
+                            continue                        
+                        if not allpropsOp:                                                     
                             continue
                         #print 'cs', prop.name, idvalue
                         if op.parent.groupby:
@@ -1015,7 +1021,11 @@ class SimpleQueryEngine(object):
                             pattern[prop.name] = idvalue
                         elif shape is op.listShape:
                             pattern.append(idvalue)
-                    elif isinstance(prop.value, jqlAST.Project) and prop.value.name == '*':                        
+                        else:
+                            pattern = idvalue
+                    elif isinstance(prop.value, jqlAST.Project) and prop.value.name == '*':
+                        if shape is op.valueShape:
+                            raise QueryException("value construct can not specify '*'")
                         allpropsOp = prop
                     else:
                         ccontext = copy.copy(context)
@@ -1058,7 +1068,7 @@ class SimpleQueryEngine(object):
                             name = flatten(prop.nameFunc.evaluate(self, ccontext))                            
                         else:
                             name = prop.name or prop.value.name
-                        _setConstructProp(shape, pattern, prop, v, name)
+                        pattern = _setConstructProp(shape, pattern, prop, v, name)                        
                         if prop.value.name and isinstance(prop.value, jqlAST.Project):
                             propsAlreadyOutput.add(prop.value.name)
                 

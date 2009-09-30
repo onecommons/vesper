@@ -634,13 +634,9 @@ class ConstructProp(QueryOp):
         if nameFunc:
             self.nameFunc = nameFunc
             nameFunc.parent = self
-            
-        if isinstance(value, Project):
-            #kind of a hack: if this is a standalone project expand object references
-            value.constructRefs = True
-        self.value = value #only one, replaces current if set
-        value.parent = self
-
+        
+        self.appendArg(value)
+        
         assert ifEmpty in (PropShape.omit, PropShape.usenull, PropShape.uselist)
         self.ifEmpty = ifEmpty
         assert ifSingle in (PropShape.nolist, PropShape.uselist)
@@ -648,8 +644,8 @@ class ConstructProp(QueryOp):
         self.nameIsFilter = nameIsFilter
 
     def appendArg(self, value):
-        if isinstance(value, Project):
-            #kind of a hack: if this is a standalone project expand object references
+        if isinstance(value, Project) and value.name != 0:
+            #hack: if this is a standalone project expand object references
             value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self
@@ -663,14 +659,13 @@ class ConstructProp(QueryOp):
     args = property(lambda self: [a for a in [self.value, self.nameFunc] if a])
 
 class ConstructSubject(QueryOp):
-    def __init__(self, name='id', value=None, suppress=False):
+    def __init__(self, name='id', value=None):
         self.name = name        
         if value: #could be a string
             if not isinstance(value, QueryOp):
                 value = Label(value)
             value.parent = self
         self.value = value
-        self.suppress = suppress
 
     def appendArg(self, op):
         if isinstance(op, Label):
@@ -692,6 +687,7 @@ class Construct(QueryOp):
     '''
     dictShape= dict
     listShape= list
+    valueShape = object
     offset = None
     limit = None
     id = None
@@ -703,7 +699,7 @@ class Construct(QueryOp):
             if isinstance(p, ConstructSubject):
                 self.id = p
         if not self.id:            
-            self.id = ConstructSubject(suppress= (shape == self.listShape))
+            self.id = ConstructSubject()
             self.appendArg(self.id)
         self.shape = shape
 

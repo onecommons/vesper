@@ -1,52 +1,10 @@
 '''
-Test can be added to the test suite by calling:
- 
-t(query=None, result=None, **kw)
-
-where kw can be one of these (shown with defaults):
-
-ast=None if set, assert ast matches
-rows=None if set, assert intermediate rows match
-skip=False
-skipParse=False don't parse query, use given AST instead
-model=None Execute the query with this model
-name=None name this test 
-group=None add this test to the given group
-
-If any of these attributes are set on `t` they will used as the default value for subsequent calls to `t`. For example, setting `t.model` will apply that model to any test added if the test doesn't specify a model.
+Basic JQL tests -- see jqltester module for usage
 '''
 
-import jql, sjson
-from jql.jqlAST import *
-from rx import RxPath
-import sys, pprint
-from rx.utils import flatten
-
-import jql.jqlAST
-import jql.engine
-
-#aliases for convenience
-jc = JoinConditionOp
-cs = ConstructSubject
-qF = jql.engine.SimpleQueryEngine.queryFunctions
-def cp(name, *args, **kw):
-    #print 'cp', name, args
-    if not args:
-        #no name
-        return ConstructProp(None, name, **kw)
-    if isinstance(name, str):        
-        kw['nameFunc']=Constant(name)
-    return ConstructProp(None, *args, **kw)
-
-_models = {}
-def modelFromJson(modelsrc, modelname=None):
-    model = sjson.sjson(generateBnode='counter').to_rdf(modelsrc)
-    model = RxPath.MemModel(model)
-    model.bnodePrefix = '_:'
-    if not modelname:
-        modelname = 'model%s' % (len(_models)+1)
-    _models[id(model)] = (modelsrc, modelname)
-    return model
+import sys
+sys.path.append('.')
+from jqltester import *
 
 '''
 todo: query tests:
@@ -61,37 +19,6 @@ anti-join (not in)
 * construction:
 id keys only (not objects)
 '''
-
-class Test(object):
-    def __init__(self, attrs):
-        self.__dict__.update(attrs)
-
-class Suite(object):    
-    defaults = dict(ast=None, rows=None, result=None, skip=False,
-                skipParse=False, model=None, name=None, query=None, group=None)
-
-    def __init__(self):
-        self.tests = []
-
-    def __call__(self, query=None, results=None, **kw):
-        '''
-        optional arguments:
-        rows: test the tupleset result matches this
-        results : test the result of query execution matches this
-        name: name the test
-        '''
-        defaults = self.defaults.copy()
-        defaults.update(self.__dict__)
-        defaults.update(query=query, results=results)
-        defaults.update(kw)
-        t = Test(defaults)
-        self.tests.append(t)
-        return t
-
-    def __iter__(self):
-        for t in self.tests:
-            yield t
-
 t = Suite()
 skip = Suite()
 
@@ -126,14 +53,14 @@ t('{*}',
 
 t('''{ * where ( foo > 'bar') }''', [])
 
-t("{ 'parent' : child }",
+t("{ id, 'parent' : child }",
 [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
 
-t("{ parent : child }",
+t("{ parent : child, id }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
 
 t(
-''' { id : ?childid,
+''' { ?childid,
         *
        where( {child = ?childid 
            })
@@ -142,7 +69,7 @@ t(
 
 
 t(
-''' { id : ?parentid,
+''' { ?parentid,      
       'derivedprop' : id * 2,
       'children' : { ?childid,
                    *
@@ -154,14 +81,14 @@ t(
 ''',skipParse=0,
 results = [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'derivedprop': 2.0,
-  'id': '1'}],
-ast=Select(Construct([ 
-    cs('id', 'parentid'),    
+  }],
+ast=Select(Construct([     
     cp('derivedprop',  qF.getOp('mul', Project(0), Constant(2))),
-    cp('children', Select(Construct([
+    cp('children', Select(Construct([            
+            cp(Project('*')),
             cs('id', 'childid'),
-            cp(Project('*')) 
-        ])))
+        ]))),
+    cs('id', 'parentid'),
     ]),
     Join(
  jc(
@@ -187,8 +114,9 @@ skiprows=[['1',
 
 t(
 ''' { ?parentid,
+      id,
       'children' : { ?childid,
-                   foo,
+                   id, foo,
                    where( foo = 'bar' and 
                          {child = ?childid and
                         parent = ?parentid                    
@@ -201,11 +129,11 @@ t(
   skipParse=0,
 skipast=Select( #XXX fix
   Construct([
-    cs('id', 'parentid'),
-    cp('children', Select(Construct([
+    cp('children', Select(Construct([            
+            cp('foo', Project('foo')), #find all props
             cs('id', 'childid'),
-            cp('foo', Project('foo')) #find all props
-        ])))
+        ]))),
+    cs('id', 'parentid'),
     ]),
  Join( #row  : (subject, (subject, foo, ("child", ("child", "parent"))))
   jc(
@@ -231,9 +159,9 @@ skiprows=[['1',
 )
 
 t('''
-{ id : ?childid,
+{ ?childid,
       *, 
-      'parent' : { id : ?parentid,
+      'parent' : { ?parentid, id,
                    where( 
                    {child = ?childid and
                         parent = ?parentid
@@ -245,58 +173,6 @@ t('''
  )
 
 t.group = 'outer'
-t.groupdoc = '''
-option (outer joins)
-====================
-
-'''
-
-t('''{
- foo,
- omitnull(
-   notthere
- )
-}
-''',
-[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}])
-
-t('''{
- omitnull(
-   foo,
- )
-}
-''',
-[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
-{'id': '_:2'}, {'id': '_:1'}])
-
-t('''{
- omitnull(
-   foo,
-   notthere
- )
-}
-''',
-[{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}, 
-{'id': '_:2'}, {'id': '_:1'}]
-)
-
-#test list construction
-t('''[
- foo,
- omitnull(
-   notthere
- )
-]
-''',
-[['bar'], ['bar']])
-
-t('''[
- omitnull(
-   foo,
- )
-]
-''',
-[['bar'], ['bar'], [], []])
 
 #XXX join from foo property masks outer join 
 skip('''{
@@ -308,7 +184,7 @@ skip('''{
 t.group = 'parse'
 
 t('''
-{ 'blah' : foo }
+{ 'id' : ID, 'blah' : foo }
 ''',
 [{'blah': 'bar', 'id': '3'}, {'blah': 'bar', 'id': '2'}]
 )
@@ -339,8 +215,8 @@ failing = [
 #XXXAssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
 '''
 {
-id : ?artist,
-foo : { id : ?join },
+?artist,
+foo : { ?join, id },
 "blah" : [ {*} ]
 where( {
     ?id == 'http://foaf/friend' and
@@ -401,7 +277,7 @@ t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
 }
 
 #construct foo with a value as the ?child object but only matching baz property
-{'foo' : { id : ?child, * }
+{'foo' : {  ?child, * }
     where ( foo = ?child.baz)
 }
 
@@ -505,15 +381,16 @@ groupby(subject)
 t.group = 'recurse'
 
 t('''{
-id : ?parent,
-'contains' : [{ where(subsumedby = ?parent)}]
+?parent,
+id,
+'contains' : [{ id where(subsumedby = ?parent)}]
 }
 ''',
 [{'contains': [{'id': 'commons'}, {'id': 'rhizome'}], 'id': 'projects'},
  {'contains': [{'id': 'toread'}, {'id': 'todo'}], 'id': 'actions'}])
 
 t('''
-{ id : ?tag, * 
+{ ?tag, * 
 where (?tag in ('foo', 'commons'))
 }
 ''',
@@ -527,7 +404,7 @@ where (id = ?tag and ?tag in ('foo', 'commons'))
 [{'id': 'commons', 'subsumedby': 'projects'}])
 
 t('''
-{ 
+{ id
 where (id not in ('foo', 'commons') and subsumedby)
 }''',
 [{'id': 'toread'},
@@ -685,8 +562,8 @@ skip('''
 )
 
 t('''
-{ id : ?a,
-  'foo' : { id : ?b where (?b > '1')}
+{ ?a,
+  'foo' : { ?b where (?b > '1')}
     where (?a = '2')
 }
 '''
@@ -785,6 +662,7 @@ where (exists(foo) or exists(child))
 
 
 t('''{
+id,
 values
 }''',[{'id': '1',
   'values': {'prop1': 'foo', 'prop2': 3, 'prop3': None, 'prop4': True}},
@@ -803,7 +681,7 @@ skip(name='labeled but no where',
 #the nested construct will not have a where clause
 #but we have a joincondition referencing that object
 query='''
-{ 'inner' : { id : ?foo }
+{ 'inner' : { ?foo, id }
   where ( ?foo = bar) }
 ''')
 
@@ -823,13 +701,13 @@ t('{*}',
 )
 
 t('{ "multivalued" : multivalued }',
-[{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
+[{ 'multivalued': [0, 'a', 'b', []]}])
 
 t('{ multivalued }',
-[{'id': '1', 'multivalued': [0, 'a', 'b', []]}])
+[{ 'multivalued': [0, 'a', 'b', []]}])
 
 t.group = 'lists'
-print 'make list model'
+
 t.model = modelFromJson([
      {
      'id' : '1',
@@ -863,18 +741,18 @@ t('{*}',
 ])
 
 t('{ "listprop" : listprop}',
-[{'id': '1', 'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']]},
- {'id': '2',
+[{'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']]},
+ {
   'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1]}]
 )
 
 t('{ listprop, listprop2, listprop3, listprop4 }',
-[{'id': '1',
+[{
   'listprop': ['b', 'a', [[]], [{'foo': 'bar'}, 'another']],
   'listprop2': [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11],
   'listprop3': [1],
   'listprop4': []},
- {'id': '2',
+ {
   'listprop': ['b', [-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11], [], 'a', 1],
   'listprop2': [[['double nested']]],
   'listprop3': [],
@@ -884,182 +762,7 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
 import unittest
 class JQLTestCase(unittest.TestCase):
     def testAll(self):
-        main(['--quiet'])
-
-import logging
-logging.basicConfig() 
-
-from string import Template
-
-_printedmodels = []
-_lastgroupdoc = None
-def printdocs(test):
-    if not test.doc:
-        return
-    if test.groupdoc and test.groupdoc != _lastgroupdoc:
-        print test.groupdoc
-        _lastgroupdoc = test.groupdoc
-    modelsrc, modelname = _models[id(test.model)]    
-    if id(test.model) in _printedmodels:    
-        createmodel = ''
-    else:
-        _printedmodels.append(id(test.model))
-        modelformatted = pprint.pformat(modelsrc).replace('\n', '\n ... ')  
-        createmodel = Template("""
- >>> $modelname = raccoon.createStore('''$modelformatted''')
-""").substitute(locals())
-    doc = test.doc
-    result = pprint.pformat(test.results).replace('\n', '\n ')     
-    queryformatted = test.query.replace('\n', '\n ... ')  
-    print Template("""
-$doc$createmodel
- >>> ${modelname}.query('''$queryformatted''')
-$result
-""").substitute(locals())
-
-def listgroups():
-    currentgroup = None
-    count = 0
-    for test in flatten(t):
-        count += 1
-        if test.group != currentgroup:
-            if currentgroup: print currentgroup, count
-            currentgroup = test.group
-            count = 0
-
-
-def main(cmdargs=None):
-    from optparse import OptionParser
-    
-    usage = "usage: %prog [options] [group name] [number]"
-    parser = OptionParser(usage)
-    for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
-        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0), ('printdocs',0)]:
-        parser.add_option('--'+name, dest=name, default=default, 
-                                                action="store_true")
-    (options, args) = parser.parse_args(cmdargs)
-    if options.listgroups:
-        listgroups()
-        return
-    options.num = -1
-    options.group = None
-    if args and args[0] != 'null':
-        if len(args) > 1:
-            options.group = args[0]
-            options.num = int(args[1])
-        else:            
-            try:                        
-                options.num = int(args[0])
-            except:
-                options.group = args[0]
-    
-    count = 0
-    skipped = 0
-    currentgroup = None
-    groupcount = 0
-    lastmodelid = None
-    for (i, test) in enumerate(flatten(t)):
-        if test.group != currentgroup:
-            currentgroup = test.group
-            groupcount = 0
-        else:
-            groupcount += 1
-        if options.group and options.group != currentgroup:
-            skipped += 1
-            continue
-        
-        if options.num > -1:
-            if options.group:
-                if groupcount != options.num:
-                    skipped += 1
-                    continue
-            elif i != options.num:
-                skipped += 1
-                continue
-                
-        if test.skip:
-            skipped += 1
-            continue
-        count += 1
-
-        if test.name:
-            name = test.name
-        elif test.group:
-            name = '%s %d' % (test.group, groupcount)
-        else:
-            name = "%d" % i        
-        
-        if options.printdocs:
-            options.quiet = True
-            printdocs(test)
-            continue
-        
-        if not options.quiet:
-            print '*** running test:', name
-            print 'query', test.query
-
-        if options.printmodel and id(test.model) != lastmodelid:
-            lastmodelid = id(test.model)
-            print 'model'
-            pprint.pprint(list(test.model))
-
-        if test.ast:
-            if not test.skipParse and test.query:
-                (testast, errs) = jql.buildAST(test.query)
-                #jql.rewriteAST(testast)
-                if not options.quiet: print 'comparing ast'
-                if test.ast == 'error': #expect an error
-                    assert testast is None, (
-                        'not expecting an ast for test %d: %s' % (i,testast))
-                else: 
-                    assert testast == test.ast, (
-                            'unexpected ast for test %d: %s \n %s'
-                            % (i, findfirstdiff(testast, test.ast), testast))
-                ast = testast
-            else:
-                ast = test.ast
-        else:
-            (ast, errs) = jql.buildAST(test.query)
-            assert ast, "ast is None, parsing failed"
-
-        if options.printast:
-            print "ast:"
-            pprint.pprint(ast)
-
-        if options.printrows or test.rows is not None:
-            if ast:
-                evalAst = ast.where            
-                testrows = list(jql.evalAST(evalAst, test.model))
-            else:
-                testrows = None
-        if options.printrows:
-            print 'labels', evalAst.labels
-            print 'rows:'
-            pprint.pprint(testrows)        
-        if test.rows is not None:
-            assert test.rows== testrows,  ('unexpected rows for test %d' % i)
-
-        if options.explain:
-            print "explain plan:"
-            explain = sys.stdout
-        else:
-            explain = None
-
-        if not options.quiet: print "construct " + (options.printdebug and '(with debug)' or '')
-        if ast:
-            testresults = list(jql.evalAST(ast, test.model, explain=explain,
-                                                    debug=options.printdebug))
-        else:
-            testresults = None
-        
-        if not options.quiet:        
-            print "Construct Results:"
-            pprint.pprint(testresults)
-
-        if test.results is not None:
-            assert test.results == testresults,  ('unexpected results for test %d' % i)#, [(k, type(k)) for k in testresults[0]])
-
-    print '***** %d tests passed, %d skipped' % (count, skipped)
+        main(t, ['--quiet'])
 
 if __name__ == "__main__":
-    main()
+    main(t)

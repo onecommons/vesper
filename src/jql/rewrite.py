@@ -472,8 +472,7 @@ def consolidateFilter(filter, projections):
         del projections[i]
         return True
     return False
-
-
+    
 def rewriteLabelsInFilters():
     '''
     Filter conditions that depend are a label are actually join predicates on
