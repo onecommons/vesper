@@ -100,9 +100,10 @@ def getResults(query, model, addChangeMap=False):
             response['results'] = results
         except QueryException, qe:
             response['results'] = None
-            errors.extend(qe.value)
+            errors.append(qe.value)
         except Exception, ex:
-            errors.extend("Exception:" + ex)
+            import traceback
+            errors.append("unexpected query exception: %s" % traceback.format_exc())
         
     if len(errors) > 0:
         response['errors'] = errors
