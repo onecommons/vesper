@@ -100,14 +100,16 @@ def test():
     { "id" : "testid", 
     "foo" : ["1","3"],
      "bar" : [],
-     "baz" : { "nestedobj" : { "id" : "anotherid", "prop" : "value" }}
+     "baz" : {  "id": "_:j:e:object:testid:1", 
+                "nestedobj" : { "id" : "anotherid", "prop" : "value" }}
     } 
     '''
-    assert_json_and_back_match(src, False) #XXX backagain fails, but then next one succeeds!
+    assert_json_and_back_match(src)
     
     src = '''
     { "id" : "testid",
-    "baz" : { "nestedobj" : { "id" : "anotherid", "prop" : "value" }},
+    "baz" : { "id": "_:j:e:object:testid:1", 
+               "nestedobj" : { "id" : "anotherid", "prop" : "value" }},
     "foo" : ["1","3"],
      "bar" : []
     } 
@@ -145,7 +147,7 @@ def test():
       "circularlist2" : [["test"],["test", "test"]]
         }
     '''
-    assert_json_and_back_match(src, False) #XXX backagain fails
+    assert_json_and_back_match(src)
 
     #test that shardrefs output doesn't explode with circular references
     #XXX current handling is bad, should give error

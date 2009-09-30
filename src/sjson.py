@@ -185,7 +185,8 @@ class sjson(object):
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
     
     def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
-                            scope = '', model=None, preserveRdfTypeInfo=True):
+                            scope = '', model=None, preserveRdfTypeInfo=True, 
+                                                          setBNodeOnObj=False):
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = RxPath.BNODE_BASE
@@ -193,6 +194,7 @@ class sjson(object):
         self.preserveRdfTypeInfo = preserveRdfTypeInfo
         self.scope = scope
         self.model = model
+        self.setBNodeOnObj = setBNodeOnObj
 
     def _value(self, node):
         from rx import RxPathDom
@@ -411,6 +413,27 @@ class sjson(object):
         if scope is None:
             scope = self.scope
 
+        parentid = '' 
+        #nsmapstack = [ self.nsmap.copy() ]
+        nsmap = self.nsmap
+
+        def getorsetid(obj):
+            #nsmap = nsmapstack.pop()
+            nsmapprop = _expandqname('nsmap', nsmap) 
+            nsmapval = obj.get(nsmapprop)
+            if nsmapval is not None:
+                pass #XXX update stack            
+            idprop = _expandqname('id', nsmap) 
+            objId = obj.get(idprop)
+            if objId is None:  
+                #mark bnodes for nested objects differently                
+                prefix = parentid and 'j:e:' or 'j:t:'
+                suffix = parentid and (parentid + ':') or ''
+                objId = self._blank(prefix+'object:'+suffix)
+                if self.setBNodeOnObj:
+                    obj[idprop] = objId
+            return objId, idprop
+
         if isinstance(json, (str,unicode)):
             todo = json = json.loads(json)            
         if isinstance(json, dict):
@@ -419,28 +442,8 @@ class sjson(object):
             todo = list(json)
         if not isinstance(todo, list):
             raise TypeError('whats this?')
-        todo = [ (x, '') for x in todo]
-        
-        parentid = '' 
-        #nsmapstack = [ self.nsmap.copy() ]
-        nsmap = self.nsmap
-        
-        def getorsetid(obj):
-            #nsmap = nsmapstack.pop()
-            nsmapprop = _expandqname('nsmap', nsmap) 
-            nsmapval = obj.get(nsmapprop)
-            if nsmapval is not None:
-                pass #XXX update stack            
-            idprop = _expandqname('id', nsmap) 
-            id = obj.get(idprop)
-            if id is None:
-                #mark bnodes for nested objects differently                
-                prefix = parentid and 'j:e:' or 'j:t:'
-                suffix = parentid and (parentid + ':') or ''
-                id = self._blank(prefix+'object:'+suffix)
-                obj[idprop] = id
-            return id, idprop
-
+        todo = [ (x, getorsetid(x), '') for x in todo]
+                
         def _createNestedList(val):
             assert isinstance(val, list)
             if not val:
@@ -460,7 +463,7 @@ class sjson(object):
                     itemid, idprop = getorsetid(item)
                     m.addStatement( Statement(seq,
                         RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
-                    todo.append( (item, parentid))
+                    todo.append( (item, (itemid, idprop), parentid))
                 elif isinstance(item, list):
                     nestedlistid = _createNestedList(item)
                     m.addStatement( Statement(seq,
@@ -470,14 +473,13 @@ class sjson(object):
             return seq
         
         while todo:
-            obj, parentid = todo.pop(0)
+            obj, (id, idprop), parentid = todo.pop(0)
                         
             #XXX support top level lists: 'list:' 
             assert isinstance(obj, dict), "only top-level dicts support right now"            
             #XXX if obj.nsmap: push nsmap
             #XXX propmap
             #XXX idmap
-            id, idprop = getorsetid(obj)
             if not self.isEmbeddedBnode(id): 
                 #this object isn't embedded so set it as the new parent
                 parentid = id
@@ -490,7 +492,7 @@ class sjson(object):
                 if isinstance(val, dict):
                     objid, idprop = getorsetid(val) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
-                    todo.append( (val, parentid) )
+                    todo.append( (val, (objid, idprop), parentid) )
                 elif isinstance(val, list):
                     #dont build a PROPSEQTYPE if prop in rdf:_ rdf:first rdfs:member                
                     specialprop = prop.startswith(RDF_MS_BASE+'_') or prop in [
@@ -512,7 +514,7 @@ class sjson(object):
                                 pos.append(i)
                             else:
                                 itemdict[(itemid, OBJECT_TYPE_RESOURCE)] = [i]                                                                
-                                todo.append( (item, parentid) )
+                                todo.append( (item, (itemid, idprop), parentid) )
                         elif isinstance(item, list):                        
                             nestedlistid = _createNestedList(item)
                             itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE)] = [i]                                                                                            
