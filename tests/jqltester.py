@@ -30,7 +30,7 @@ class Test(object):
         self.__dict__.update(attrs)
 
 class Suite(object):    
-    defaults = dict(ast=None, rows=None, result=None, skip=False,
+    defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None,
                 skipParse=False, model=None, name=None, query=None, group=None)
 
     def __init__(self):
@@ -226,7 +226,7 @@ def main(t, cmdargs=None):
         if options.printrows or test.rows is not None:
             if ast:
                 evalAst = ast.where            
-                testrows = list(jql.evalAST(evalAst, test.model))
+                testrows = list(jql.evalAST(evalAst, test.model, test.bindvars))
             else:
                 testrows = None
         if options.printrows:
@@ -244,8 +244,8 @@ def main(t, cmdargs=None):
 
         if not options.quiet: print "construct " + (options.printdebug and '(with debug)' or '')
         if ast:
-            testresults = list(jql.evalAST(ast, test.model, explain=explain,
-                                                    debug=options.printdebug))
+            testresults = list(jql.evalAST(ast, test.model, test.bindvars,
+                                    explain=explain, debug=options.printdebug))
         else:
             testresults = None
         

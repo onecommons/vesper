@@ -56,11 +56,11 @@ import ply.yacc
 
 reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', #'NS', 
            'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
-           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'INCLUDE', 'EXCLUDE')
+           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'INCLUDE', 'EXCLUDE', 'WHEN')
 
 tokens = reserved + (
-    # Literals (identifier, integer constant, float constant, string constant, char const)
-    'NAME', 'INT', 'FLOAT', 'STRING',
+    # Literals (identifier, integer constant, float constant, string constant)
+    'NAME', 'INT', 'FLOAT', 'STRING', 
 
     # Operators (+,-,*,/,%,  |,&,~,^,<<,>>, ||, &&, !, <, <=, >, >=, ==, !=)
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'MOD',
@@ -74,7 +74,7 @@ tokens = reserved + (
     'LBRACE', 'RBRACE',
     'COMMA', 'PERIOD', 'COLON',
 
-    'PROPSTRING', 'VAR', 'QNAME', 'QSTAR'
+    'PROPSTRING', 'LABEL', 'QNAME', 'QSTAR', 'BINDVAR'
 )
 
 # Operators
@@ -133,22 +133,26 @@ def t_PROPSTRING(t):
     t.value = t.value[1:-1]
     return t
 
-def t_VAR(t):
+def t_LABEL(t):
     v = t.value[1:]
-    t.value = T.var(v)
+    t.value = T.label(v)
     return t
-t_VAR.__doc__ = r'\?'+ _namere +''
+t_LABEL.__doc__ = r'\?'+ _namere +''
 
 def t_QNAME(t):
     prefix, name = t.lexer.lexmatch.group('prefix','name')
     if prefix:
-        t.value = QName(prefix[:-1], name)
+        if prefix == ':':
+            t.type = 'BINDVAR'
+            t.value = name
+        else:
+            t.value = QName(prefix[:-1], name)
     else:
         key = t.value.lower() #make keywords case-insensitive (like SQL)
         t.type = reserved_map.get(key,"NAME")
         t.value = reserved_constants.get(key, t.value)
     return t
-t_QNAME.__doc__ = '(?P<prefix>'+_namere+':)?(?P<name>' + _namere + ')'
+t_QNAME.__doc__ = '(?P<prefix>('+_namere+')?:)?(?P<name>' + _namere + ')'
 
 def t_QSTAR(t):    
     t.value = QName(t.value[:-2], '*')
@@ -264,7 +268,7 @@ def p_construct0(p):
         defaults['groupby'] = groupby = GroupBy(arg)
     
     if label:
-        assert isinstance(label, T.var)
+        assert isinstance(label, T.label)
         op.id.appendArg( Label(label[0]) )
     where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, defaults['where'], groupby)
     #XXX add support for ns constructop    
@@ -375,17 +379,15 @@ def p_atom(p):
     """
     p[0] = p[1]
 
-#def p_constructitem2(p):
-#    '''
-#    constructitem : VAR
-#    listconstructitem : VAR
-#    '''
-#    p[0] = ConstructSubject(value=p[1][0])
-
-##next one must come after above rule so that they take priority
-def p_atom_var(p):
+def p_atom_bindvar(p):
     """
-    atom : VAR
+    atom : BINDVAR
+    """
+    p[0] = BindVar(p[1])
+
+def p_atom_label(p):
+    """
+    atom : LABEL
     """
     p[0] = Label(p[1][0])
 
@@ -396,7 +398,6 @@ def p_constructitem6(p):
     '''    
     p[0] = _makeConstructProp(p[1], Project(0), True, False)
 
-
 def p_atom_id(p):
     """
     atom : ID
@@ -406,6 +407,7 @@ def p_atom_id(p):
 def p_funcname(p):
     '''funcname : NAME
                 | QNAME
+                | PROPSTRING
     '''
     p[0] = p[1]
 
@@ -443,18 +445,6 @@ def p_arglist(p):
         p[0] = p[1] + [p[3]]
     else:
         p[0] = [p[1]]
-
-#def p_constructitemlist_optional(p):
-#    """    
-#    constructitemlist : constructitemlist COMMA dictoptional
-#                      | dictoptional
-#    listconstructitemlist : listconstructitemlist COMMA listoptional
-#                          | listoptional
-#    """
-#    if len(p) == 4:
-#        p[0] = p[1] + p[3]
-#    else:
-#        p[0] = p[1]
 
 def p_constructoplist(p):
     """
@@ -535,6 +525,7 @@ def p_constructitem_include(p):
     constructitem : INCLUDE dictconstruct
     listconstructitem : INCLUDE listconstruct
     '''
+    #XXX
     p[0] = _makeConstructProp(None, p[2], False)
 
 def p_constructitem_exclude1(p): 
@@ -542,17 +533,14 @@ def p_constructitem_exclude1(p):
     constructitem : EXCLUDE barecolumnreflist
     listconstructitem : EXCLUDE arrayindexlist    
     '''
-    p[0] = p[2] #_makeConstructProp(None, p[2], False)
+    p[0] = p[2] #XXX _makeConstructProp(None, p[2], False)
 
 def p_constructitem_exclude2(p): 
     '''     
-    constructitem : EXCLUDE barecolumnreflist NAME expression
-    listconstructitem : EXCLUDE arrayindexlist NAME expression 
+    constructitem : EXCLUDE barecolumnreflist WHEN expression
+    listconstructitem : EXCLUDE arrayindexlist WHEN expression 
     '''
-    if p[3].lower() != 'if':
-        #we don't want IF to be a keyword so do this check manually
-        p.parser.errorlog.error('syntax error in EXCLUDE, missing "if"')
-    exp = p[4]
+    exp = p[4] #XXX
     p[0] = p[2] #_makeConstructProp(None, p[2], False)
 
 def p_arrayindex(p):
@@ -585,7 +573,7 @@ def p_columnref_trailer(p):
 
 def p_columnref(p):
     '''
-    columnref : VAR PERIOD columnreftrailer
+    columnref : LABEL PERIOD columnreftrailer
               | columnreftrailer
     '''
     if len(p) == 2:
@@ -603,21 +591,6 @@ def p_dictvalue(p):
         p[0] = T.forcelist(p[2])
     else:
         p[0] = p[1]
-
-#def p_optional(p):
-#    '''
-#    dictoptional : OMITNULL LPAREN constructitemlist RPAREN
-#             | OMITNULL LPAREN constructitemlist COMMA RPAREN
-#    listoptional : OMITNULL LPAREN listconstructitemlist RPAREN
-#             | OMITNULL LPAREN listconstructitemlist COMMA RPAREN
-#    '''
-#    for i, prop in enumerate(p[3]):
-#        if isinstance(prop, ConstructSubject):
-#            p[3][i] = ErrorOp(prop, "Subject in Optional")
-#            p.parser.errorlog.error('subject spec not allowed in Optional')
-#        else:
-#            prop.ifEmpty = PropShape.omit
-#    p[0] = p[3]
 
 def p_constructop1(p):
     '''
@@ -666,20 +639,6 @@ def p_orderbyexp_2(p):
     sortexp : expression DESC
     '''
     p[0] = SortExp(p[1], True)
-    
-def XXXp_dictconstruct(p):
-    '''
-    dictconstruct : LBRACE constructitemlist RBRACE
-                  | LBRACE constructitemlist constructoplist RBRACE
-                  | LBRACE constructitemlist COMMA constructoplist RBRACE                  
-                  | LBRACE constructitemlist COMMA constructoplist COMMA RBRACE
-    '''
-    if len(p) == 4:
-        p[0] = T.dictconstruct( p[2], None)
-    elif len(p) == 5:
-        p[0] = T.dictconstruct( p[2], p[3])
-    else:
-        p[0] = T.dictconstruct( p[2 ], p[4])
 
 def p_constructlist(p):
     '''
@@ -698,12 +657,12 @@ def p_constructlist(p):
 
 def p_construct(p):
     '''
-    dictconstruct : LBRACE VAR COMMA dictconstructlist RBRACE
-                  | LBRACE VAR dictconstructlist RBRACE
+    dictconstruct : LBRACE LABEL COMMA dictconstructlist RBRACE
+                  | LBRACE LABEL dictconstructlist RBRACE
                   | LBRACE dictconstructlist RBRACE
 
-    listconstruct : LBRACKET VAR COMMA listconstructlist RBRACKET
-                  | LBRACKET VAR listconstructlist RBRACKET
+    listconstruct : LBRACKET LABEL COMMA listconstructlist RBRACKET
+                  | LBRACKET LABEL listconstructlist RBRACKET
                   | LBRACKET listconstructlist RBRACKET
     '''
     if len(p) == 4:

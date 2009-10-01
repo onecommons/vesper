@@ -374,6 +374,10 @@ class Label(QueryOp):
     def isIndependent(self):
         return False
 
+class BindVar(QueryOp):
+    def __init__(self, name):
+        self.name = name
+
 class Constant(QueryOp):
     '''
     '''

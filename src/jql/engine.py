@@ -1543,6 +1543,15 @@ class SimpleQueryEngine(object):
     def costConstant(self, op, context):
         return 0.0
 
+    def evalBindVar(self, op, context):
+        try:
+            return context.bindvars[op.name]
+        except KeyError:
+            raise QueryException('bindvar "%s" not found' % op.name)
+
+    def costBindVar(self, op, context):
+        return 0.0
+
     def evalEq(self, op, context):
         #XXX
         lvalue = op.left.evaluate(self, context)

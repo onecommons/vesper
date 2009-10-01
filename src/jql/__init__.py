@@ -73,7 +73,7 @@ def runQuery(query, model):
     (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, addChangeMap=False):
+def getResults(query, model, bindvars=None, addChangeMap=False):
     '''
     Returns a dict with the following keys:
         
@@ -96,14 +96,14 @@ def getResults(query, model, addChangeMap=False):
 
     if ast != None:
         try:
-            results = list(evalAST(ast, model))
+            results = list(evalAST(ast, model, bindvars))
             response['results'] = results
         except QueryException, qe:
             response['results'] = None
-            errors.append(qe.value)
+            errors.append('error: %s' % qe.message)
         except Exception, ex:
             import traceback
-            errors.append("unexpected query exception: %s" % traceback.format_exc())
+            errors.append("unexpected exception: %s" % traceback.format_exc())
         
     if len(errors) > 0:
         response['errors'] = errors
@@ -125,10 +125,10 @@ def buildAST(query):
     from jql import parse, engine
     return parse.parse(query, engine.SimpleQueryEngine.queryFunctions)
     
-def evalAST(ast, model, bindvars=(), explain=None, debug=False):
+def evalAST(ast, model, bindvars=None, explain=None, debug=False):
     #rewriteAST(ast)
     from jql import engine
-    queryContext = QueryContext(model, ast, explain, debug)
+    queryContext = QueryContext(model, ast, explain, bindvars, debug)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
@@ -139,20 +139,20 @@ class QueryContext(object):
     currentRow = None
     currentValue = None
     
-    def __init__(self, initModel, ast, explain=False, debug=False, depth=0, vars=None):
+    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
         self.ast = ast
-        self.vars = vars
+        self.bindvars = bindvars or {}
         self.debug=debug
         self.depth=depth
         self.constructStack = []
         self.engine = None
 
     def __copy__(self):
-        copy = QueryContext(self.initialModel, self.ast, self.explain, 
-                                              self.debug, self.depth, self.vars)
+        copy = QueryContext(self.initialModel, self.ast, self.explain, self.bindvars,
+                                              self.debug, self.depth)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow
