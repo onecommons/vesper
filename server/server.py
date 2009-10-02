@@ -39,6 +39,13 @@ def store_query(q, update=False):
         except Exception, e:
             print "error saving query history!", e
 
+def load_data(data):
+    try:
+        import yaml
+        return yaml.safe_load(data)
+    except ImportError:
+        return json.loads(data)
+
 @Route("index")
 def index(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
@@ -92,7 +99,7 @@ def update(kw, retval):
         postdata = kw['_params']['data']
         store_query(postdata, update=True)
         
-        data = json.loads(postdata)
+        data = load_data(postdata)
         tmp = dom_store.update(data)
         from pprint import pformat
         return pformat(tmp)
@@ -127,7 +134,7 @@ def api_handler(kw, retval):
             r = list(r) # XXX
             out['data'] = r
         elif action == 'update':            
-            root = json.loads(params['data']) # XXX this should probably change
+            root = load_data(params['data']) # XXX this should probably change
             
             query = "{*, where(%s)}" % root['where']
             # print "querying:", query
@@ -149,7 +156,7 @@ def api_handler(kw, retval):
             changed = dom_store.update(target) # returns statements modified; not so useful
             
         elif action == 'add':
-            data = json.loads(params['data'])
+            data = load_data(params['data'])
             out['added'] = dom_store.add(data)
         elif action == 'delete':
             print "XXX delete action not supported!"
