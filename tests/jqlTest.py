@@ -53,11 +53,11 @@ t('{*}',
 
 t('''{ * where ( foo > 'bar') }''', [])
 
-t('''{ * where ( id = :id) }''', 
-[{'foo': 'bar', 'id': '2'}], 
+t('''{ * where ( id = @id) }''', 
+[{'foo':'bar', 'id':'2'}], 
                 bindvars={'id':'2'})
 
-t('''{ * where ( child = :child) }''', 
+t('''{ * where ( child = @child) }''', 
 [{'child': '2', 'id': '_:2', 'parent': '1'}], 
         bindvars={'child':'2'})
 

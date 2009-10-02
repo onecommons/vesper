@@ -768,6 +768,11 @@ class QueryFuncs(object):
         self.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
         self.addFunc('negate', lambda a: -float(a), NumberType)
         self.addFunc('bool', lambda a: bool(a), BooleanType)
+        self.addFunc('upper', lambda a: a.upper(), StringType)
+        self.addFunc('lower', lambda a: a.lower(), StringType)
+        self.addFunc('trim', lambda a,chars=None: a.strip(chars), StringType)
+        self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType)
+        self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType)
 
 def recurse(context, startid, propname=None):
     '''

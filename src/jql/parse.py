@@ -142,17 +142,18 @@ t_LABEL.__doc__ = r'\?'+ _namere +''
 def t_QNAME(t):
     prefix, name = t.lexer.lexmatch.group('prefix','name')
     if prefix:
-        if prefix == ':':
-            t.type = 'BINDVAR'
-            t.value = name
-        else:
-            t.value = QName(prefix[:-1], name)
+        t.value = QName(prefix[:-1], name)
     else:
         key = t.value.lower() #make keywords case-insensitive (like SQL)
         t.type = reserved_map.get(key,"NAME")
         t.value = reserved_constants.get(key, t.value)
     return t
-t_QNAME.__doc__ = '(?P<prefix>('+_namere+')?:)?(?P<name>' + _namere + ')'
+t_QNAME.__doc__ = '(?P<prefix>'+_namere+':)?(?P<name>' + _namere + ')'
+
+def t_BINDVAR(t):
+    t.value = t.value[1:]
+    return t
+t_BINDVAR.__doc__ = r'\@'+ _namere +''
 
 def t_QSTAR(t):    
     t.value = QName(t.value[:-2], '*')
