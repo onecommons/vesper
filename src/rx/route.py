@@ -1,5 +1,6 @@
 #derived from http://pythonpaste.org/webob/do-it-yourself.html#routing
 from raccoon import *
+from rx.utils import attrdict
 
 import re
 var_regex = re.compile(r'''
@@ -44,7 +45,7 @@ class Router(object):
             if match:            
                 urlvars = match.groupdict()
                 urlvars.update(vars)
-                kw['urlvars'] = urlvars
+                kw['urlvars'] = attrdict(urlvars)
                 return controller
         return None
 
@@ -56,12 +57,12 @@ def Route(path, routes = routes, **vars):
         return f
     return _route
     
-def gensequence(kw): 
+def gensequence(kw, default=None): 
     route = routes.find_route(kw)
     if route:
         yield route
-    else: #default:
-        yield servefile
+    elif default:
+        yield default
 
 @Action
 def servefile(kw, retval):

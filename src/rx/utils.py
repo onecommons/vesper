@@ -567,3 +567,118 @@ class DynaExceptionFactory(object):
             #import traceback; print traceback.print_stack(file=sys.stderr)
             setattr(self.module, classname, dynaexception)
         return dynaexception
+
+class attrdict(dict):
+    '''
+`attrdict` is a `dict` subclass that lets you access keys as using attribute notation.
+`dict` attributes and methods are accessed as normal and so mask any keys 
+in the dictionary with the same name (as such keys will need to be accessed 
+through the standard `dict` interface).
+
+For example: 
+>>> d = attrdict(foo=1, update=2, copy=3)
+>>> d.foo
+1
+>>> d.copy()
+{'copy': 3, 'update': 2, 'foo': 1}
+>>> d.update({'update':4})
+>>> d['update']
+4
+>>> d[10] = '10'
+>>> len(d)
+4
+>>> del d[10]
+>>> len(d)
+3
+>>> bool(d.not_there)
+False
+>>> d.not_there = 'here'
+>>> d.not_there
+'here'
+>>> d['not_there']
+'here'
+    '''
+    UNDEFINED = None
+    
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            #raise AttributeError(name + ' not found')
+            return self.UNDEFINED
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+class LameAttrDict(dict):
+    '''
+A `dict` subclass that lets you access keys as using attribute notation.
+To access built-in dict attributes and methods prefix the name with '__'.
+
+WARNING: this probably won't work well with code expecting an dict because
+calling normal `dict` methods won't work. 
+
+For example: 
+>>> d = LameAttrDict(foo=1, update=2, copy=3)
+>>> d.foo
+1
+>>> d.copy
+3
+>>> d.__copy()
+{'copy': 3, 'update': 2, 'foo': 1}
+>>> d.__update({'update':4})
+>>> d.update
+4
+>>> d['update']
+4
+>>> list(d.__iterkeys()) == d.__keys() == list(d)
+True
+>>> d[10] = '10'
+>>> len(d)
+4
+>>> del d[10]
+>>> len(d)
+3
+    '''
+
+    def __getattribute__(self, name):     
+        if name.startswith('__'):
+            try:
+                return dict.__getattribute__(self, name)                
+            except AttributeError:
+                try:
+                    return dict.__getattribute__(self, name[2:])
+                except AttributeError:
+                    pass         
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name + ' not found')
+
+class enumlist(list):
+    '''
+`enumlist` is a list subclass that overrides the built-in iterator
+to return (item, index, self) instead of item.
+
+>>> el = enumlist(('a', 'b'))
+>>> list(el)
+[('a', 0, ['a', 'b']), ('b', 1, ['a', 'b'])]
+>>> item = list(el)[1]
+>>> item.value
+'b'
+>>> item.index
+1
+>>> item.parent
+['a', 'b']
+    '''
+
+    class item(tuple):
+        __slots__ = ()
+        
+        value = property(lambda self: self[0])
+        index = property(lambda self: self[1])
+        parent = property(lambda self: self[2])
+        
+    def __iter__(self):
+        for i, v in enumerate(list.__iter__(self)):
+            yield enumlist.item((v, i, self))

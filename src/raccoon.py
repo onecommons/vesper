@@ -413,7 +413,7 @@ class RequestProcessor(utils.object_with_threadlocals):
         value it returns is passed to the next invoked Action until the end of
         the sequence, upon which the final return value is return by this function.
         '''
-        if kw is None: kw = {}
+        kw = utils.attrdict(kw or {})
         sequence = self.actions.get(triggerName)
         if sequence:
             errorSequence = self.actions.get(triggerName+'-error')
@@ -705,14 +705,14 @@ class HTTPRequestProcessor(RequestProcessor):
             _name = self.defaultPageName
 
         _responseCookies = Cookie.SimpleCookie()
-        _responseHeaders = dict(_status="200 OK") #include response code pseudo-header
-        kw = dict(_environ=environ,
+        _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
+        kw = dict(_environ=utils.attrdict(environ),
             _uri = wsgiref.util.request_uri(environ),
             _baseUri = wsgiref.util.application_uri(environ),
             _responseCookies = _responseCookies,
             _requestCookies = Cookie.SimpleCookie(environ.get('HTTP_COOKIE', '')),
             _responseHeaders= _responseHeaders,
-            _name=_name,
+            _name=_name
         )
         paramsdict = get_http_params(environ)
         kw.update(paramsdict)
@@ -786,8 +786,8 @@ def get_http_params(environ):
 
     _params = {}
     _postContent = None
-    getparams = {}
-    postparams = {}
+    getparams = utils.attrdict()
+    postparams = utils.attrdict()
 
     if environ.get('QUERY_STRING'):
         forms = cgi.FieldStorage(environ=environ, keep_blank_values=1)
@@ -985,15 +985,22 @@ def run(vars, out=sys.stdout):
 
             root.handleHTTPRequest(request)
 
-    if 'RECORD_REQUESTS' in vars:
+    if vars.get('RECORD_REQUESTS'):
         root.requestsRecord = []
         root.requestRecordPath = 'debug-wiki.pkl'
 
-    if 'EXEC_CMD_AND_EXIT' not in vars:
+    if not vars.get('EXEC_CMD_AND_EXIT'):
         #print 'starting server!'
         from wsgiref.simple_server import make_server
-        httpd = make_server('', 8000, root.wsgi_app) #XXX configurable port
-        print>>out, "Serving HTTP on port 8000..."
+        if vars.get('firepython_enabled'):
+            # FirePython Middleware
+            import firepython.middleware
+            app = firepython.middleware.FirePythonWSGI(root.wsgi_app)
+        else:
+            app = root.wsgi_app
+        port = vars.get('PORT', 8000)
+        httpd = make_server('', port, app)
+        print>>out, "Serving HTTP on port %d..." % port
         try:
             httpd.serve_forever()
         finally:

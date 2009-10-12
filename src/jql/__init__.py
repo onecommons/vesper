@@ -45,6 +45,7 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 
 from rx.python_shim import *
 from rx.RxPath import Tupleset, ColumnInfo, EMPTY_NAMESPACE
+import rx.utils
          
 SUBJECT = 0
 PROPERTY = 1
@@ -78,7 +79,7 @@ def getResults(query, model, bindvars=None, addChangeMap=False):
     Returns a dict with the following keys:
         
     - `results`: the result of the query (either a list or None if the query failed)
-    - `error`: An error string if the query failed or None if it succeeded
+    - `errors`: An error string if the query failed or None if it succeeded
     - `resource`: a list describing the resources (used for track changes)
     
     :Parameters:
@@ -93,20 +94,21 @@ def getResults(query, model, bindvars=None, addChangeMap=False):
     
     (ast, parseErrors) = buildAST(query)
     errors.extend(parseErrors)
-
+    
+    response['results'] = []
+    
     if ast != None:
+        
         try:
             results = list(evalAST(ast, model, bindvars))
             response['results'] = results
-        except QueryException, qe:
-            response['results'] = None
+        except QueryException, qe:            
             errors.append('error: %s' % qe.message)
         except Exception, ex:
             import traceback
             errors.append("unexpected exception: %s" % traceback.format_exc())
         
-    if len(errors) > 0:
-        response['errors'] = errors
+    response['errors'] = errors
 
     # XXX may not be valid anymore
     """
@@ -138,6 +140,7 @@ def evalAST(ast, model, bindvars=None, explain=None, debug=False):
 class QueryContext(object):
     currentRow = None
     currentValue = None
+    shapes = { dict : rx.utils.attrdict }
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0):
         self.initialModel = initModel

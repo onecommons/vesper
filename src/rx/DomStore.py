@@ -79,7 +79,7 @@ class DomStore(transactions.TransactionParticipant):
             
 class BasicStore(DomStore):
 
-    def __init__(self, requestProcessor, modelFactory=RxPath.IncrementalNTriplesFileModel,
+    def __init__(self, requestProcessor, modelFactory=None,
                  schemaFactory=RxPath.defaultSchemaClass,                 
                  STORAGE_PATH ='',
                  STORAGE_TEMPLATE='',
@@ -96,8 +96,8 @@ class BasicStore(DomStore):
           to initialize the model if it needs to be created
         '''
         self.requestProcessor = requestProcessor
-        self.modelFactory = modelFactory
-        self.versionModelFactory = versionModelFactory or modelFactory
+        self.modelFactory = modelFactory or RxPath.TransactionFileModel
+        self.versionModelFactory = versionModelFactory or modelFactory or RxPath.IncrementalNTriplesFileModel
         self.schemaFactory = schemaFactory 
         self.APPLICATION_MODEL = APPLICATION_MODEL        
         self.STORAGE_PATH = STORAGE_PATH        
@@ -260,6 +260,7 @@ class BasicStore(DomStore):
             self.addTrigger(stmts, jsonrep)
 
         self.model.addStatements(stmts)
+        return stmts
         
     def remove(self, removes):
         '''
@@ -359,8 +360,8 @@ class BasicStore(DomStore):
             #        bnode
             removals.extend( stmts )
         self.remove(removals)        
-        self.add(newStatements)
-        return newStatements
+        return self.add(newStatements)
+
 
     def query(self, query, **kw):
         import jql

@@ -937,7 +937,10 @@ class SimpleQueryEngine(object):
         })
         #print 'findprop', listid, list(rows)
         return rows
-    
+
+    def getShape(self, context, shape):
+        return context.shapes.get(shape, shape)()
+
     def evalSelect(self, op, context):
         context.engine = self
         if op.where:
@@ -1005,7 +1008,7 @@ class SimpleQueryEngine(object):
                     print 'valid outer'
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
-                pattern = shape()
+                pattern = self.getShape(context, shape)
                 allpropsOp = None
                 propsAlreadyOutput = set((sjson.PROPSEQ,)) #exclude PROPSEQ
                 for prop in op.args:
@@ -1080,7 +1083,7 @@ class SimpleQueryEngine(object):
                 if allpropsOp:
                     if shape is op.dictShape: 
                         #don't overwrite keys already created
-                        propsAlreadyOutput.update(pattern.keys())
+                        propsAlreadyOutput.update(pattern)
 
                     #XXX what about scope -- should initialModel just filter by scope if set?
                     rows = context.initialModel.filter({ SUBJECT: idvalue })

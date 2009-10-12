@@ -603,7 +603,6 @@ class IncrementalNTriplesFileModelBase(FileModel):
         else:
             self.path = source
             self.format = format
-        
         MemModel.__init__(self, stmts)    
         
     def commit(self, **kw):                
@@ -637,7 +636,6 @@ def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
     '''
-    
     if os.path.exists(path):
         from rx import Uri
         uri = Uri.OsPathToUri(path)
