@@ -123,8 +123,6 @@ from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_M
 from rx.RxPathUtils import encodeStmtObject
 import re
 
-RESOURCE_REGEX = re.compile(r'^[\w:/\.\?&\$\-_\+#\@]+$') #XXX
-
 JSON_BASE = 'sjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
@@ -180,18 +178,21 @@ class sjson(object):
     
     bnodecounter = 0
     bnodeprefix = '_:'
-
+    
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
-    
+        
     def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
                             scope = '', model=None, preserveRdfTypeInfo=True, 
-                                                          setBNodeOnObj=False):
+                                                          setBNodeOnObj=False,
+                                                          refPrefix=''):
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = RxPath.BNODE_BASE
         self.addOrderInfo = addOrderInfo
         self.preserveRdfTypeInfo = preserveRdfTypeInfo
+        self.refPrefix = refPrefix
+        self.RESOURCE_REGEX = re.compile(r'^%s([\w:/\.\?&\$\-_\+#\@]+)$' % self.refPrefix)
         self.scope = scope
         self.model = model
         self.setBNodeOnObj = setBNodeOnObj
@@ -205,6 +206,9 @@ class sjson(object):
         return node.data
     
     def QName(self, prop):
+        '''
+        convert prop to QName
+        '''
         #reverse sorted so longest comes first
         for ns, prefix in self.nsmap:
             if prop.startswith(ns):
@@ -215,6 +219,9 @@ class sjson(object):
                     return suffix
         return prop
 
+    def serializeRef(self, uri):
+        return self.refPrefix+self.QName(uri) 
+    
     def _setPropSeq(self, propseq, idrefs):
         #XXX what about empty lists?
         from rx import RxPathDom
@@ -232,7 +239,7 @@ class sjson(object):
                 elif obj.uri == RDF_MS_BASE + 'nil':
                     childlist.append( [] )
                 else: #otherwise it's a resource
-                    childlist.append( self.QName(obj.uri) )
+                    childlist.append( self.serializeRef(obj.uri) )
                     key = len(childlist)-1
                     idrefs.setdefault(obj.uri, []).append((childlist, key))
         return propbag, childlist
@@ -246,6 +253,7 @@ class sjson(object):
             return obj
         else:
             if not isshared and self.model:
+                #look up and serialize the resource
                 #XXX pass on options like includesharedrefs
                 #XXX pass in idrefs
                 #XXX add depth option
@@ -362,7 +370,7 @@ class sjson(object):
                     parent[ key ] = []
                 else: #otherwise it's a resource
                     #print 'prop key', key, prop, type(parent)
-                    parent[ key ] = self.QName(obj.uri)
+                    parent[ key ] = self.serializeRef(obj.uri)
                     if includesharedrefs or obj.uri != res.uri:
                         #add ref if object isn't same as subject
                         idrefs.setdefault(obj.uri, []).append( (parent, key) )
@@ -575,9 +583,9 @@ class sjson(object):
         #XXX think about customization, e.g. if number were ids
         if not isinstance(s, (str,unicode)):        
             return False
-        m = RESOURCE_REGEX.match(s)
+        m = self.RESOURCE_REGEX.match(s)
         if m is not None:
-            return s
+            return m.group(1)
         return False
  
     def deduceObjectType(self, item):    

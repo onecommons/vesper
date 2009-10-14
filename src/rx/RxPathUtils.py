@@ -1375,19 +1375,19 @@ class Graph(object):
         if stmt[3] == OBJECT_TYPE_RESOURCE:
             obj = stmt[2]
         else:
-            obj = '"'+stmt[2]+'"'+stmt[3]
+            obj = '"'+ stmt[2]+'"'+stmt[3]
         if quad:
-            scope = stmt[4]
+            scope = str(stmt[4])
         else:
             scope = None
-        t = (stmt[0], stmt[1], obj, scope)
+        t = (str(stmt[0]), str(stmt[1]), str(obj), scope)
         self.statements.add(t)
 
     def isBnode(self, uri):
       isbnode = uri.startswith(BNODE_BASE) or uri.startswith('_:')
       return isbnode
 
-    def __hash__(self):
+    def _hashtuple(self):
       result = []
       for (subj, pred, objt, scope) in self.statements:
          if self.isBnode(subj):
@@ -1403,6 +1403,10 @@ class Graph(object):
 
          result.append(tripleHash.digest())
       result.sort()
+      return result
+      
+    def __hash__(self):
+      result = self._hashtuple()
       return hash(tuple(result))
 
     def vhashmemo(self, term, done=False):

@@ -1,5 +1,5 @@
 from sjson import *
-from pprint import pprint
+from pprint import pprint,pformat
 
 def assert_json_match(expected, result, dosort=False):
     if dosort and isinstance(expected, list):
@@ -13,42 +13,44 @@ def printdiff(a, b):
     import difflib
     d = difflib.SequenceMatcher(None, a, b)
     return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
-          (tag, i1, i2, a[i1:i2], j1, j2, b[j1:j2]))
-        for tag, i1, i2, j1, j2 in d.get_opcodes()])
+          (tag, i1, i2, pformat(a[i1:i2]), j1, j2, pformat(b[j1:j2])) )
+        for tag, i1, i2, j1, j2 in d.get_opcodes() if tag != 'equal'])
 
 def assert_stmts_match(expected_stmts, result_stmts):
     assert set(result_stmts) == set(expected_stmts), printdiff(
                         result_stmts,expected_stmts)
 
     if not RxPath.graph_compare(expected_stmts, result_stmts):
-        print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')
-        print 'expected _:1', RxPath.Graph(expected_stmts).vhash('_:1')
-        print 'result _:1', RxPath.Graph(result_stmts).vhash('_:1')
-        print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
+        print 'graph_compare failed'
+        print printdiff(ge._hashtuple(), gr._hashtuple())
+        #print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')
+        #print 'expected _:1', RxPath.Graph(expected_stmts).vhash('_:1')
+        #print 'result _:1', RxPath.Graph(result_stmts).vhash('_:1')
+        #print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
         assert False
 
-def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False):
+def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False,refPrefix=''):
     test_json = [ json.loads(src) ]
-    result_stmts = sjson(generateBnode='counter').to_rdf( test_json )
+    result_stmts = sjson(generateBnode='counter', refPrefix=refPrefix).to_rdf( test_json )
     #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = sjson()._to_sjson( result_stmts, includesharedrefs=includesharedrefs)['results']
+    result_json = sjson(refPrefix=refPrefix)._to_sjson( result_stmts, includesharedrefs=includesharedrefs and True)['results']
     #pprint( result_json )
     if includesharedrefs:
         test_json = includesharedrefs
     assert_json_match(result_json, test_json)
     if backagain:
-        assert_stmts_and_back_match(result_stmts)
+        assert_stmts_and_back_match(result_stmts,refPrefix=refPrefix)
 
-def assert_stmts_and_back_match(stmts, expectedobj = None):
-    result = sjson()._to_sjson( stmts )['results']
+def assert_stmts_and_back_match(stmts, expectedobj = None, refPrefix=''):
+    result = sjson(refPrefix=refPrefix)._to_sjson( stmts )['results']
     if expectedobj is not None:
         assert_json_match(expectedobj, result, True)
     
-    result_stmts = sjson(generateBnode='counter').to_rdf( result )
+    result_stmts = sjson(generateBnode='counter',refPrefix=refPrefix).to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
 import unittest
@@ -87,12 +89,17 @@ def test():
         "id": "http://example.org/book#1"
         }
     }]
-
     assert_stmts_and_back_match(stmts, expected)
 
     src = '''
     { "id" : "atestid",
        "foo" : { "id" : "bnestedid", "prop" : "value" }
+    }'''
+    assert_json_and_back_match(src)
+
+    src = '''
+    { "id" : "atestid2",
+       "foo" : { "id" : "bnestedid", "prop" : "@ref" }
     }'''
     assert_json_and_back_match(src)
 
@@ -142,21 +149,23 @@ def test():
 
     src = '''
     { "id" : "test",
-     "circular" : "test",
-      "circularlist" : ["test", "test"],
-      "circularlist2" : [["test"],["test", "test"]]
+     "circular" : "@test",
+     "not a reference" : "test",
+      "circularlist" : ["@test", "@test"],
+      "circularlist2" : [["@test"],["@test", "@test"]]
         }
     '''
-    assert_json_and_back_match(src)
+    assert_json_and_back_match(src, refPrefix='@')
 
-    #test that shardrefs output doesn't explode with circular references
+    #test that shardrefs output doesn't try to expand circular references
     #XXX current handling is bad, should give error
     includesharedrefs = [{
-    "circular": "test",
-    "circularlist": ["test", "test"],
-    "circularlist2": ["_:j:e:list:test:1", "_:j:e:list:test:2"],
+    "circular": "@test",
+    "not a reference" : "test",
+    "circularlist": ["@test", "@test"],
+    "circularlist2": ["@_:j:e:list:test:1", "@_:j:e:list:test:2"],
     "id": "test"}]
-    assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs)
+    assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs, refPrefix='@')
     #test missing ids and exclude_blankids
     #test shared
     print 'tests pass'

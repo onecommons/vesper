@@ -767,6 +767,20 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
   'listprop4': [[]]}]
 )
 
+#XXX t.group = 'exclude'
+#html5 json microdata representation:
+#issue: @ in type's value, need a way to control that (by prop)
+'''
+{
+?parent
+id, type,
+'properties' : { 
+   *, exclude(id, type) 
+   where (id=?parent)
+  }
+}
+'''
+
 import unittest
 class JQLTestCase(unittest.TestCase):
     def testAll(self):
