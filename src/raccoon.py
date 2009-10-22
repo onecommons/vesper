@@ -280,12 +280,13 @@ class RequestProcessor(utils.object_with_threadlocals):
         if path and not os.path.exists(path):
             raise CmdArgError('%s not found' % path)
 
-        kw = globals().copy() #copy this modules namespace
-        if path:
-            if not self.BASE_MODEL_URI:
-                import socket
-                self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
+        if not self.BASE_MODEL_URI:
+            import socket
+            self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
 
+        kw = globals().copy() #copy this module's namespace
+
+        if path:
             def includeConfig(path):
                  kw['__configpath__'].append(os.path.abspath(path))
                  execfile(path, globals(), kw)
