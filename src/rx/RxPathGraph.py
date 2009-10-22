@@ -25,8 +25,9 @@ from RxPath import OBJECT_TYPE_LITERAL
 from RxPath import OBJECT_TYPE_RESOURCE
 from RxPath import RDF_MS_BASE
 from RxPath import Statement
-import logging
+import logging, time
 from rx import RxPath
+from rx.utils import attrdict
 log = logging.getLogger("RxPath")
 
 CTX_NS = u'http://rx4rdf.sf.net/ns/archive#'
@@ -50,7 +51,7 @@ def splitContext(ctx):
     '''
     parts = ctx.split(';;')
     if ctx.startswith(ORGCTX):
-        if parts[1].startswith(ADDCTX):
+        if parts[1].startswithth(ADDCTX):
             if parts[2].startswith(DEL4CTX):
                 delctx = parts[2] + ';;' + parts[1]
             else:
@@ -79,16 +80,21 @@ def isTransactionContext(contexturi):
     return False
 
 class CurrentTxN:
-    def __init__(self, txnCtxt):
+    def __init__(self, txnCtxt, baseRev, newRev):
         self.txnContext = txnCtxt
-        self.adds = {} #orignal_stmt => (primarystore stmt or none, txn_stmt)
-        self.removes = {} #orignal_stmt => (primarystore stmt or none, txn_stmt)
+        self.baseRev = baseRev
+        self.currRev = newRev
+        self.adds = {} #original_stmt => (primarystore stmt or none, txn_stmt)
+        self.removes = {} #original_stmt => (primarystore stmt or none, txn_stmt)
         
     def rollback(self):
         self.adds = {}
         self.removes = {}
 
 def getTxnContextUri(modelUri, versionnum):
+    '''
+    Create a transaction context URI from a model uri and revision id
+    '''
     return TXNCTX + modelUri + ';' + str(versionnum)
 
 class NamedGraphManager(RxPath.Model):
@@ -99,12 +105,15 @@ class NamedGraphManager(RxPath.Model):
     #
     #If this functionality was reintroduced then revert old behavior for getStatements and "remove w/ no context" 
     #(which would have to delete matching ADD*contexts and add ORG:contexts)
-    #and re-add support for ORG:context (i.e. in getRevisionStmts)
+    #and re-add support for ORG:context (i.e. in getRevisionStmtsForResource)
     
     #: set this to false to suppress the graph manager from adding statements to the store (useful for testing)
     createCtxResource = True 
     markLatest = True
     lastLatest = None
+    
+    branchId = None
+    notifyChangeset = None
 
     autocommit = property(lambda self: self.managedModel.autocommit,
         lambda self, set:
@@ -131,16 +140,17 @@ class NamedGraphManager(RxPath.Model):
             self.managedModel = primaryModel
         
         self.modelUri = modelUri
-        
+        self._setCurrentVersion(lastScope)
+        self._currentTxn = None
+
+    def _setCurrentVersion(self, lastScope):
         if lastScope:
             parts = lastScope.split(';')
             #context urls will always start with a txn context,
             #with the version after the first ;
-            #assert int(parts[1])
-            self.lastVersion = int(parts[1])   
+            self.currentVersion = parts[1]   
         else:
-            self.lastVersion = -1 #so the 1st version # will be 0
-        self._currentTxn = None
+            self.currentVersion = '' #will be set in incrementTxnContext 
         
     def getStatements(self, subject=None, predicate=None, object=None,
         objecttype=None, context=None, asQuad=True, hints=None):
@@ -181,14 +191,33 @@ class NamedGraphManager(RxPath.Model):
          
     @property
     def currentTxn(self):
+        '''
+        Return the current transaction. Creates a new transaction if there 
+        currently isn't one, incrementing the revision.
+        '''
         if not self._currentTxn:
             self.initializeTxn()
         return self._currentTxn
     
     def getTxnContext(self):
+        '''
+        Return the context revision URI for the current transaction. Creates a 
+        new transaction if there currently isn't one, incrementing the revision.
+        '''
         return self.currentTxn.txnContext
+
+    def _increment(self, rev):
+        if not rev:
+            return 0
+        return int(rev) + 1
     
     def incrementTxnContext(self):
+        '''
+        Increment the revision number. If no previous version exists 
+        (for example, a new database) the initial revision number will be 0.
+
+        Returns the transaction context URI for the new revision.
+        '''
         if self.markLatest:
             oldLatest = self.getStatements(predicate=CTX_NS + 'latest')
             if oldLatest:
@@ -196,17 +225,16 @@ class NamedGraphManager(RxPath.Model):
                 lastScope = oldLatest[0].subject
                 parts = lastScope.split(';')
                 #context urls will always start with a txn context,
-                #with the version after the first ;
-                #assert int(parts[1])                
-                self.lastVersion = int(parts[1]) + 1
+                #with the version after the first ;                
+                self.currentVersion = self._increment(parts[1])
             else:
                 self.lastLatest = None
-                self.lastVersion = 0
+                self.currentVersion = self._increment('')
         else:
-            self.lastVersion += 1
-
-        return getTxnContextUri(self.modelUri, self.lastVersion)        
-
+            self.currentVersion = self._increment(self.currentVersion)
+            
+        return getTxnContextUri(self.modelUri, self.currentVersion)
+    
     def isContextForPrimaryStore(self, context):
         '''
         Returns true if the context URI is for the primary model
@@ -232,6 +260,24 @@ class NamedGraphManager(RxPath.Model):
         '''
         return True
 
+    def _addPrimaryStoreStatement(self, srcstmt):
+        scope = srcstmt.scope
+        if not self.isContextForPrimaryStore(scope):
+            if isTransactionContext(scope):
+                raise RuntimeError("can't directly add scope: "+scope)
+            if self.isContextReflectedInPrimaryStore(scope):
+                stmt = Statement(scope='', *srcstmt[:4])
+                if self.managedModel.getStatements(*stmt):
+                    #already exists, so don't re-add
+                    stmt = None
+            else: #dont add to primary store
+                stmt = None
+        else:
+            stmt = srcstmt
+        if stmt:
+            self.managedModel.addStatement(stmt)
+        return stmt
+        
     def addStatement(self, srcstmt):
         '''
         Add the statement to the primary and revision models.
@@ -239,47 +285,21 @@ class NamedGraphManager(RxPath.Model):
         then store it in the primary model without a context (but first make sure
         the statement with the empty context isn't already in the primary model).
         '''
-        srcstmt = Statement( * srcstmt) #make sure it's an unmutable statement
+        srcstmt = Statement(*srcstmt) #make sure it's an unmutable statement
         if self.revertRemoveIfNecessary(srcstmt):
             return #the add just reverts a remove, so we're done
-
-        scope = srcstmt.scope
-        if not self.isContextForPrimaryStore(scope):
-            if isTransactionContext(scope):
-                raise RuntimeError("can't directly add scope: "+scope)
-            if not self.isContextReflectedInPrimaryStore(scope):
-                stmt = None
-            else:
-                stmt = Statement(scope='', *srcstmt[:4])
-                if self.managedModel.getStatements(*stmt):
-                    #already exists, so don't re-add
-                    stmt = None
-        else:
-            stmt = srcstmt
-        if stmt:
-            self.managedModel.addStatement(stmt)
-
+        
+        stmt = self._addPrimaryStoreStatement(srcstmt)
+        
         currentTxn = self.currentTxn
         txnCtxt = currentTxn.txnContext
-        addContext = ADDCTX + txnCtxt + ';;' + scope                    
-        newstmt = Statement(scope=addContext, * srcstmt[:4])
+        addContext = ADDCTX + txnCtxt + ';;' + srcstmt.scope                    
+        newstmt = Statement(scope=addContext, *srcstmt[:4])
         self.revisionModel.addStatement(newstmt)
 
         currentTxn.adds[srcstmt] = (stmt, newstmt)
-        
-    def removeStatement(self, srcstmt):
-        '''
-        Remove the statement from the primary model and add the statement using
-        the DEL context to the revision model. If the statement has a context
-        that is managed by the revision model remove the equivalent statement
-        without a context from  the primary model (but only if the statement
-        wasn't already added with an empty context or with another revision model
-        managed context).
-        '''
-        srcstmt = Statement(*srcstmt) #make sure its an unmutable statement
-        if self.revertAddIfNecessary(srcstmt):
-            return
 
+    def _removePrimaryStoreStatement(self, srcstmt):
         removeStmt = None
         if self.isContextForPrimaryStore(srcstmt.scope):
             removeStmt = srcstmt
@@ -287,13 +307,14 @@ class NamedGraphManager(RxPath.Model):
             if isTransactionContext(srcstmt.scope):
                 raise RuntimeError("can't directly remove with scope: "+srcstmt.scope)
 
-            #if the scope isn't intended for the primary store
+            #if the scope isn't intended to stored in the primary store
+            #(but is intended to be reflected in the primary store)
             #we assume there might be multiple statements with different scopes
             #that map to the triple in the primary store
             #so search the delmodel for live adds, if there's only one,
             #remove the statement from the primary store
             stmts = self.revisionModel.getStatements(*srcstmt[:4])
-            stmts.sort(cmp=comparecontextversion)
+            stmts.sort(key=self.getTransactionVersion)
             adds = 0
             for s in stmts:
                 orginalscope = splitContext(s.scope)[EXTRACTCTX]
@@ -313,35 +334,84 @@ class NamedGraphManager(RxPath.Model):
             if adds == 1: #len(adds) == 1:
                 #last one in the primary model, so delete it
                 removeStmt = Statement(scope='', * srcstmt[:4])
+        if removeStmt:
+            self.managedModel.removeStatement(removeStmt)
+        return removeStmt
+                
+    def removeStatement(self, srcstmt):
+        '''
+        Remove the statement from the primary model and add the statement using
+        the DEL context to the revision model. If the statement has a context
+        that is managed by the revision model remove the equivalent statement
+        without a context from  the primary model (but only if the statement
+        wasn't already added with an empty context or with another revision model
+        managed context).
+        '''
+        srcstmt = Statement(*srcstmt) #make sure its an unmutable statement
+        if self.revertAddIfNecessary(srcstmt):
+            return
+
+        removeStmt = self._removePrimaryStoreStatement(srcstmt)
         
         #record deletion in history store
         txnContext = self.getTxnContext()
         delContext = DELCTX + txnContext + ';;' + srcstmt.scope
-        delStmt = Statement(scope=delContext, * srcstmt[:4])
+        delStmt = Statement(scope=delContext, *srcstmt[:4])
         self.revisionModel.addStatement(delStmt)
-        if removeStmt:
-            self.managedModel.removeStatement(removeStmt)
         self.currentTxn.removes[srcstmt] = (removeStmt, delStmt)
 
+    def sendChangeset(self, ctxStmts):        
+        if not self.notifyChangeset:
+            return        
+        assert self._currentTxn
+        if self.createCtxResource:
+            #see _createCtxResource()
+            txnContext = self.getTxnContext()
+            assert txnContext            
+            ctxStmts.append(
+                Statement(txnContext, RDF_MS_BASE + 'type',
+                CTX_NS + 'TransactionContext', OBJECT_TYPE_RESOURCE, txnContext)
+            )
+        
+        txn = self.currentTxn
+        for stmt, revStmt in txn.adds.values():
+            ctxStmts.append(revStmt)
+        for stmt, revStmt in txn.removes.values():
+            ctxStmts.append(revStmt)
+        
+        #XXX do we need to handle StatementWithOrder specially?
+        changeset = attrdict(revision = self.currentVersion, 
+                baserevision=txn.baseRev, timestamp=txn.timestamp, 
+                origin=self.branchId , statements = ctxStmts)
+        self.notifyChangeset(changeset)
+    
+    def createTxnTimestamp(self):        
+        return time.time()
+            
     def commit(self, ** kw):
-        self._finishCtxResource()
+        self.currentTxn.timestamp = self.createTxnTimestamp() 
+        ctxStmts = self._finishCtxResource()
         if self.revisionModel != self.managedModel:
-            self.revisionModel.commit( ** kw)
-         
+            self.revisionModel.commit( ** kw)     
         #commit the transaction
-        self.managedModel.commit( ** kw)
+        self.managedModel.commit(** kw)        
+        #if successful, broadcast changeeset        
+        self.sendChangeset(ctxStmts)    
         self._currentTxn = None
 
     def initializeTxn(self):
         #increment version and set new transaction and context
-        self._currentTxn = CurrentTxN(self.incrementTxnContext())   
-
+        currentRev = self.currentVersion
+        ctxUri = self.incrementTxnContext()
+        assert ctxUri
+        self._currentTxn = CurrentTxN(ctxUri, currentRev, self.currentVersion)
         self._createCtxResource()
 
     def _createCtxResource(self):
         '''create a new context resource'''
-
-        txnContext = self.getTxnContext()
+        
+        assert self._currentTxn
+        txnContext = self._currentTxn.txnContext
         assert txnContext
 
         if self.createCtxResource:
@@ -352,19 +422,29 @@ class NamedGraphManager(RxPath.Model):
         if self.markLatest:
             if self.lastLatest:
                 self.revisionModel.removeStatement(self.lastLatest)
+            #assert self.currentVersion, 'currentVersion not set'
             self.revisionModel.addStatement(
                 Statement(txnContext, CTX_NS + 'latest',
-                    unicode(self.lastVersion), OBJECT_TYPE_LITERAL, txnContext)
+                    unicode(self.currentVersion), OBJECT_TYPE_LITERAL, txnContext)
             )
 
     def _finishCtxResource(self):
         if not self.createCtxResource:
             return
 
-        txnContext = self.getTxnContext()
+        assert self._currentTxn
+        txnContext = self._currentTxn.txnContext
         assert txnContext
+
         ctxStmts = []
 
+        ctxStmts.append(Statement(txnContext, CTX_NS+'baseRevision',
+            unicode(self._currentTxn.baseRev), OBJECT_TYPE_LITERAL, txnContext))
+        ctxStmts.append(Statement(txnContext, CTX_NS+'hasRevision',
+            unicode(self.currentVersion), OBJECT_TYPE_LITERAL, txnContext))        
+        ctxStmts.append(Statement(txnContext, CTX_NS+'createdOn',
+            unicode(self._currentTxn.timestamp), OBJECT_TYPE_LITERAL, txnContext))
+        
         def findContexts(changes):
             return set([(key.scope, value[1].scope)
                 for key, value in changes.items()])
@@ -376,7 +456,7 @@ class NamedGraphManager(RxPath.Model):
                 delContext, OBJECT_TYPE_RESOURCE, txnContext)
             ctxStmts.append(removeCtxStmt)            
             ctxStmts.append(Statement(delContext, CTX_NS + 'applies-to',
-                scope, OBJECT_TYPE_RESOURCE, delContext))
+                scope, OBJECT_TYPE_RESOURCE, txnContext))
 
         includeCtxts = findContexts(self.currentTxn.adds)
         for (scope, addContext) in includeCtxts:
@@ -390,9 +470,10 @@ class NamedGraphManager(RxPath.Model):
             #    'http://rx4rdf.sf.net/ns/archive#Context',
             #              OBJECT_TYPE_RESOURCE, addContext),
             ctxStmts.append(Statement(addContext, CTX_NS + 'applies-to',
-                scope, OBJECT_TYPE_RESOURCE, addContext))
+                scope, OBJECT_TYPE_RESOURCE, txnContext))
 
         self.revisionModel.addStatements(ctxStmts)
+        return ctxStmts
 
     def rollback(self):
         self.managedModel.rollback()
@@ -424,22 +505,39 @@ class NamedGraphManager(RxPath.Model):
 
         return False
 
+    @staticmethod
+    def getTransactionVersion(contexturi):
+        ctxUri1 = getTransactionContext(contexturi)
+        return ctxUri and int(ctxUri.split(';')[1]) or 0
+
+    @staticmethod
+    def comparecontextversion(ctxUri1, ctxUri2):    
+        assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
+            ctxUri1 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
+            ctxUri2 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
+        assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
+
+        return cmp(ctxUri1 and int(ctxUri1.split(';')[1]) or 0,
+                   ctxUri2 and int(ctxUri2.split(';')[1]) or 0)
+
     ###### revision querying methods #############
         
     def isModifiedAfter(self, contextUri, resources, excludeCurrent=True):
         '''
-        Given a list of resources, return list a of the ones that were modified
+        Given a list of resources, return a list of the ones that were modified
         after the given context.
         '''    
         currentContextUri = self.getTxnContext()
         contexts = [] 
         for resUri in resources:
-            rescontexts = self.getRevisionContexts(resUri)
+            rescontexts = self.getRevisionContextsForResource(resUri)
             if rescontexts:
                 latestContext = rescontexts.pop()
                 if excludeCurrent:              
                     #don't include the current context in the comparison
-                    cmpcurrent = comparecontextversion(currentContextUri, 
+                    cmpcurrent = self.comparecontextversion(currentContextUri, 
                         latestContext)
                     assert cmpcurrent >= 0, 'context created after current context!?'
                     if cmpcurrent == 0:
@@ -449,12 +547,12 @@ class NamedGraphManager(RxPath.Model):
                 contexts.append((latestContext, resUri))
         if not contexts:
             return []
-        contexts.sort(lambda x, y: comparecontextversion(x[0], y[0]))
+        contexts.sort(lambda x, y: self.comparecontextversion(x[0], y[0]))
         #include resources that were modified after the given context
         return [resUri for latestContext, resUri in contexts
-            if comparecontextversion(contextUri, latestContext) < 0]
+            if self.comparecontextversion(contextUri, latestContext) < 0]
 
-    def getRevisionContexts(self, resourceuri, stmts=None):
+    def getRevisionContextsForResource(self, resourceuri, stmts=None):
         '''
         return a list of transaction contexts that modified the given resource,
         sorted by revision order
@@ -464,10 +562,10 @@ class NamedGraphManager(RxPath.Model):
         contexts = set(filter(None,
             [getTransactionContext(s.scope) for s in stmts]))
         contexts = list(contexts)
-        contexts.sort(comparecontextversion)
+        contexts.sort(key=self.getTransactionVersion)
         return contexts
 
-    def getRevisionStmts(self, subjectUri, revision):
+    def getRevisionStmtsForResource(self, subjectUri, revision):
         '''
         Return the statements visible at the given revision 
         for the specified resource.
@@ -475,13 +573,13 @@ class NamedGraphManager(RxPath.Model):
         revision: 0-based revision number
         '''
         stmts = self.revisionModel.getStatements(subject=resourceuri)
-        contexts = self.getRevisionContexts(subjectUri, stmts)
+        contexts = self.getRevisionContextsForResource(subjectUri, stmts)
         rev2Context = dict([(x[1], x[0]) for x in enumerate(contexts)])
 
         #only include transactional statements
         stmts = [s for s in stmts if (getTransactionContext(s.scope) and
             rev2Context[getTransactionContext(s.scope)] <= revision)]
-        stmts.sort(cmp=lambda x, y: comparecontextversion(x.scope, y.scope))
+        stmts.sort(cmp=lambda x, y: self.comparecontextversion(x.scope, y.scope))
         revisionstmts = set()
         for s in stmts:
             if s.scope.startswith(DELCTX):
@@ -501,7 +599,7 @@ class NamedGraphManager(RxPath.Model):
             predicate='http://rx4rdf.sf.net/ns/archive#applies-to')]
     
         #get a unique set of transaction context uris, sorted by revision order
-        txncontexts.sort(key=getTransactionVersion)
+        txncontexts.sort(key=self.getTransactionVersion)
         return txncontexts
       
     def getStatementsForContextAndRevision(self, srcContextUri, revision=-1):
@@ -530,6 +628,208 @@ class NamedGraphManager(RxPath.Model):
                 assert 0, 'unrecognized context type: ' + ctx
                 
         return list(stmts)
+            
+def getTransactionContext(contexturi):
+   txnpart = contexturi.split(';;')[0]
+   index = txnpart.find(TXNCTX)
+   if index < 0:
+       return '' #not a txn context (e.g. empty or context:application, etc.)
+   return txnpart[index:]
+
+class MergeableGraphManager(NamedGraphManager):
+    '''
+    * ("branchid"."revisionnum",")+ ordered by branchid. branchid and revisionnum are left padded so that lexicographic comparison works.
+    * comparison: 
+    ** < := for shared branches, any revision numbers are less the other. If version string contains the exact same branchid, can do lexicographic comparison
+    *** but lexicographic comparison breaks with c2,d2 and b2,d3: b2,d3 is greater (d3 < d2) but compares smaller since "b" < "c". This can be avoided if the branch ids are numbered sequentially -- then more recently created branches will appear at the end of the revision and the shared branches will be compared first.
+    *** Order is only signficant between revisions on the same branch, e.g. a3 < a4 is significant but a4,b2,c3 < a4,b3,c2 is not. An heuristic for displaying revision order would be to partition by significant order and order the insignificant revisions by the revision creation timestamp.
+    * after merge changeset happens the branch can be dropped from the version string if the branch is retired. This is because there will be no revisions with the retired branchid >= the merge revision.
+    e.g. a1.b2 => merge b + a => a2.b2 => retire b => a3, etc. is ok since will always be > any changeset with b revisions. but once its dropped can no longer compare revisions that didn't contain the branch with merge revision. Note however, if the merged branch was part of the initial revision of the dropped branch then there won't be any revisions like this.
+    '''
+    
+    maxPendingQueueSize = 1000
+    pendingQueue = {} 
+
+    def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, branchId='0A'):
+        super(MergeableGraphManager, self).__init__(primaryModel, revisionModel, modelUri, lastScope)
+        self.branchId = branchId.rjust(2, '0')
+
+    @staticmethod
+    def getTransactionVersion(contexturi):
+        ctxUri1 = getTransactionContext(contexturi)
+        return ctxUri and ctxUri.split(';')[1] or ''
+
+    @staticmethod
+    def comparecontextversion(ctxUri1, ctxUri2):    
+        assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
+            ctxUri1 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
+            ctxUri2 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
+        assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
+
+        return cmp(ctxUri1 and ctxUri1.split(';')[1] or '',
+                   ctxUri2 and ctxUri2.split(';')[1] or '')
+
+    @staticmethod
+    def getBranchRev(rev,branchid):
+        for node in rev.split(','):
+            if node.startswith(branchid):
+                return node[len(branchId):]
+
+    def _increment(self, rev):
+        if not rev:
+            return self.branchId + '00000'
+        
+        if self.branchId not in rev:
+            #create new branch            
+            if [node for node in rev.split(',') if node > self.branchId]:
+                 raise RuntimeError(
+                    'branchId %s precedes current branches in rev %s' % 
+                                                    (self.branchId, rev))
+            return rev + self.branchId + '00000'
+
+        def incLocalBranch(node):
+            if node.startswith(self.branchId):
+                start = len(self.branchId)
+                inc = int(node[start:])+1
+                return self.branchId + '%05d' % inc
+            else:
+                return node
+        return [incLocalBranch(node) for node in rev.split(',')].join(',')
+
+    def addChangesetStatements(self, stmts):
+        '''
+        Directly adds changeset statements to the revision store
+        and adds and removes statements from the primary store.
+        '''
+        for s in stmts:
+            scope = s[4]
+            if scope.startswith(ADDCTX):
+                orginalscope = splitContext(scope)[EXTRACTCTX]
+                orgstmt = Statement(scope=orginalscope, *s[:4])
+                self._addPrimaryStoreStatement(orgstmt)
+            elif scope.startswith(DELCTX):
+                orginalscope = splitContext(scope)[EXTRACTCTX]
+                orgstmt = Statement(scope=orginalscope, *s[:4])
+                self._removePrimaryStoreStatement(orgstmt)
+                
+            self.revisionModel.addStatement(s)
+
+    def createMergeChangeset(self, otherrev, adds, removes):
+        '''
+        Creates an merge changeset 
+        '''
+
+    def merge(self, changeset):
+        '''
+        external changeset add it 
+        '''
+        if self._currentTxn:
+            raise RuntimeError('cannot merge while transaction in progress')        
+        if not list(self.getRevisions(changeset.baserevision)):
+            if changeset.baserevision in self.pendingQueue:
+                self.merge(self.pendingQueue[changeset.baserevision])
+            elif len(self.pendingQueue) < self.maxPendingQueueSize:
+                #xxx queue should be persistent because we're SOL if 
+                #we miss a changeset
+                self.pendingQueue[changeset.baserevision] = changeset
+                #XXX log
+            else:
+                raise RuntimeError(
+                'can not perform merge because base revision "%s" is missing' 
+                                                    % changeset.baserevision)
+        if changeset.baserevision == self.currentVersion:
+            #just add changeset, no need for merge changeset
+            self.addChangesetStatements(changeset.statements)
+            self.lastVersion = changeset.revision
+            return
+        
+        assert False, 'merging not yet implemented! %s current %s' % (type(changeset.baserevision), type(self.currentVersion))
+        modifiedResources = set(s[0] for s in changeset.statements)                
+        modifiedResources.update(set(s[2] for s in changeset.statements 
+                                        if s[3] == OBJECT_TYPE_RESOURCE))
+        remoteResources = modifiedResources #=self.findMergeResources(modifiedResources)
+            
+        locallyChanged = self.getChangedResourcesAfterBranchRevision(
+                    changeset.baserevision, changeset.origin)        
+        localResources = locallyChanged #=self.findMergeResources(locallyChanged)
+        conflicts = remoteResources & localResources
+        
+        #handle cases like: 
+        #base has an object like { prop : [{id : bnode:a},{id : bnode:b}] }
+        #and local changes bnode:a and remote changes bnode:b
+        #we need to detect a conflict
+        
+        #changeset: add bnode:a foo : baz
+        #local: a prop2 "hello!"
+        #treat as conflict
+        #another case: resource in local closure changed
+        #base: a prop { id : bnode:a, foo : bar }
+        #changeset: add bnode:a foo : baz
+        #local: add prop2 "hello!"
+        
+        if conflicts:            
+            self.conflictstrategy
+            #stategies: error, create special merge context, discard later, later wins
+        else:
+            #no conflicts just add changeset
+            self.addChangesetStatements(changeset.stmts)
+            self.createMergeChangeset(changeset.rev)
+
+    def getStatementsAfterBranchRevision(self, baserev, branchid):
+        '''
+        '''
+        addStmts = set()
+        removeStmts = set()
+        branchrev = self.getBranchRev(baserev,branchid)
+        for rev in sorted(self.findBranchRevisions(branchid, branchrev,baserev)):
+            revTxnUri = getTxnContextUri(self.modelUri, rev)
+            for txnStmt in self.revisionModel.getStatements(context=revTxnUri):
+                if txnStmt.predicate not in [CTX_NS + 'includes',CTX_NS + 'excludes']:
+                    continue
+                isAdd = txnStmt.predicate == CTX_NS + 'includes'
+                ctxStmts = set([Triple(s) for s in revisionModel.getStatements(
+                                                context=txnStmt.object)])
+                if isAdd:
+                    addStmts += ctxStmts
+                    removeStmts -= ctxStmts
+                else:
+                    addStmts -= ctxStmts
+                    removeStmts += ctxStmts
+        return addStmts, removeStmts
+        
+    def getChangedResourcesAfterBranchRevision(self, baserev,branchid):        
+        addStmts, removeStmts = self.getStatementsAfterBranchRevision(
+                                                baserev,branchid)
+        resources = set()
+        import itertools
+        for stmt in itertools.chain(addStmts, removeStmts):
+            resources.add(s.subject)
+            if s.objectType == OBJECT_TYPE_RESOURCE:
+                resources.add(s.object)
+        return resources
+
+    def getRevisions(self, revision=None):
+        for s in self.revisionModel.getStatements(predicate=CTX_NS+'hasRevision', object=revision):
+            if s.subject.startswith(TXNCTX) and s.subject.startswith(s.scope):
+                yield s.object
+        
+    def findBranchRevisions(self, branchid, branchrev, baserev=''):
+        #can a changeset > rev not include branch? 
+        #yes: e.g. rev = b2c3 and changeset = b3c2 
+        #but changeset < rev is not possible assuming node
+        #has all branchids where branchid < node's branchid
+        #and the local store has all base changesets
+
+        #note: we could optimize the case where if baserev not specified with 
+        #a leftsideCache so baserev = leftsideCache[branchRevision]
+        #where baserev would be the first rev with branchRevision 
+        #e.g. C3 => A2B1 if the first rev with C3 A2B1C3        
+        
+        for rev in self.getAllRevisions():
+            if rev > baserev and self.getBranchRev(rev, branchid) >= branchrev:
+                yield rev
 
 class DeletionModelCreator(object):
     '''
@@ -605,26 +905,4 @@ class DeletionModelCreator(object):
                 srcCtxt, OBJECT_TYPE_RESOURCE, currentDelContext))
 
             self.currRemovesForContext = {}                
-
-def getTransactionContext(contexturi):
-    txnpart = contexturi.split(';;')[0]
-    index = txnpart.find(TXNCTX)
-    if index < 0:
-        return '' #not a txn context (e.g. empty or context:application, etc.)
-    return txnpart[index:]
-
-def getTransactionVersion(contexturi):
-    ctxUri1 = getTransactionContext(contexturi)
-    return ctxUri and int(ctxUri.split(';')[1]) or 0
-
-def comparecontextversion(ctxUri1, ctxUri2):    
-    assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
-        ctxUri1 + " doesn't look like a txn context URI")
-    assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
-        ctxUri2 + " doesn't look like a txn context URI")
-    assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
-    assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
-
-    return cmp(ctxUri1 and int(ctxUri1.split(';')[1]) or 0,
-               ctxUri2 and int(ctxUri2.split(';')[1]) or 0)
 

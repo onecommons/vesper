@@ -88,7 +88,8 @@ class BasicStore(DomStore):
                  saveHistory = False,
                  VERSION_STORAGE_PATH='',
                  versionModelFactory=None,
-                 storageTemplateOptions=None, **kw):
+                 storageTemplateOptions=None,
+                 branchId = '0A', **kw):
         '''
         modelFactory is a RxPath.Model class or factory function that takes
         two parameters:
@@ -106,6 +107,7 @@ class BasicStore(DomStore):
         self.transactionLog = transactionLog
         self.saveHistory = saveHistory
         self.storageTemplateOptions = storageTemplateOptions
+        self.branchId = branchId
             
     def loadDom(self):        
         requestProcessor = self.requestProcessor
@@ -146,8 +148,9 @@ class BasicStore(DomStore):
         self.model = model
 
         if self.saveHistory:
-            self.model = self.graphManager = RxPathGraph.NamedGraphManager(model, 
-                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope)
+            from rx import RxPathGraph
+            self.model = self.graphManager = RxPathGraph.MergeableGraphManager(model, 
+                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.branchId)
         else:
             self.graphManager = None
         
@@ -362,7 +365,32 @@ class BasicStore(DomStore):
         self.remove(removals)        
         return self.add(newStatements)
 
-
     def query(self, query, **kw):
         import jql
         return jql.getResults(query, self.model)
+
+    def merge(self,changeset): 
+        from rx import RxPathGraph
+        assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
+        
+        #graphManager.merge() needs special transaction logic since we don't 
+        #want the transaction metadata that the standard commit creates and saves
+        class Merger(transactions.TransactionParticipant):
+            def __init__(self, graphManager):
+                self.graphManager = graphManager
+                
+            def merge(self, requestProcessor, changeset):
+                self.join(requestProcessor.txnSvc)
+                return self.graphManager.merge(changeset)
+                                
+            def commitTransaction(self, txnService):
+                if self.graphManager.revisionModel != self.graphManager.managedModel:
+                    self.graphManager.revisionModel.commit(**txnService.getInfo())     
+                self.graphManager.managedModel.commit(**txnService.getInfo())
+            
+            def abortTransaction(self, txnService):                    
+                self.graphManager.managedModel.rollback()
+                if self.graphManager.revisionModel != self.graphManager.managedModel:
+                    self.graphManager.revisionModel.rollback()
+        
+        return Merger(self.graphManager).merge(self.requestProcessor, changeset)

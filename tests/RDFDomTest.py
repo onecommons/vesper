@@ -13,8 +13,11 @@ from rx.RxPath import *
 
 testHistory = 'split' #'single', 'split' or '' (for no graph manager)
 
-def RDFDoc(model, nsMap, testHistory=testHistory):
-    from rx import RxPathGraph
+from rx import RxPathGraph
+graphManagerClass = RxPathGraph.MergeableGraphManager
+graphManagerClass = RxPathGraph.NamedGraphManager
+
+def RDFDoc(model, nsMap, testHistory=testHistory):    
     modelUri =generateBnode()
     if testHistory:
         if testHistory == 'single':
@@ -22,7 +25,7 @@ def RDFDoc(model, nsMap, testHistory=testHistory):
         else:
             assert testHistory == 'split'
             revmodel = TransactionMemModel()
-        graphManager = RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
+        graphManager = graphManagerClass(model, revmodel, modelUri)
     else:
         graphManager = None
     return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 

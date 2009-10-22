@@ -9,6 +9,51 @@ import raccoon
 from rx import utils, logging
 import unittest, glob, os, os.path
 
+expectedChangedSet = {'baserevision': '',
+ 'origin': '0A',
+ 'revision': '0A00000',
+ 'statements': [('context:txn:test:;0A00000',
+                 u'http://rx4rdf.sf.net/ns/archive#baseRevision',
+                 u'',
+                 'L',
+                 'context:txn:test:;0A00000'),
+                ('context:txn:test:;0A00000',
+                 u'http://rx4rdf.sf.net/ns/archive#hasRevision',
+                 u'0A00000',
+                 'L',
+                 'context:txn:test:;0A00000'),
+                ('context:txn:test:;0A00000',
+                 u'http://rx4rdf.sf.net/ns/archive#createdOn',
+                 u'0',
+                 'L',
+                 'context:txn:test:;0A00000'),
+                ('context:txn:test:;0A00000',
+                 u'http://rx4rdf.sf.net/ns/archive#includes',
+                 'context:add:context:txn:test:;0A00000;;',
+                 'R',
+                 'context:txn:test:;0A00000'),
+                ('context:add:context:txn:test:;0A00000;;',
+                 u'http://rx4rdf.sf.net/ns/archive#applies-to',
+                 '',
+                 'R',
+                 'context:txn:test:;0A00000'),
+                ('context:txn:test:;0A00000',
+                 u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
+                 u'http://rx4rdf.sf.net/ns/archive#TransactionContext',
+                 'R',
+                 'context:txn:test:;0A00000'),
+                ('a_resource',
+                 'comment',
+                 'page content.',
+                 'L',
+                 'context:add:context:txn:test:;0A00000;;'),
+                ('a_resource',
+                 'label',
+                 'foo',
+                 'R',
+                 'context:add:context:txn:test:;0A00000;;')],
+ 'timestamp': 0}
+
 class RaccoonTestCase(unittest.TestCase):
     def setUp(self):
         logging.BASIC_FORMAT = "%(asctime)s %(levelname)s %(name)s:%(message)s"
@@ -57,6 +102,13 @@ class RaccoonTestCase(unittest.TestCase):
 
     def testUpdatesApp(self):
         root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        root.domStore.model.createTxnTimestamp = lambda *args: 0
+        self.notifyChangeset = None
+        def testNotifyChangeset(changeset):
+            self.notifyChangeset = changeset            
+            self.assertEquals(changeset, expectedChangedSet)
+        root.domStore.model.notifyChangeset = testNotifyChangeset
+        
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)
@@ -74,7 +126,20 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('_added' not in root.updateResults)
         self.failUnless('_removedStatements' not in root.updateResults)
         self.failUnless('_removed' not in root.updateResults)
+        self.failUnless(self.notifyChangeset)
         
+        root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
+        try:
+            root2.txnSvc.begin()
+            root2.domStore.merge(self.notifyChangeset)
+        except:
+            root2.txnSvc.abort()
+            raise
+        else:
+            root2.txnSvc.commit()
+        
+        self.assertEquals(root2.domStore.query("{*}")['results'], 
+            [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}])
 
 if __name__ == '__main__':
     import sys    

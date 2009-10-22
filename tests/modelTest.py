@@ -10,8 +10,12 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 from rx.RxPath import *
+from rx import RxPath, RxPathGraph
 
-testHistory = '' # 'single' or 'split' or '' (for no graph manager)
+testHistory = 'split' # 'single' or 'split' or '' (for no graph manager)
+#XXX unit tests fail with 'single' -- find and fix the bug
+graphManagerClass = RxPathGraph.MergeableGraphManager
+#graphManagerClass = RxPathGraph.NamedGraphManager
 
 def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
@@ -22,14 +26,13 @@ class BasicModelTestCase(unittest.TestCase):
     persistentStore = True
 
     def _getModel(self, model):
-        if testHistory:
-            from rx import RxPath, RxPathGraph
+        if testHistory:            
             modelUri = RxPath.generateBnode()
             if testHistory == 'single':
                 revmodel = None
             else:
                 revmodel = RxPath.TransactionMemModel()
-            return RxPathGraph.NamedGraphManager(model, revmodel, modelUri)
+            return graphManagerClass(model, revmodel, modelUri)
         else:
             return model
 

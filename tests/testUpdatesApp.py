@@ -32,3 +32,4 @@ actions = { 'http-request' : [updateAction, queryAction],
 'after-commit' : [recordUpdates]
         }
 
+saveHistory = True
