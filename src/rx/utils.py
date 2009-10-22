@@ -572,7 +572,7 @@ class attrdict(dict):
     '''
 `attrdict` is a `dict` subclass that lets you access keys as using attribute notation.
 `dict` attributes and methods are accessed as normal and so mask any keys 
-in the dictionary with the same name (as such keys will need to be accessed 
+in the dictionary with the same name (of course, those keys can need to be accessed 
 through the standard `dict` interface).
 
 For example: 
@@ -590,25 +590,66 @@ For example:
 >>> del d[10]
 >>> len(d)
 3
->>> bool(d.not_there)
-False
+>>> d.newattribute = 'here'
+>>> d.newattribute
+'here'
+>>> d['newattribute']
+'here'
+>>> d.missingattribute
+Traceback (most recent call last):
+    ...
+AttributeError: missingattribute not found
+    '''
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name + ' not found')
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+class defaultattrdict(attrdict):
+    '''
+`defaultattrdict` is a `dict` subclass that lets you access keys as using attribute notation.
+`dict` attributes and methods are accessed as normal and so mask any keys 
+in the dictionary with the same name (of course, those keys can need to be accessed 
+through the standard `dict` interface).
+If attribute is not available the None is returned. This default value can be changed by 
+setting defaultattrdict.UNDEFINED. Note that this can only be set at the class 
+level, not per instance.
+
+For example: 
+>>> d = defaultattrdict(foo=1, update=2, copy=3)
+>>> d.foo
+1
+>>> d.copy()
+{'copy': 3, 'update': 2, 'foo': 1}
+>>> d.update({'update':4})
+>>> d['update']
+4
+>>> d[10] = '10'
+>>> len(d)
+4
+>>> del d[10]
+>>> len(d)
+3
+>>> type(d.not_there)
+<type 'NoneType'>
 >>> d.not_there = 'here'
 >>> d.not_there
 'here'
 >>> d['not_there']
 'here'
+>>> defaultattrdict.UNDEFINED = 0
+>>> d.unassigned
+0
     '''
     UNDEFINED = None
     
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            #raise AttributeError(name + ' not found')
-            return self.UNDEFINED
-
-    def __setattr__(self, name, value):
-        self[name] = value
+    def __getitem__(self, name):
+        return dict.get(self, name, defaultattrdict.UNDEFINED)
 
 class LameAttrDict(dict):
     '''

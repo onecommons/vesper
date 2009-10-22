@@ -786,8 +786,8 @@ def get_http_params(environ):
 
     _params = {}
     _postContent = None
-    getparams = utils.attrdict()
-    postparams = utils.attrdict()
+    getparams = utils.defaultattrdict()
+    postparams = utils.defaultattrdict()
 
     if environ.get('QUERY_STRING'):
         forms = cgi.FieldStorage(environ=environ, keep_blank_values=1)

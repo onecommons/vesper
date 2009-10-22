@@ -89,7 +89,7 @@ def getResults(query, model, bindvars=None, addChangeMap=False):
        the store       
     '''
     #XXX this method still under construction
-    response = {}
+    response = rx.utils.attrdict()
     errors = []
     
     (ast, parseErrors) = buildAST(query)
@@ -140,7 +140,7 @@ def evalAST(ast, model, bindvars=None, explain=None, debug=False):
 class QueryContext(object):
     currentRow = None
     currentValue = None
-    shapes = { dict : rx.utils.attrdict }
+    shapes = { dict : rx.utils.defaultattrdict }
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0):
         self.initialModel = initModel
