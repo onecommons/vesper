@@ -31,7 +31,11 @@ OBJECT_TYPE_LITERAL = "L"
 
 BNODE_BASE = 'bnode:'
 BNODE_BASE_LEN = len('bnode:')
-    
+
+def isBnode(uri):
+  isbnode = uri.startswith(BNODE_BASE) or uri.startswith('_:')
+  return isbnode
+
 #from Ft.Rdf import RDF_MS_BASE,RDF_SCHEMA_BASE
 #for some reason we need this to be unicode for the xslt engine:
 RDF_MS_BASE=u'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
@@ -1383,21 +1387,17 @@ class Graph(object):
         t = (str(stmt[0]), str(stmt[1]), str(obj), scope)
         self.statements.add(t)
 
-    def isBnode(self, uri):
-      isbnode = uri.startswith(BNODE_BASE) or uri.startswith('_:')
-      return isbnode
-
     def _hashtuple(self):
       result = []
       for (subj, pred, objt, scope) in self.statements:
-         if self.isBnode(subj):
+         if isBnode(subj):
             tripleHash = md5(str(self.vhashmemo(subj)))
          else: tripleHash = md5(subj)
 
          for term in (pred, objt, scope):
             if term is None:
                 continue
-            if self.isBnode(term):
+            if isBnode(term):
                tripleHash.update(str(self.vhashmemo(term)))
             else: tripleHash.update(term)
 
@@ -1424,7 +1424,7 @@ class Graph(object):
             for pos in xrange(4):
                if stmt[pos] is None:
                    continue
-               if not self.isBnode(stmt[pos]):
+               if not isBnode(stmt[pos]):
                   result.append(stmt[pos])
                elif done or (stmt[pos] == term):
                   result.append(pos)
@@ -1435,19 +1435,19 @@ class Graph(object):
     def normalizeBNodes(self):
         for t in self.statements:
             sub = t[0]
-            if self.isBnode(sub):
+            if isBnode(sub):
                 sub = self.vhashmemo(sub)
             pred = t[1]
-            if self.isBnode(pred):
+            if isBnode(pred):
                 pred = self.vhashmemo(pred)
             obj = t[2]
-            if self.isBnode(obj):
+            if isBnode(obj):
                 obj = self.vhashmemo(obj)
             scope = t[3]
             if scope is None:
                 yield (sub, pred, obj)
             else:
-                if self.isBnode(scope):
+                if isBnode(scope):
                     scope = self.vhashmemo(scope)
                 yield (sub, pred, obj, scope)
 

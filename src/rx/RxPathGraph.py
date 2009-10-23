@@ -24,7 +24,7 @@ by providing the ability to create a compensating transaction in the history.
 from RxPath import OBJECT_TYPE_LITERAL
 from RxPath import OBJECT_TYPE_RESOURCE
 from RxPath import RDF_MS_BASE
-from RxPath import Statement
+from RxPath import Statement, isBnode
 import logging, time
 from rx import RxPath
 from rx.utils import attrdict
@@ -112,6 +112,7 @@ class NamedGraphManager(RxPath.Model):
     markLatest = True
     lastLatest = None
     
+    initialRevision = 0
     branchId = None
     notifyChangeset = None
 
@@ -146,11 +147,12 @@ class NamedGraphManager(RxPath.Model):
     def _setCurrentVersion(self, lastScope):
         if lastScope:
             parts = lastScope.split(';')
+            assert parts[1]
             #context urls will always start with a txn context,
             #with the version after the first ;
-            self.currentVersion = parts[1]   
+            self.currentVersion = parts[1]
         else:
-            self.currentVersion = '' #will be set in incrementTxnContext 
+            self.currentVersion = self._increment('')
         
     def getStatements(self, subject=None, predicate=None, object=None,
         objecttype=None, context=None, asQuad=True, hints=None):
@@ -208,7 +210,7 @@ class NamedGraphManager(RxPath.Model):
 
     def _increment(self, rev):
         if not rev:
-            return 0
+            return self.initialRevision
         return int(rev) + 1
     
     def incrementTxnContext(self):
@@ -229,7 +231,7 @@ class NamedGraphManager(RxPath.Model):
                 self.currentVersion = self._increment(parts[1])
             else:
                 self.lastLatest = None
-                self.currentVersion = self._increment('')
+                self.currentVersion = self._increment(self.currentVersion)
         else:
             self.currentVersion = self._increment(self.currentVersion)
         
@@ -647,12 +649,13 @@ class MergeableGraphManager(NamedGraphManager):
     e.g. a1.b2 => merge b + a => a2.b2 => retire b => a3, etc. is ok since will always be > any changeset with b revisions. but once its dropped can no longer compare revisions that didn't contain the branch with merge revision. Note however, if the merged branch was part of the initial revision of the dropped branch then there won't be any revisions like this.
     '''
     
+    initialRevision = '0'
     maxPendingQueueSize = 1000
     pendingQueue = {} 
 
     def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, branchId='0A'):
-        super(MergeableGraphManager, self).__init__(primaryModel, revisionModel, modelUri, lastScope)
         self.branchId = branchId.rjust(2, '0')
+        super(MergeableGraphManager, self).__init__(primaryModel, revisionModel, modelUri, lastScope)
 
     @staticmethod
     def getTransactionVersion(contexturi):
@@ -679,7 +682,7 @@ class MergeableGraphManager(NamedGraphManager):
 
     def _increment(self, rev):
         if not rev:
-            return self.branchId + '00000'
+            return self.initialRevision
         
         if self.branchId not in rev:
             #create new branch            
@@ -687,7 +690,9 @@ class MergeableGraphManager(NamedGraphManager):
                  raise RuntimeError(
                     'branchId %s precedes current branches in rev %s' % 
                                                     (self.branchId, rev))
-            return rev + self.branchId + '00000'
+            if rev == self.initialRevision:
+                return self.branchId + '00001'
+            return rev + self.branchId + '00001'
 
         def incLocalBranch(node):
             if node.startswith(self.branchId):
@@ -727,7 +732,7 @@ class MergeableGraphManager(NamedGraphManager):
         and follow any parent or child that is a bnode
         '''
         def defaultFollow(resource):
-            if isbnode(resource):
+            if isBnode(resource):
                 return [None], [None]
             else:
                 return (),()
@@ -762,14 +767,19 @@ class MergeableGraphManager(NamedGraphManager):
         '''
         if self._currentTxn:
             raise RuntimeError('cannot merge while transaction in progress')        
-        if not list(self.getRevisions(changeset.baserevision)):
+        if not isinstance(changeset, attrdict):
+            changeset = attrdict(changeset)
+        if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
             if changeset.baserevision in self.pendingQueue:
                 self.merge(self.pendingQueue[changeset.baserevision])
             elif len(self.pendingQueue) < self.maxPendingQueueSize:
                 #xxx queue should be persistent because we're SOL if 
                 #we miss a changeset
-                self.pendingQueue[changeset.baserevision] = changeset
+                self.pendingQueue[changeset.baserevision] = changeset            
                 #XXX log
+                print ('adding to pending queue because base revision "%s" is missing' 
+                                                    % changeset.baserevision)
+                return False
             else:
                 raise RuntimeError(
                 'can not perform merge because base revision "%s" is missing' 
@@ -778,7 +788,7 @@ class MergeableGraphManager(NamedGraphManager):
             #just add changeset, no need for merge changeset
             self.addChangesetStatements(changeset.statements)
             self.lastVersion = changeset.revision
-            return
+            return True
         
         assert False, 'merging not yet implemented! %s current %s' % (
                             changeset.baserevision, self.currentVersion)
@@ -796,7 +806,15 @@ class MergeableGraphManager(NamedGraphManager):
         locallyChanged = self.getChangedResourcesAfterBranchRevision(
                     changeset.baserevision, changeset.origin)        
         localResources = self.findMergeResources(locallyChanged)
-        conflicts = remoteResources & localResources
+        
+        conflicts = []
+        for closure in closures:
+            #its a conflict if an object in the closure appears in both the 
+            #remote and local changed resources            
+            remote = closure & remoteResources
+            local = closure & localResources
+            if remote and local:
+                conflicts.append( (local, remote) )
                         
         if conflicts:            
             self.conflictstrategy
@@ -805,6 +823,8 @@ class MergeableGraphManager(NamedGraphManager):
             #no conflicts just add changeset
             self.addChangesetStatements(changeset.statements)
             self.createMergeChangeset(changeset)
+        
+        return True
 
     def getStatementsAfterBranchRevision(self, baserev, branchid):
         '''

@@ -9,50 +9,10 @@ import raccoon
 from rx import utils, logging
 import unittest, glob, os, os.path
 
-expectedChangedSet = {'baserevision': '',
- 'origin': '0A',
- 'revision': '0A00000',
- 'statements': [('context:txn:test:;0A00000',
-                 u'http://rx4rdf.sf.net/ns/archive#baseRevision',
-                 u'',
-                 'L',
-                 'context:txn:test:;0A00000'),
-                ('context:txn:test:;0A00000',
-                 u'http://rx4rdf.sf.net/ns/archive#hasRevision',
-                 u'0A00000',
-                 'L',
-                 'context:txn:test:;0A00000'),
-                ('context:txn:test:;0A00000',
-                 u'http://rx4rdf.sf.net/ns/archive#createdOn',
-                 u'0',
-                 'L',
-                 'context:txn:test:;0A00000'),
-                ('context:txn:test:;0A00000',
-                 u'http://rx4rdf.sf.net/ns/archive#includes',
-                 'context:add:context:txn:test:;0A00000;;',
-                 'R',
-                 'context:txn:test:;0A00000'),
-                ('context:add:context:txn:test:;0A00000;;',
-                 u'http://rx4rdf.sf.net/ns/archive#applies-to',
-                 '',
-                 'R',
-                 'context:txn:test:;0A00000'),
-                ('context:txn:test:;0A00000',
-                 u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-                 u'http://rx4rdf.sf.net/ns/archive#TransactionContext',
-                 'R',
-                 'context:txn:test:;0A00000'),
-                ('a_resource',
-                 'comment',
-                 'page content.',
-                 'L',
-                 'context:add:context:txn:test:;0A00000;;'),
-                ('a_resource',
-                 'label',
-                 'foo',
-                 'R',
-                 'context:add:context:txn:test:;0A00000;;')],
- 'timestamp': 0}
+expectedChangedSet = {'origin': '0A', 'timestamp': 0, 
+ 'baserevision': '0', 'revision': '0A00001',
+ 'statements': 
+ [('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#hasRevision', u'0A00001', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;0A00001;;', 'R', 'context:txn:test:;0A00001'), ('context:add:context:txn:test:;0A00001;;', u'http://rx4rdf.sf.net/ns/archive#applies-to', '', 'R', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://rx4rdf.sf.net/ns/archive#TransactionContext', 'R', 'context:txn:test:;0A00001'), ('a_resource', 'comment', 'page content.', 'L', 'context:add:context:txn:test:;0A00001;;'), ('a_resource', 'label', 'foo', 'R', 'context:add:context:txn:test:;0A00001;;')] }
 
 class RaccoonTestCase(unittest.TestCase):
     def setUp(self):
@@ -131,7 +91,7 @@ class RaccoonTestCase(unittest.TestCase):
         root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
         try:
             root2.txnSvc.begin()
-            root2.domStore.merge(self.notifyChangeset)
+            self.failUnless( root2.domStore.merge(self.notifyChangeset) )
         except:
             root2.txnSvc.abort()
             raise
@@ -144,14 +104,14 @@ class RaccoonTestCase(unittest.TestCase):
     def testMerge(self):        
         store1 = raccoon.createStore(saveHistory=True)
         root1 = store1.requestProcessor
-        
+        self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
         store1.add([{
           'base': [ {'foo': 1}, {'foo': 2}]
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0A00000')
+        self.assertEquals(store1.model.currentVersion, '0A00001')
         
         root1.txnSvc.begin()
         store1.add([{
@@ -159,7 +119,7 @@ class RaccoonTestCase(unittest.TestCase):
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0A00001')
+        self.assertEquals(store1.model.currentVersion, '0A00002')
                 
         
 if __name__ == '__main__':
