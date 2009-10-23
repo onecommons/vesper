@@ -219,7 +219,7 @@ class NamedGraphManager(RxPath.Model):
         Returns the transaction context URI for the new revision.
         '''
         if self.markLatest:
-            oldLatest = self.getStatements(predicate=CTX_NS + 'latest')
+            oldLatest = self.revisionModel.getStatements(predicate=CTX_NS + 'latest')            
             if oldLatest:
                 self.lastLatest = oldLatest[0]
                 lastScope = oldLatest[0].subject
@@ -232,7 +232,7 @@ class NamedGraphManager(RxPath.Model):
                 self.currentVersion = self._increment('')
         else:
             self.currentVersion = self._increment(self.currentVersion)
-            
+        
         return getTxnContextUri(self.modelUri, self.currentVersion)
     
     def isContextForPrimaryStore(self, context):
@@ -696,7 +696,7 @@ class MergeableGraphManager(NamedGraphManager):
                 return self.branchId + '%05d' % inc
             else:
                 return node
-        return [incLocalBranch(node) for node in rev.split(',')].join(',')
+        return ','.join([incLocalBranch(node) for node in rev.split(',')])
 
     def addChangesetStatements(self, stmts):
         '''
@@ -721,9 +721,44 @@ class MergeableGraphManager(NamedGraphManager):
         Creates an merge changeset 
         '''
 
+    def findMergeResources(self, resources, followFunc=None):
+        '''
+        if bnode: add "parents" and "children" to resources
+        and follow any parent or child that is a bnode
+        '''
+        def defaultFollow(resource):
+            if isbnode(resource):
+                return [None], [None]
+            else:
+                return (),()
+        
+        followFunc = followFunc or defaultFollow
+        todo = set(resources)
+        while todo:            
+            r = todo.pop()
+            childPreds, parentPreds = followFunc(r)
+            #add children to resources
+            for pred in childPreds:
+                for s in self.getStatements(subject=r, predicate=pred):
+                    if s.objectType == OBJECT_TYPE_RESOURCE:
+                        resources.add(s.object)                        
+                        todo.add(s.object)
+            #add parents
+            for pred in parentPreds:
+                for s in self.getStatements(object=r, predicate=pred, objecttype=OBJECT_TYPE_RESOURCE):
+                    resources.add(s.subject)
+                    todo.add(s.object)
+
+        return resources
+    
     def merge(self, changeset):
         '''
-        external changeset add it 
+        Merge an external changeset into the local store. If the local store doesn't have 
+        the base revision of the changeset it is add to the pending queue. 
+        If no changes have been made to the local store after the base revision then the changeset is
+        added to store with no modification. But if changes have been made, these changes are merged
+        with the external changeset. If the merge succeeds, the changeset is added, followed by a merge 
+        changeset.
         '''
         if self._currentTxn:
             raise RuntimeError('cannot merge while transaction in progress')        
@@ -745,40 +780,40 @@ class MergeableGraphManager(NamedGraphManager):
             self.lastVersion = changeset.revision
             return
         
-        assert False, 'merging not yet implemented! %s current %s' % (type(changeset.baserevision), type(self.currentVersion))
-        modifiedResources = set(s[0] for s in changeset.statements)                
-        modifiedResources.update(set(s[2] for s in changeset.statements 
-                                        if s[3] == OBJECT_TYPE_RESOURCE))
-        remoteResources = modifiedResources #=self.findMergeResources(modifiedResources)
-            
-        locallyChanged = self.getChangedResourcesAfterBranchRevision(
-                    changeset.baserevision, changeset.origin)        
-        localResources = locallyChanged #=self.findMergeResources(locallyChanged)
-        conflicts = remoteResources & localResources
-        
+        assert False, 'merging not yet implemented! %s current %s' % (
+                            changeset.baserevision, self.currentVersion)
+
         #handle cases like: 
         #base has an object like { prop : [{id : bnode:a},{id : bnode:b}] }
         #and local changes bnode:a and remote changes bnode:b
         #we need to detect a conflict
-        
-        #changeset: add bnode:a foo : baz
-        #local: a prop2 "hello!"
-        #treat as conflict
-        #another case: resource in local closure changed
-        #base: a prop { id : bnode:a, foo : bar }
-        #changeset: add bnode:a foo : baz
-        #local: add prop2 "hello!"
-        
+
+        modifiedResources = set(s[0] for s in changeset.statements)                
+        modifiedResources.update(set(s[2] for s in changeset.statements 
+                                        if s[3] == OBJECT_TYPE_RESOURCE))
+        remoteResources =self.findMergeResources(modifiedResources)
+            
+        locallyChanged = self.getChangedResourcesAfterBranchRevision(
+                    changeset.baserevision, changeset.origin)        
+        localResources = self.findMergeResources(locallyChanged)
+        conflicts = remoteResources & localResources
+                        
         if conflicts:            
             self.conflictstrategy
             #stategies: error, create special merge context, discard later, later wins
         else:
             #no conflicts just add changeset
-            self.addChangesetStatements(changeset.stmts)
-            self.createMergeChangeset(changeset.rev)
+            self.addChangesetStatements(changeset.statements)
+            self.createMergeChangeset(changeset)
 
     def getStatementsAfterBranchRevision(self, baserev, branchid):
         '''
+        return all the changes made after the given branch revision, 
+        but don't include statements that were added and then removed
+        or removed and then re-added.
+        
+        Returns a pair of sets of statements of added and removed statements, 
+        respectively.
         '''
         addStmts = set()
         removeStmts = set()
@@ -799,7 +834,14 @@ class MergeableGraphManager(NamedGraphManager):
                     removeStmts += ctxStmts
         return addStmts, removeStmts
         
-    def getChangedResourcesAfterBranchRevision(self, baserev,branchid):        
+    def getChangedResourcesAfterBranchRevision(self, baserev,branchid):
+        '''
+        Return the set of resources that had changes made to it after
+        the given branch revision. 
+        
+        Any resource that appears as a subject in an added
+        or removed statement will be in the set.
+        '''
         addStmts, removeStmts = self.getStatementsAfterBranchRevision(
                                                 baserev,branchid)
         resources = set()

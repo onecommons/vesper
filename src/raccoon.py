@@ -1010,12 +1010,13 @@ def run(vars, out=sys.stdout):
 
     return root
 
-def createStore(json, storageURL = 'mem://', idGenerator='counter'):
+def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
     root = run(dict(
         STORAGE_URL = storageURL,
         STORAGE_TEMPLATE = json,       
         EXEC_CMD_AND_EXIT = True,
-        storageTemplateOptions = dict(generateBnode=idGenerator)
+        storageTemplateOptions = dict(generateBnode=idGenerator),
+        **kw
     ))
     return root.domStore
 

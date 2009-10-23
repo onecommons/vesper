@@ -140,7 +140,28 @@ class RaccoonTestCase(unittest.TestCase):
         
         self.assertEquals(root2.domStore.query("{*}")['results'], 
             [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}])
-
+    
+    def testMerge(self):        
+        store1 = raccoon.createStore(saveHistory=True)
+        root1 = store1.requestProcessor
+        
+        root1.txnSvc.begin()
+        store1.add([{
+          'base': [ {'foo': 1}, {'foo': 2}]
+        }
+        ])
+        root1.txnSvc.commit()
+        self.assertEquals(store1.model.currentVersion, '0A00000')
+        
+        root1.txnSvc.begin()
+        store1.add([{
+          'base': [{'foo': 3}, {'foo': 4}]
+        }
+        ])
+        root1.txnSvc.commit()
+        self.assertEquals(store1.model.currentVersion, '0A00001')
+                
+        
 if __name__ == '__main__':
     import sys    
     #import os, os.path
