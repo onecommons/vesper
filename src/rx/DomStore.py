@@ -89,6 +89,7 @@ class BasicStore(DomStore):
                  VERSION_STORAGE_PATH='',
                  versionModelFactory=None,
                  storageTemplateOptions=None,
+                 DOM_CHANGESET_HOOK=None,
                  branchId = '0A', **kw):
         '''
         modelFactory is a RxPath.Model class or factory function that takes
@@ -108,6 +109,7 @@ class BasicStore(DomStore):
         self.saveHistory = saveHistory
         self.storageTemplateOptions = storageTemplateOptions
         self.branchId = branchId
+        self.changesetHook = DOM_CHANGESET_HOOK
             
     def loadDom(self):        
         requestProcessor = self.requestProcessor
@@ -153,6 +155,10 @@ class BasicStore(DomStore):
                 historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.branchId)
         else:
             self.graphManager = None
+        
+        if self.changesetHook:
+            assert self.saveHistory, "replication requires saveHistory to be on"
+            self.model.notifyChangeset = self.changesetHook
         
         #set the schema (default is no-op)
         self.schema = self.schemaFactory(self.model)
