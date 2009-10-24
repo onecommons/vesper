@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
-import raccoon, rx.route
+import raccoon, rx.route, rx.replication
 from rx.python_shim import *
 from optparse import OptionParser
 from rx.route import Route
+from raccoon import Action
 
 import os
 from string import Template
@@ -178,14 +179,32 @@ def servefile(kw, retval):
         return file(path)
     return retval
 
-actions = {
-  'http-request' : rx.route.gensequence
-}
 
 # using STORAGE_URL sets modelFactory and STORAGE_PATH
 #STORAGE_URL="tyrant://localhost:1978"
 #STORAGE_URL="rdf://out2.nt"
 STORAGE_URL="mem://"
+
+###############################
+# set up stomp replication
+###############################
+# saveHistory=True
+# branchId="0B"
+# REPLICATION_HOSTS=[('tokyo-vm', 61613)]
+# REPLICATION_CHANNEL="TEST9"
+# 
+# rep = rx.replication.get_replicator(branchId, REPLICATION_CHANNEL, hosts=REPLICATION_HOSTS)
+# DOM_CHANGESET_HOOK = rep.replication_hook
+# 
+# @Action
+# def startReplication(kw, retVal):
+#     rep.start(kw.__server__)    
+# 
+# actions = {
+#   'http-request' : rx.route.gensequence,
+#   'load-model':[startReplication]
+# }
+###############################
 
 parser = OptionParser()
 (options, args) = parser.parse_args()

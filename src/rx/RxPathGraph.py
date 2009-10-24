@@ -814,7 +814,7 @@ class MergeableGraphManager(NamedGraphManager):
         changeset.
         '''        
         if self._currentTxn:
-            raise RuntimeError('cannot merge while transaction in progress')        
+            raise RuntimeError('cannot merge while transaction in progress')
         if not isinstance(changeset, attrdict):
             changeset = attrdict(changeset)
         if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
@@ -832,7 +832,7 @@ class MergeableGraphManager(NamedGraphManager):
                 raise RuntimeError(
                 'can not perform merge because base revision "%s" is missing' 
                                                     % changeset.baserevision)
-        if changeset.baserevision == self.currentVersion:
+        if not changeset.baserevision or changeset.baserevision == self.currentVersion:
             #just add changeset, no need for merge changeset
             self.addChangesetStatements(changeset)            
             return True
