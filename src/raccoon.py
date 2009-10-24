@@ -450,8 +450,6 @@ class RequestProcessor(utils.object_with_threadlocals):
     def _doActionsTxn(self, sequence, kw, retVal):
         self.txnSvc.begin()
         self.txnSvc.state.kw = kw
-        txnCtxtResult = self.domStore.getTransactionContext()
-        self.txnSvc.state.kw['__current-transaction'] = txnCtxtResult or []
         self.txnSvc.state.retVal = retVal
         try:
             retVal = self._doActionsBare(sequence, kw, retVal)
@@ -485,9 +483,6 @@ class RequestProcessor(utils.object_with_threadlocals):
             if newTransaction:
                 retVal = self._doActionsTxn(sequence, kw, retVal)
             else:
-                if '__current-transaction' not in kw:
-                    txnCtxtResult = self.domStore.getTransactionContext()
-                    kw['__current-transaction'] = txnCtxtResult or []
                 retVal = self._doActionsBare(sequence, kw, retVal)
         except (KeyboardInterrupt, SystemExit):
             raise

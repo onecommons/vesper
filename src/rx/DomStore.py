@@ -238,7 +238,13 @@ class BasicStore(DomStore):
         if self.graphManager:
             return self.graphManager.getTxnContext() #return a contextUri
         return None
-        
+    
+    def join(self, txnService):
+        if hasattr(txnService.state, 'kw'):
+            txnCtxtResult = self.getTransactionContext()
+            txnService.state.kw['__current-transaction'] = txnCtxtResult
+        return super(BasicStore,self).join(txnService)
+    
     def add(self, adds):
         '''
         Adds data to the store.

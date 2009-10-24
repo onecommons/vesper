@@ -24,7 +24,7 @@ by providing the ability to create a compensating transaction in the history.
 from RxPath import OBJECT_TYPE_LITERAL
 from RxPath import OBJECT_TYPE_RESOURCE
 from RxPath import RDF_MS_BASE
-from RxPath import Statement, isBnode
+from RxPath import Statement, isBnode, Triple
 import logging, time
 from rx import RxPath
 from rx.utils import attrdict
@@ -224,11 +224,15 @@ class NamedGraphManager(RxPath.Model):
             oldLatest = self.revisionModel.getStatements(predicate=CTX_NS + 'latest')            
             if oldLatest:
                 self.lastLatest = oldLatest[0]
-                lastScope = oldLatest[0].subject
-                parts = lastScope.split(';')
+                
+                latest = oldLatest[0].object
+                #lastScope = oldLatest[0].subject
                 #context urls will always start with a txn context,
                 #with the version after the first ;                
-                self.currentVersion = self._increment(parts[1])
+                #parts = lastScope.split(';')
+                #latest = parts[1]
+                
+                self.currentVersion = self._increment(latest)
             else:
                 self.lastLatest = None
                 self.currentVersion = self._increment(self.currentVersion)
@@ -421,14 +425,17 @@ class NamedGraphManager(RxPath.Model):
                 Statement(txnContext, RDF_MS_BASE + 'type',
                 CTX_NS + 'TransactionContext', OBJECT_TYPE_RESOURCE, txnContext)
             )
+        
+        self._markLatest(txnContext)
+
+    def _markLatest(self, txnContext):
         if self.markLatest:
             if self.lastLatest:
                 self.revisionModel.removeStatement(self.lastLatest)
             #assert self.currentVersion, 'currentVersion not set'
-            self.revisionModel.addStatement(
-                Statement(txnContext, CTX_NS + 'latest',
+            self.lastLatest = Statement(txnContext, CTX_NS + 'latest',
                     unicode(self.currentVersion), OBJECT_TYPE_LITERAL, txnContext)
-            )
+            self.revisionModel.addStatement(self.lastLatest)
 
     def _finishCtxResource(self):
         if not self.createCtxResource:
@@ -691,8 +698,8 @@ class MergeableGraphManager(NamedGraphManager):
                     'branchId %s precedes current branches in rev %s' % 
                                                     (self.branchId, rev))
             if rev == self.initialRevision:
-                return self.branchId + '00001'
-            return rev + self.branchId + '00001'
+                return self.branchId + '00001'            
+            return rev + ',' + self.branchId + '00001'
 
         def incLocalBranch(node):
             if node.startswith(self.branchId):
@@ -703,58 +710,99 @@ class MergeableGraphManager(NamedGraphManager):
                 return node
         return ','.join([incLocalBranch(node) for node in rev.split(',')])
 
-    def addChangesetStatements(self, stmts):
+    def addChangesetStatements(self, changeset):
         '''
         Directly adds changeset statements to the revision store
         and adds and removes statements from the primary store.
         '''
-        for s in stmts:
+        txnContext = None
+        for s in changeset.statements:
             scope = s[4]
             if scope.startswith(ADDCTX):
-                orginalscope = splitContext(scope)[EXTRACTCTX]
-                orgstmt = Statement(scope=orginalscope, *s[:4])
+                originalscope = splitContext(scope)[EXTRACTCTX]
+                orgstmt = Statement(scope=originalscope, *s[:4])
                 self._addPrimaryStoreStatement(orgstmt)
             elif scope.startswith(DELCTX):
-                orginalscope = splitContext(scope)[EXTRACTCTX]
-                orgstmt = Statement(scope=orginalscope, *s[:4])
+                originalscope = splitContext(scope)[EXTRACTCTX]
+                orgstmt = Statement(scope=originalscope, *s[:4])
                 self._removePrimaryStoreStatement(orgstmt)
-                
+            if scope.startswith(TXNCTX):
+                txnContext = scope
             self.revisionModel.addStatement(s)
+                
+        if changeset.baserevision == self.initialRevision and self.currentVersion != self.initialRevision:
+            #XXX txnContext is the remote ctx so it will have a different revision than this 
+            #so CTX:latest's value won't match the revision encoded in the context uri -- not sure if this matters
+            self.currentVersion = ','.join( sorted([self.currentVersion, changeset.revision]) )
+        else:
+            self.currentVersion = changeset.revision        
+        assert txnContext
+        self._markLatest(txnContext)
 
-    def createMergeChangeset(self, otherrev, adds, removes):
+    def createMergeChangeset(self, otherrev, adds=(), removes=()):
         '''
         Creates an merge changeset 
         '''
+        txnContext = self.getTxnContext()
+        self.revisionModel.addStatement(Statement(txnContext, CTX_NS+'baseRevision',
+            unicode(otherrev), OBJECT_TYPE_LITERAL, txnContext))        
+        if adds: self.addStatements(adds)
+        if removes: self.removeStatements(removes)
+        self.commit()
 
-    def findMergeResources(self, resources, followFunc=None):
+    def findMergeClosures(self, resources, followFunc=None):
         '''
-        if bnode: add "parents" and "children" to resources
-        and follow any parent or child that is a bnode
+        For each given resource find related resources that should be considered
+        when determining if 
+        
+        Default policy: if resource is a bnode add ancestor and descendant resources 
+        to the closure and recursively follow as long as the resource is a bnode.
         '''
-        def defaultFollow(resource):
+        #handle cases like: 
+        #base has an object like { prop : [{id : bnode:a},{id : bnode:b}] }
+        #and local changes bnode:a and remote changes bnode:b
+        #we need to detect a conflict
+        
+        def defaultFollow(resource, add):
             if isBnode(resource):
+                #XXX optimize by extracting owner
+                owner = None#trytoextractowner(resource)
+                if owner:
+                    add(owner)
+                    return (), [None]
+
+                #follow all parents and children
                 return [None], [None]
             else:
+                #dont follow anything
                 return (),()
         
         followFunc = followFunc or defaultFollow
-        todo = set(resources)
-        while todo:            
-            r = todo.pop()
-            childPreds, parentPreds = followFunc(r)
-            #add children to resources
-            for pred in childPreds:
-                for s in self.getStatements(subject=r, predicate=pred):
-                    if s.objectType == OBJECT_TYPE_RESOURCE:
-                        resources.add(s.object)                        
-                        todo.add(s.object)
-            #add parents
-            for pred in parentPreds:
-                for s in self.getStatements(object=r, predicate=pred, objecttype=OBJECT_TYPE_RESOURCE):
-                    resources.add(s.subject)
-                    todo.add(s.object)
+        
+        closures = []
+        for r in resources:
+            closure = set([r])
+            todo = set([r])
+            def add(res):
+                if res not in closure:
+                    todo.add(res)
+                    closure.add(res)
+            
+            while todo:            
+                r = todo.pop()            
+                childPreds, parentPreds = followFunc(r,add)
+                #add children to resources
+                for pred in childPreds:
+                    for s in self.getStatements(subject=r, predicate=pred):
+                        if s.objectType == OBJECT_TYPE_RESOURCE:
+                            add(s.object)
+                #add parents
+                for pred in parentPreds:
+                    for s in self.getStatements(object=r, predicate=pred, objecttype=OBJECT_TYPE_RESOURCE):
+                        add(s.subject)
+            closures.append(closure)
 
-        return resources
+        return closures
     
     def merge(self, changeset):
         '''
@@ -764,7 +812,7 @@ class MergeableGraphManager(NamedGraphManager):
         added to store with no modification. But if changes have been made, these changes are merged
         with the external changeset. If the merge succeeds, the changeset is added, followed by a merge 
         changeset.
-        '''
+        '''        
         if self._currentTxn:
             raise RuntimeError('cannot merge while transaction in progress')        
         if not isinstance(changeset, attrdict):
@@ -786,26 +834,18 @@ class MergeableGraphManager(NamedGraphManager):
                                                     % changeset.baserevision)
         if changeset.baserevision == self.currentVersion:
             #just add changeset, no need for merge changeset
-            self.addChangesetStatements(changeset.statements)
-            self.lastVersion = changeset.revision
+            self.addChangesetStatements(changeset)            
             return True
         
-        assert False, 'merging not yet implemented! %s current %s' % (
-                            changeset.baserevision, self.currentVersion)
-
-        #handle cases like: 
-        #base has an object like { prop : [{id : bnode:a},{id : bnode:b}] }
-        #and local changes bnode:a and remote changes bnode:b
-        #we need to detect a conflict
-
-        modifiedResources = set(s[0] for s in changeset.statements)                
-        modifiedResources.update(set(s[2] for s in changeset.statements 
+        remoteResources = set(s[0] for s in changeset.statements)                
+        remoteResources.update(set(s[2] for s in changeset.statements 
                                         if s[3] == OBJECT_TYPE_RESOURCE))
-        remoteResources =self.findMergeResources(modifiedResources)
+        
             
-        locallyChanged = self.getChangedResourcesAfterBranchRevision(
-                    changeset.baserevision, changeset.origin)        
-        localResources = self.findMergeResources(locallyChanged)
+        localResources = self.getChangedResourcesAfterBranchRevision(
+                    changeset.baserevision, changeset.origin)     
+                       
+        closures = self.findMergeClosures(localResources | remoteResources)
         
         conflicts = []
         for closure in closures:
@@ -814,15 +854,17 @@ class MergeableGraphManager(NamedGraphManager):
             remote = closure & remoteResources
             local = closure & localResources
             if remote and local:
-                conflicts.append( (local, remote) )
+                conflicts.append( (closure, local, remote) )
                         
         if conflicts:            
+            assert False, 'merging conflicts not yet implemented! %s current %s' % (
+                                changeset.baserevision, self.currentVersion)
             self.conflictstrategy
             #stategies: error, create special merge context, discard later, later wins
         else:
             #no conflicts just add changeset
-            self.addChangesetStatements(changeset.statements)
-            self.createMergeChangeset(changeset)
+            self.addChangesetStatements(changeset)
+            self.createMergeChangeset(changeset.revision)
         
         return True
 
@@ -844,14 +886,14 @@ class MergeableGraphManager(NamedGraphManager):
                 if txnStmt.predicate not in [CTX_NS + 'includes',CTX_NS + 'excludes']:
                     continue
                 isAdd = txnStmt.predicate == CTX_NS + 'includes'
-                ctxStmts = set([Triple(s) for s in revisionModel.getStatements(
+                ctxStmts = set([Triple(*s) for s in self.revisionModel.getStatements(
                                                 context=txnStmt.object)])
                 if isAdd:
-                    addStmts += ctxStmts
+                    addStmts |= ctxStmts
                     removeStmts -= ctxStmts
                 else:
                     addStmts -= ctxStmts
-                    removeStmts += ctxStmts
+                    removeStmts |= ctxStmts
         return addStmts, removeStmts
         
     def getChangedResourcesAfterBranchRevision(self, baserev,branchid):
@@ -866,7 +908,7 @@ class MergeableGraphManager(NamedGraphManager):
                                                 baserev,branchid)
         resources = set()
         import itertools
-        for stmt in itertools.chain(addStmts, removeStmts):
+        for s in itertools.chain(addStmts, removeStmts):
             resources.add(s.subject)
             if s.objectType == OBJECT_TYPE_RESOURCE:
                 resources.add(s.object)
@@ -889,7 +931,7 @@ class MergeableGraphManager(NamedGraphManager):
         #where baserev would be the first rev with branchRevision 
         #e.g. C3 => A2B1 if the first rev with C3 A2B1C3        
         
-        for rev in self.getAllRevisions():
+        for rev in self.getRevisions():
             if rev > baserev and self.getBranchRev(rev, branchid) >= branchrev:
                 yield rev
 

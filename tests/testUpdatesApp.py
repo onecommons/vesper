@@ -27,9 +27,15 @@ def queryAction(kw, retval):
 @Action 
 def recordUpdates(kw, retval):
     kw['__server__'].updateResults = kw
-                                            
+
+@Action
+def testLoadModelHook(kw, retVal):
+    kw.__server__.loadModelHookCalled = True
+    return retVal
+             
 actions = { 'http-request' : [updateAction, queryAction],
-'after-commit' : [recordUpdates]
+'after-commit' : [recordUpdates],
+'load-model':[testLoadModelHook]
         }
 
 saveHistory = True

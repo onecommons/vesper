@@ -62,12 +62,16 @@ class RaccoonTestCase(unittest.TestCase):
 
     def testUpdatesApp(self):
         root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        
         root.domStore.model.createTxnTimestamp = lambda *args: 0
         self.notifyChangeset = None
         def testNotifyChangeset(changeset):
             self.notifyChangeset = changeset            
             self.assertEquals(changeset, expectedChangedSet)
         root.domStore.model.notifyChangeset = testNotifyChangeset
+        
+        self.failUnless(root.loadModelHookCalled)
+        self.failUnless(not root.domStore.model._currentTxn)
         
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
@@ -99,27 +103,44 @@ class RaccoonTestCase(unittest.TestCase):
             root2.txnSvc.commit()
         
         self.assertEquals(root2.domStore.query("{*}")['results'], 
-            [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}])
+            [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
     def testMerge(self):        
-        store1 = raccoon.createStore(saveHistory=True)
+        store1 = raccoon.createStore(saveHistory=True, branchId='B',BASE_MODEL_URI = 'test:')
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
-        store1.add([{
+        store1.add([{ 'id' : '1',
           'base': [ {'foo': 1}, {'foo': 2}]
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0A00001')
+        self.assertEquals(store1.model.currentVersion, '0B00001')
         
         root1.txnSvc.begin()
-        store1.add([{
+        store1.add([{ 'id' : '1',
           'base': [{'foo': 3}, {'foo': 4}]
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0A00002')
+        self.assertEquals(store1.model.currentVersion, '0B00002')
+        
+        #print root1.domStore.query("{*}").results
+        
+        root1.txnSvc.begin()
+        store1.merge(expectedChangedSet)
+        root1.txnSvc.commit()
+        self.assertEquals(store1.model.currentVersion, '0A00001,0B00003')
+        
+        #print root1.domStore.query("{*}").results
+        
+        #store2 = raccoon.createStore(saveHistory=True, nodeId='B')
+        #root2 = store1.requestProcessor
+        #root2.txnSvc.begin()
+        #store2.add([
+        #])
+        #root1.txnSvc.commit()
+        #self.assertEquals(store1.model.currentVersion, '0A00001')
                 
         
 if __name__ == '__main__':
