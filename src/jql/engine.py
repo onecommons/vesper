@@ -278,13 +278,14 @@ class SimpleTupleset(Tupleset):
         if debug:
             self._filter = self.filter
             self.filter = self._debugFilter
+            self.debug = debug
 
     def _debugFilter(self, conditions=None, hints=None):
         results = tuple(self._filter(conditions, hints))        
-        print self.__class__.__name__,hex(id(self)), '('+self.op+')', \
+        print >>self.debug, self.__class__.__name__,hex(id(self)), '('+self.op+')', \
           'on', self.hint, 'cols', _colrepr(self), 'filter:', repr(conditions),\
           'results:'
-        pprint.pprint(results)
+        pprint.pprint(results,self.debug)
         [validateRowShape(self.columns, r) for r in results]
         for row in results:
             yield row
@@ -419,12 +420,13 @@ class Join(RxPath.Tupleset):
         if debug:
             self._filter = self.filter
             self.filter = self._debugFilter
+            self.debug = debug
 
     def _debugFilter(self, conditions=None, hints=None):
         results = tuple(self._filter(conditions, hints))        
-        print self.__class__.__name__,hex(id(self)), '('+self.msg+')', 'on', \
+        print >>self.debug, self.__class__.__name__,hex(id(self)), '('+self.msg+')', 'on', \
             (self.left, self.right), 'cols', _colrepr(self), 'filter:', repr(conditions), 'results:'
-        pprint.pprint(results)
+        pprint.pprint(results, self.debug)
         [validateRowShape(self.columns, r) for r in results]
         for row in results:
             yield row
@@ -689,12 +691,13 @@ class Union(RxPath.Tupleset):
         if debug:
             self._filter = self.filter
             self.filter = self._debugFilter
+            self.debug = debug
 
     def _debugFilter(self, conditions=None, hints=None):
         results = tuple(self._filter(conditions, hints))        
-        print self.__class__.__name__,hex(id(self)), '('+self.msg+')', 'on', \
+        print >>self.debug, self.__class__.__name__,hex(id(self)), '('+self.msg+')', 'on', \
             self.tuplesets, 'cols', _colrepr(self), 'filter:', repr(conditions), 'results:'
-        pprint.pprint(results)
+        pprint.pprint(results, self.debug)
         [validateRowShape(self.columns, r) for r in results]
         for row in results:
             yield row
@@ -1005,7 +1008,7 @@ class SimpleQueryEngine(object):
                 context.currentRow = [idvalue] + row
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
-                    print 'valid outer'
+                    print >> context.debug, 'valid outer'
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
                 pattern = self.getShape(context, shape)
@@ -1174,8 +1177,9 @@ class SimpleQueryEngine(object):
                     predicate = row[1]
                     if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
                         ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
-                        ordered.append( (ordinal, row[2]) )
                         assert row[2] in listval, '%s not in %s' % (row[2], listval)
+                        if row[2] in listval:
+                            ordered.append( (ordinal, row[2]) )                        
             else:
                 return (False, listval)
         else:

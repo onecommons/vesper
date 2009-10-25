@@ -46,7 +46,8 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 from rx.python_shim import *
 from rx.RxPath import Tupleset, ColumnInfo, EMPTY_NAMESPACE
 import rx.utils
-         
+import StringIO
+        
 SUBJECT = 0
 PROPERTY = 1
 OBJECT = 2
@@ -74,7 +75,7 @@ def runQuery(query, model):
     (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, bindvars=None, addChangeMap=False):
+def getResults(query, model, bindvars=None, explain=None, debug=False,addChangeMap=False):
     '''
     Returns a dict with the following keys:
         
@@ -97,10 +98,15 @@ def getResults(query, model, bindvars=None, addChangeMap=False):
     
     response['results'] = []
     
-    if ast != None:
-        
+    if explain:
+        explain = StringIO.StringIO()
+    
+    if debug:
+        debug = StringIO.StringIO()
+    
+    if ast != None:        
         try:
-            results = list(evalAST(ast, model, bindvars))
+            results = list(evalAST(ast, model, bindvars, explain, debug))
             response['results'] = results
         except QueryException, qe:            
             errors.append('error: %s' % qe.message)
@@ -109,7 +115,12 @@ def getResults(query, model, bindvars=None, addChangeMap=False):
             errors.append("unexpected exception: %s" % traceback.format_exc())
         
     response['errors'] = errors
+    if explain:
+        response['explain'] = explain.getvalue()        
 
+    if debug:
+        response['debug'] = debug.getvalue()        
+    
     # XXX may not be valid anymore
     """
     if addChangeMap:

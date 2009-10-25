@@ -241,11 +241,17 @@ def main(t, cmdargs=None):
             explain = sys.stdout
         else:
             explain = None
-
-        if not options.quiet: print "construct " + (options.printdebug and '(with debug)' or '')
+        
+        if options.printdebug:
+            debug = sys.stdout
+        else:
+            debug = None
+        
+        if not options.quiet: 
+            print "construct " + (options.printdebug and '(with debug)' or '')
         if ast:
             testresults = list(jql.evalAST(ast, test.model, test.bindvars,
-                                    explain=explain, debug=options.printdebug))
+                                    explain=explain, debug=debug))
         else:
             testresults = None
         

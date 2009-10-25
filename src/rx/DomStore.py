@@ -8,6 +8,7 @@
 from rx import RxPath, transactions
 import StringIO, os, os.path
 import logging
+from rx.utils import debugp
 
 def _toStatements(contents):
     import sjson
@@ -343,7 +344,7 @@ class BasicStore(DomStore):
                 if len(o) == 1:
                     removeid = o['id']
                     removedresources.add(removeid)
-
+        
         updateDom = RxPath.RxPathDOMFromStatements(updateStmts + replaceStmts)
         srcstmts = []
         resources = set()
@@ -354,32 +355,34 @@ class BasicStore(DomStore):
             resources.add(subject)
             if subject in replaceResources:
                 srcstmts.extend( self.model.getStatements(subject) )
-            else:
-                predicates = set(pred.stmt.predicate for pred in subjectNode.childNodes)
-                for prop in predicates:
+            else:                
+                subjectStmts = subjectNode.getModelStatements()
+                predicates = set(stmt.predicate for stmt in subjectStmts)
+                for prop in predicates:                                        
                     propstmts = self.model.getStatements(subject, prop)
                     srcstmts.extend( propstmts )
 
         srcDom = RxPath.RxPathDOMFromStatements(srcstmts)
         newStatements, removedNodes = RxPath.mergeDOM(srcDom, updateDom, resources)
-
+        
         removals = []
-        if removedResources:
+        if removedResources:            
             for subject in removedResources:
                 removals.extend( self.model.getStatements(subject) )
 
         for node in removedNodes:
-            stmts = node.getModelStatements()             
+            stmts = node.getModelStatements()
             #for s in stmts:
             #    if s.object is bnode:
             #        bnode
             removals.extend( stmts )
-        self.remove(removals)        
-        return self.add(newStatements)
 
-    def query(self, query, **kw):
+        self.remove(removals)        
+        return self.add(newStatements), removals
+
+    def query(self, query, bindvars=None, explain=None, debug=False, **kw):
         import jql
-        return jql.getResults(query, self.model)
+        return jql.getResults(query, self.model,bindvars,explain,debug)
 
     def merge(self,changeset): 
         from rx import RxPathGraph

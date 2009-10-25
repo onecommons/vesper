@@ -102,7 +102,7 @@ class RaccoonTestCase(unittest.TestCase):
         else:
             root2.txnSvc.commit()
         
-        self.assertEquals(root2.domStore.query("{*}")['results'], 
+        self.assertEquals(root2.domStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
     def testMerge(self):        
@@ -118,22 +118,25 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store1.model.currentVersion, '0B00001')
         
         root1.txnSvc.begin()
-        store1.add([{ 'id' : '1',
+        store1.update([{ 'id' : '1',
           'base': [{'foo': 3}, {'foo': 4}]
         }
         ])
         root1.txnSvc.commit()
         self.assertEquals(store1.model.currentVersion, '0B00002')
-        
-        #print root1.domStore.query("{*}").results
+
+        self.assertEquals(store1.query("{*}", debug=1).results, 
+            [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
         
         root1.txnSvc.begin()
         store1.merge(expectedChangedSet)
         root1.txnSvc.commit()
         self.assertEquals(store1.model.currentVersion, '0A00001,0B00003')
-        
-        #print root1.domStore.query("{*}").results
-        
+
+        self.assertEquals(store1.query("{*}").results, 
+            [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}, 
+                {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
+
         #store2 = raccoon.createStore(saveHistory=True, nodeId='B')
         #root2 = store1.requestProcessor
         #root2.txnSvc.begin()
@@ -141,7 +144,6 @@ class RaccoonTestCase(unittest.TestCase):
         #])
         #root1.txnSvc.commit()
         #self.assertEquals(store1.model.currentVersion, '0A00001')
-                
         
 if __name__ == '__main__':
     import sys    

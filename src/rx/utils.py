@@ -133,6 +133,12 @@ class object_with_threadlocals(object):
         def __init__(self, propname, *args, **kw):
             self.name = propname
             return property.__init__(self, *args, **kw)
+
+def debugp(*args, **kw):
+    import pprint
+    if len(args) == 1:
+        args = args[0]
+    pprint.pprint(args, kw.get('stream'))
     
 def htmlQuote(data):
     return data.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')

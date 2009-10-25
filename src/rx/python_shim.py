@@ -1,7 +1,7 @@
 #for pythons older than 2.5:
 try:
-    all = all
-    any = any
+    all
+    any
 except NameError:
     def all(iterable):
          for element in iterable:
