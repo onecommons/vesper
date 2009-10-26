@@ -247,18 +247,21 @@ class BasicStore(DomStore):
         return None
     
     def join(self, txnService):
+        if not txnService.isActive():
+            return False
         if hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
-            txnService.state.kw['__current-transaction'] = txnCtxtResult
-        return super(BasicStore,self).join(txnService)
+            txnService.state.kw['__current-transaction'] = txnCtxtResult        
+        super(BasicStore,self).join(txnService)
+        return True
     
-    def add(self, adds):
+    def add(self, adds, _inTxn=False):
         '''
         Adds data to the store.
 
         `adds`: A list of either statements or sjson conforming dicts
         '''
-        self.join(self.requestProcessor.txnSvc)
+        inTxn = _inTxn or self.join(self.requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(adds)
         resources = set()
         newresources = []
@@ -275,22 +278,34 @@ class BasicStore(DomStore):
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
 
-        self.model.addStatements(stmts)
+        try: 
+            self.model.addStatements(stmts)
+        except:
+            if not inTxn: self.model.rollback()            
+            raise
+        else:
+            if not inTxn: self.model.commit()
         return stmts
         
-    def remove(self, removes):
+    def remove(self, removes, _inTxn=False):
         '''
 
         Removes data from the store.
         `removes`: A list of either statements or sjson conforming dicts
         '''
-        self.join(self.requestProcessor.txnSvc)
+        inTxn = _inTxn or self.join(self.requestProcessor.txnSvc)
         stmts, jsonrep = _toStatements(removes)
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
 
-        self.model.removeStatements(stmts)
+        try: 
+            self.model.removeStatements(stmts)
+        except:
+            if not inTxn: self.model.rollback()            
+            raise
+        else:
+            if not inTxn: self.model.commit()
 
     def update(self, updates):
         '''
@@ -330,7 +345,7 @@ class BasicStore(DomStore):
         `removedResources`: A list of ids of resources that will be removed 
         from the store.
         '''
-        self.join(self.requestProcessor.txnSvc)
+        inTxn = self.join(self.requestProcessor.txnSvc)
 
         removedResources = set(removedResources or [])
 
@@ -377,8 +392,16 @@ class BasicStore(DomStore):
             #        bnode
             removals.extend( stmts )
 
-        self.remove(removals)        
-        return self.add(newStatements), removals
+        try: 
+            self.remove(removals, _inTxn=True)        
+            addStmts = self.add(newStatements, _inTxn=True)
+        except:
+            if not inTxn: self.model.rollback()            
+            raise
+        else:
+            if not inTxn: 
+                self.model.commit()
+        return addStmts, removals
 
     def query(self, query, bindvars=None, explain=None, debug=False, **kw):
         import jql
@@ -395,7 +418,8 @@ class BasicStore(DomStore):
                 self.graphManager = graphManager
                 
             def merge(self, requestProcessor, changeset):
-                self.join(requestProcessor.txnSvc)
+                if requestProcessor.txnSvc.isActive():
+                    self.join(requestProcessor.txnSvc)
                 return self.graphManager.merge(changeset)
                                 
             def commitTransaction(self, txnService):
@@ -408,4 +432,15 @@ class BasicStore(DomStore):
                 if self.graphManager.revisionModel != self.graphManager.managedModel:
                     self.graphManager.revisionModel.rollback()
         
-        return Merger(self.graphManager).merge(self.requestProcessor, changeset)
+        inTxn = self.requestProcessor.txnSvc.isActive()
+        merger = Merger(self.graphManager)
+        try:
+            merged = merger.merge(self.requestProcessor, changeset)
+        except:
+            if not inTxn:
+                merger.abortTransaction(self.requestProcessor.txnSvc)
+            raise
+        else:
+            if not inTxn:
+                merger.commitTransaction(self.requestProcessor.txnSvc)
+        return merged
