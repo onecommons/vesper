@@ -685,7 +685,7 @@ class MergeableGraphManager(NamedGraphManager):
     def getBranchRev(rev,branchid):
         for node in rev.split(','):
             if node.startswith(branchid):
-                return node[len(branchId):]
+                return node[len(branchid):]
 
     def _increment(self, rev):
         if not rev:
