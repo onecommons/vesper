@@ -123,6 +123,12 @@ from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_M
 from rx.RxPathUtils import encodeStmtObject
 import re
 
+try:
+    import yaml
+    use_yaml = True
+except ImportError:
+    use_yaml = False
+
 JSON_BASE = 'sjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
@@ -170,6 +176,12 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False):
                 return valueparse(data)
     else:
         return data
+
+def loads(data):
+    if use_yaml:
+        return yaml.safe_load(data)
+    else:
+        return json.loads(data)
 
 class sjson(object):    
     #XXX need separate output nsmap for serializing
@@ -442,8 +454,8 @@ class sjson(object):
                     obj[idprop] = objId
             return objId, idprop
 
-        if isinstance(json, (str,unicode)):
-            todo = json = json.loads(json)            
+        if isinstance(json, (str,unicode)):            
+            todo = json = loads(json)            
         if isinstance(json, dict):
             todo = [json]
         else:
