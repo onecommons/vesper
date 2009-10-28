@@ -59,9 +59,12 @@ class StompQueueReplicator(object):
     log = logging.getLogger("replication")
     
     def __init__(self, clientid, channel, hosts):
+        import queue
         self.clientid = clientid
         self.channel  = channel
         self.hosts    = hosts
+        
+        self.changeset_queue = queue.Queue()
         
     def start(self, server):
         """
@@ -70,34 +73,57 @@ class StompQueueReplicator(object):
         self.server = server
         
         self.log.info("connecting to %s" % str(self.hosts))
-    	self.conn = stomp.Connection(self.hosts)
-    	self.conn.set_listener('', ChangesetListener(self)) # XXX what's the first param here?
-    	self.conn.start()
-    	
+        self.conn = stomp.Connection(self.hosts)
+        self.conn.set_listener('', ChangesetListener(self)) # XXX what's the first param here?
+        self.conn.start()
+        
         subscription_name = "%s-%s" % (self.clientid, self.channel)
-    	subscribe_headers = {
-    		"activemq.subscriptionName":subscription_name,
-    		"selector":"clientid <> '%s'" % self.clientid  # XXX perf implications here?
-    	}
-    	self.log.debug("subscribing to topic:" + self.channel)
-    	
-    	self.conn.connect(headers={'client-id':self.clientid})
-    	self.conn.subscribe(destination='/topic/%s' % self.channel, ack='client', headers=subscribe_headers)
-    	
+        subscribe_headers = {
+            "activemq.subscriptionName":subscription_name,
+            "selector":"clientid <> '%s'" % self.clientid  # XXX perf implications here?
+        }
+        self.log.debug("subscribing to topic:" + self.channel)
+        
+        self.conn.connect(headers={'client-id':self.clientid})
+        self.conn.subscribe(destination='/topic/%s' % self.channel, 
+                                ack='client', headers=subscribe_headers)
+        
+        self.start_sending_thread()
+        
+    
+    def start_sending_thread(self):
+        import threading
+        self.changeset_queue = queue.Queue()
+        
+        def worker():
+            while True:
+                changeset = self.changeset_queue.get()
+                if changeset == 'done':
+                    break
+                self.send_changeset(changeset)
+        
+        send_thread = threading.Thread(target=worker)
+        send_thread.daemon = True        
+        send_thread.start()
+        
     def stop(self):
-        self.conn.disconnect()        
-    	
+        self.conn.disconnect()
+        self.changeset_queue.put("done")
+        
     def replication_hook(self, changeset):
-    	HEADERS = {
-    	    'persistent':'true',
-    		'clientid':self.clientid
-    	}        
+        self.changeset_queue.put(changeset)
+        
+    def send_changeset(self, changeset):    
+        HEADERS = {
+            'persistent':'true',
+            'clientid':self.clientid
+        }        
         self.log.debug("posting changeset %s to channel %s" % (changeset.revision, self.channel))
         data = json.dumps(changeset) #,sort_keys=True, indent=4)
-    	try:
-    	    self.conn.send(data, destination='/topic/%s' % self.channel, headers=HEADERS)
-    	except Exception, e:
-    	    self.log.error("exception posting changeset", e)
+        try:
+            self.conn.send(data, destination='/topic/%s' % self.channel, headers=HEADERS)
+        except Exception, e:
+            self.log.error("exception posting changeset", e)
 
 def get_replicator(clientid, channel, host=None, port=61613, hosts=None):
     # """
@@ -108,8 +134,8 @@ def get_replicator(clientid, channel, host=None, port=61613, hosts=None):
     # hosts=[('tokyo-vm', 61613), ('mqtest-vm', 61613)]
     # Returns a replicator object
     # """
-	if not hosts:
-	    hosts=[(host,port)]
-	
-	obj = StompQueueReplicator(clientid, channel, hosts)
-	return obj
+    if not hosts:
+        hosts=[(host,port)]
+    
+    obj = StompQueueReplicator(clientid, channel, hosts)
+    return obj
