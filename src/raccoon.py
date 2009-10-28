@@ -5,6 +5,10 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
+if __name__ == '__main__':
+    import sys,raccoon
+    sys.exit(raccoon.main())
+    
 from rx import utils, glock, RxPath, MRUCache, DomStore, transactions, store
 import os, time, sys, base64, mimetypes, types, traceback
 import urllib, re
@@ -253,7 +257,11 @@ class RequestProcessor(utils.object_with_threadlocals):
         self.appBase = appBase or '/'
         self.appName = appName
         self.cmd_usage = DEFAULT_cmd_usage
-        self.loadConfig(configpath, argsForConfig, appVars)
+        self.loadConfig(configpath, argsForConfig, appVars)        
+        if self.template_path:
+            from mako.lookup import TemplateLookup
+            self.template_loader = TemplateLookup(directories=self.template_path, 
+                module_directory='mako_modules', output_encoding='utf-8', encoding_errors='replace')
         self.requestDispatcher = Requestor(self)
         #self.resolver = SiteUriResolver(self)
         self.loadModel()
@@ -340,28 +348,18 @@ class RequestProcessor(utils.object_with_threadlocals):
             self.domStore.newResourceTrigger = self.txnSvc.newResourceHook
 
         self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
-        initConstants( ['globalRequestVars'], [])
+        initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
         self.globalRequestVars.extend( self.defaultGlobalVars )
         self.defaultPageName = kw.get('defaultPageName', 'index')
         #cache settings:
-        initConstants( ['LIVE_ENVIRONMENT', 'useEtags'], 1)
+        initConstants( ['LIVE_ENVIRONMENT', 'SECURE_FILE_ACCESS', 'useEtags'], 1)
         self.defaultExpiresIn = kw.get('defaultExpiresIn', 0)
         initConstants( ['ACTION_CACHE_SIZE'], 1000)
         #disable by default(default cache size used to be 10000000 (~10mb))
         initConstants( ['maxCacheableStream','FILE_CACHE_SIZE'], 0)
 
-        #todo: these caches are global, only let the root RequestProcessor
-        #set these values
-        #fileCache.maxFileSize = kw.get('MAX_CACHEABLE_FILE_SIZE', 0)
-        #self.expCache.capacity = self.XPATH_PARSER_CACHE_SIZE
-        #fileCache.capacity = self.FILE_CACHE_SIZE
-        #fileCache.hashValue = lambda path: getFileCacheKey(path,
-        #                                   fileCache.maxFileSize)
-
         self.PATH = kw.get('PATH', self.PATH)
-
-        #self.disabledContentProcessors = kw.get('disabledContentProcessors',
-        #                            self.DefaultDisabledContentProcessors)
+        
         self.authorizeMetadata = kw.get('authorizeMetadata',
                                         lambda *args: True)
         self.validateExternalRequest = kw.get('validateExternalRequest',
@@ -767,6 +765,36 @@ Please check the URL to ensure that the path is correct.</p>
             pickle.dump(self.requestsRecord, requestRecordFile)
             requestRecordFile.close()
 
+    def playbackRequestHistory(self, debugFileName, out=sys.stdout):
+        requests = pickle.load(file(debugFileName, 'rU'))
+        import repr
+        rpr = repr.Repr()
+        rpr.maxdict = 20
+        rpr.maxlevel = 2
+        for i, request in enumerate(requests):
+            verb = request['_environ']['REQUEST_METHOD']
+            login = request.get('_session',{}).get('login','')
+            print>>out, i, verb, request['_name'], 'login:', login
+            #print form variables
+            print>>out, rpr.repr(dict([(k, v) for k, v in request.items()
+                                if isinstance(v, (unicode, str, list))]))
+
+            self.handleHTTPRequest(request)
+
+    def runWsgiServer(self, port=8000, server=None, middleware=None):
+        if not server:
+            from wsgiref.simple_server import make_server
+            server = make_server
+        if middleware:
+            app = middleware(self.wsgi_app)
+        else:
+            app = self.wsgi_app
+        httpd = server('', port, app)
+        try:
+            httpd.serve_forever()
+        finally:
+            self.saveRequestHistory()
+
 class UploadFile(object):
 
     def __init__(field):
@@ -867,7 +895,6 @@ def translateCmdArgs(data):
 DEFAULT_cmd_usage = 'python raccoon.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.nt -a config.py '
 cmd_usage = '''
 -h this help message
--s server.cfg specify an alternative server.cfg
 -l [log.config] specify a config file for logging
 -r record requests (ctrl-c to stop recording) 
 -d [debug.pkl]: debug mode (replay the requests saved in debug.pkl)
@@ -939,84 +966,150 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
 
     return vars
 
-def run(vars, out=sys.stdout):
-    if 'STORAGE_URL' in vars:        
-        (proto, path) = vars['STORAGE_URL'].split('://')
+def initLogConfig(logConfig):
+    import logging.config as log_config
+    if isinstance(logConfig,(str,unicode)) and logConfig.lstrip()[:1] in ';#[':
+        #looks like a logging configuration 
+        import textwrap
+        logConfig = StringIO.StringIO(textwrap.dedent(logConfig))
+    log_config.fileConfig(logConfig)
+    #any logger already created and not explicitly
+    #specified in the log config file is disabled this
+    #seems like a bad design -- certainly took me a while
+    #to why understand things weren't getting logged so
+    #re-enable the loggers
+    for logger in logging.Logger.manager.loggerDict.itervalues():
+        logger.disabled = 0
+    
+class AppConfig(utils.attrdict):
+    _server = None
+    
+    def load(self):
+        if 'STORAGE_URL' in self:        
+            (proto, path) = self['STORAGE_URL'].split('://')
+
+            self['modelFactory'] = store.get_factory(proto)
+            self['STORAGE_PATH'] = path
+
+        if self.get('logconfig'):
+            initLogConfig(self['logconfig'])
+
+        kw = translateCmdArgs(self)
+        root = HTTPRequestProcessor(appName='root', appVars=kw)
+        dict.__setattr__(self, '_server', root)
+        return self._server
         
-        vars['modelFactory'] = store.get_factory(proto)
-        vars['STORAGE_PATH'] = path
-        
-    if 'LOG_CONFIG' in vars:
-        logConfig = vars['LOG_CONFIG']
-        import logging.config as log_config
-        log_config.fileConfig(logConfig)
-        #any logger already created and not explicitly
-        #specified in the log config file is disabled this
-        #seems like a bad design -- certainly took me a while
-        #to why understand things weren't getting logged so
-        #re-enable the loggers
-        for logger in logging.Logger.manager.loggerDict.itervalues():
-            logger.disabled = 0
+    def run(self, startserver=True, out=sys.stdout):
+        root = self._server
+        if not root:
+            root = self.load()
 
-    kw = translateCmdArgs(vars)
-    root = HTTPRequestProcessor(appName='root', appVars=kw)
+        if 'DEBUG_FILENAME' in self:
+            self.playbackRequestHistory(self['DEBUG_FILENAME'], out)
 
-    if 'DEBUG_FILENAME' in vars:
-        debugFileName = vars['DEBUG_FILENAME']
+        if self.get('RECORD_REQUESTS'):
+            root.requestsRecord = []
+            root.requestRecordPath = 'debug-wiki.pkl'
 
-        flags = sys.version_info[:2] < (2, 3) and 'b' or 'U'
-        requests = pickle.load(file(debugFileName, 'r'+flags))
+        if not self.get('EXEC_CMD_AND_EXIT', not startserver):
+            port = self.get('PORT', 8000)
+            if self.get('firepython_enabled'):
+                import firepython.middleware
+                middleware = firepython.middleware.FirePythonWSGI(root.wsgi_app)
+            else:
+                middleware = None
+            httpserver = self.get('httpserver')
+            print>>out, "Starting HTTP on port %d..." % port
+            #runs forever:
+            root.runWsgiServer(port, httpserver, middleware)
 
-        import repr
-        rpr = repr.Repr()
-        rpr.maxdict = 20
-        rpr.maxlevel = 2
-        for i, request in enumerate(requests):
-            verb = request['_environ']['REQUEST_METHOD']
-            login = request.get('_session',{}).get('login','')
-            print>>out, i, verb, request['_name'], 'login:', login
-            #print form variables
-            print>>out, rpr.repr(dict([(k, v) for k, v in request.items()
-                                if isinstance(v, (unicode, str, list))]))
-
-            root.handleHTTPRequest(request)
-
-    if vars.get('RECORD_REQUESTS'):
-        root.requestsRecord = []
-        root.requestRecordPath = 'debug-wiki.pkl'
-
-    if not vars.get('EXEC_CMD_AND_EXIT'):
-        #print 'starting server!'
-        from wsgiref.simple_server import make_server
-        if vars.get('firepython_enabled'):
-            # FirePython Middleware
-            import firepython.middleware
-            app = firepython.middleware.FirePythonWSGI(root.wsgi_app)
-        else:
-            app = root.wsgi_app
-        port = vars.get('PORT', 8000)
-        httpd = make_server('', port, app)
-        print>>out, "Serving HTTP on port %d..." % port
-        try:
-            httpd.serve_forever()
-        finally:
-            root.saveRequestHistory()
-        #print 'dying!'
-
-    return root
-
+        return root
+    
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
-    root = run(dict(
+    root = createApp(
         STORAGE_URL = storageURL,
-        STORAGE_TEMPLATE = json,       
-        EXEC_CMD_AND_EXIT = True,
+        STORAGE_TEMPLATE = json,
         storageTemplateOptions = dict(generateBnode=idGenerator),
-        **kw
-    ))
+        **kw    
+    ).run(False)
     return root.domStore
 
+_current_config = AppConfig()
+_current_configpath = [None]
+
+def _normpath(basedir, path):
+    return [os.path.isabs(dir) and dir or os.path.normpath(
+                        os.path.join(basedir, dir)) for dir in path]
+
+def importApp(baseapp):
+    '''
+    Executes the given config file and returns a Python module-like object that contains the global variables defined by it.
+    If `createApp()` was called during execution, it have an attribute called `_app_config` set to the app configuration returned by `createApp()`.
+    '''
+    baseglobals = utils.attrdict()
+    #set this global so we can resolve relative paths against the location
+    #of the config file they appear in
+    _current_configpath.append( os.path.dirname(os.path.abspath(baseapp)) )
+    #assuming the baseapp file calls createApp(), it will set _current_config
+    execfile(baseapp, baseglobals)
+    _current_configpath.pop()
+    baseglobals._app_config = _current_config
+    return baseglobals
+
+def createApp(baseapp=None, static_path=(), template_path=(), actions=None, **config):
+    '''
+    Returns an `AppConfig` based on the given config parameters.
+    If specified, `baseapp` is either a path to config file or an object returned by `importApp`.
+    Otherwise, all other parameters are treated as config variables.
+    '''
+    global _current_config
+    if baseapp:
+        if isinstance(baseapp, (str, unicode)):
+            baseapp = importApp(baseapp)    
+        _current_config = baseapp._app_config
+    else:
+        _current_config = AppConfig()
+    
+    _current_config.__toplevel__ = not bool(_current_configpath[-1])
+    #config variables that shouldn't be simply overwritten should be specified 
+    #as an explicit function args
+    _current_config.update(config)
+        
+    if 'actions' in _current_config:
+        if actions:
+            _current_config.actions.update(actions)
+    else:
+        _current_config.actions = actions or {}
+    
+    basedir = _current_configpath[-1] or os.getcwd()
+    
+    if isinstance(static_path, (str, unicode)):
+        static_path = [static_path]     
+    static_path = list(static_path) + _current_config.get('static_path',[])
+    _current_config.static_path = _normpath(basedir, static_path)
+
+    if isinstance(template_path, (str, unicode)):
+        template_path = [template_path]    
+    template_path = list(template_path) + _current_config.get('template_path',[])
+    _current_config.template_path = _normpath(basedir, template_path)
+    
+    return _current_config
+
+#XXX clean up args and implement this as the doc says
 def main(argv=sys.argv[1:], out=sys.stdout):
+    '''
+    usage app-config.py [options]
+    Any appconfig variables can be passed as an command line option 
+    and will override the config value set in the app.
+    For convenience, short alternative are available:
+
+    -l [log.config] LOG_CONFIG specify a config file for logging
+    -x EXEC_CMD_AND_EXIT exit after executing config specific cmd arguments
+    -m [store.json] SOURCE (connect to/load the store)
+    -r RECORD_REQUESTS record requests (ctrl-c to stop recording) 
+    -d [debug.pkl] DEBUG_FILENAME debug mode (replay the requests saved in debug.pkl)    
+    '''
     # mimics behavior of old main(), not really used anywhere
     vars = parse_args(argv, out)
-    run(vars, out)
-
+    createApp(**vars).run(out=out)
+    return 0

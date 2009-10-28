@@ -590,6 +590,8 @@ For example:
 >>> d.update({'update':4})
 >>> d['update']
 4
+>>> d.update #doctest: +ELLIPSIS
+<built-in method update of attrdict object at ...>
 >>> d[10] = '10'
 >>> len(d)
 4

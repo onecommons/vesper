@@ -92,6 +92,9 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('_removed' not in root.updateResults)
         self.failUnless(self.notifyChangeset)
         
+        #XXX test merging with self -- should be no op
+        #root.domStore.merge(self.notifyChangeset)
+        
         root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
         self.failUnless( root2.domStore.merge(self.notifyChangeset) )
         #try:
@@ -106,7 +109,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(root2.domStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
-    def testMerge(self):        
+    def testMerge(self):
         store1 = raccoon.createStore(saveHistory=True, branchId='B',BASE_MODEL_URI = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')        
         store1.add([{ 'id' : '1',
@@ -124,20 +127,26 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store1.query("{*}", debug=1).results, 
             [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
         
+        #merge a different branch changeset based on the origin (empty) revision
+        #this causes a simple merge 
         store1.merge(expectedChangedSet)
         self.assertEquals(store1.model.currentVersion, '0A00001,0B00003')
-
         self.assertEquals(store1.query("{*}").results, 
             [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}, 
                 {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
 
-        #store2 = raccoon.createStore(saveHistory=True, nodeId='B')
-        #root2 = store1.requestProcessor
-        #root2.txnSvc.begin()
-        #store2.add([
-        #])
-        #root1.txnSvc.commit()
-        #self.assertEquals(store1.model.currentVersion, '0A00001')
+    def testMergeConflict(self):        
+        store1 = raccoon.createStore(saveHistory=True, branchId='B',BASE_MODEL_URI = 'test:')
+        store1.add([{ 'id' : 'a_resource',
+           'newprop' : 'change an existing resource'
+        }])
+        self.assertEquals(store1.model.currentVersion, '0B00001')
+        
+        #merge a different branch changeset based on the origin (empty) revision
+        #this causes a simple merge 
+        #XXX
+        #store1.merge(expectedChangedSet)
+        #self.assertEquals(store1.model.currentVersion, '0A00001,0B00002')
 
     def testMergeInTransaction(self):
         #same as testMerge but in a transactions (mostly to test domstore methods)
@@ -171,6 +180,37 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store1.query("{*}").results, 
             [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}, 
                 {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
+
+    def testCreateApp(self):
+        app = raccoon.createApp(static_path=['static'], 
+          logconfig = '''
+          [loggers]
+          keys=root
+
+          [handlers]
+          keys=hand01
+
+          [formatters]
+          keys=form01
+
+          [logger_root]
+          level=DEBUG
+          handlers=hand01
+
+          [handler_hand01]
+          class=StreamHandler
+          level=NOTSET
+          formatter=form01
+          args=(sys.stdout,)
+
+          [formatter_form01]
+          format=%(asctime)s %(levelname)s %(name)s %(message)s
+          datefmt=%d %b %H:%M:%S
+          '''
+        )
+        root = app.load()
+        self.failUnless(root)
+        
         
 if __name__ == '__main__':
     import sys    

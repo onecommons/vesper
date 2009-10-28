@@ -1,8 +1,10 @@
 #derived from http://pythonpaste.org/webob/do-it-yourself.html#routing
 from raccoon import *
-from rx.utils import attrdict
-
+from rx.utils import defaultattrdict
+import os.path
+from urllib import url2pathname
 import re
+
 var_regex = re.compile(r'''
     \{          # The exact character "{"
     (\w+)       # The variable name (restricted to a-z, 0-9, _)
@@ -45,7 +47,7 @@ class Router(object):
             if match:            
                 urlvars = match.groupdict()
                 urlvars.update(vars)
-                kw['urlvars'] = attrdict(urlvars)
+                kw['urlvars'] = defaultattrdict(urlvars)
                 return controller
         return None
 
@@ -66,7 +68,35 @@ def gensequence(kw, default=None):
 
 @Action
 def servefile(kw, retval):
-    path = kw['_name']
-    if os.path.exists(path):
-        return file(path)
-    return retval
+    #value = kw
+    #for n in name.split('.'):
+    #    value = value[n]
+    return _servefile(kw,retval,kw._name)
+
+def _servefile(kw, retval, uri):
+    path = url2pathname(uri)
+    unauthorized = False
+    server = kw.__server__
+    for prefix in server.static_path:            
+        filepath = os.path.join(prefix.strip(), path)        
+        #check to make sure the path url wasn't trying to sneak outside the path (e.g. by using "..")
+        if server.SECURE_FILE_ACCESS:
+            if not os.path.abspath(filepath).startswith(os.path.abspath(prefix)):
+                unauthorized = True                
+                continue
+        unauthorized = False
+        if os.path.exists(filepath):
+            return file(filepath)
+
+    #if unauthorized:
+    #    raise UriException(UriException.RESOURCE_ERROR, uri, 'Unauthorized')                 
+    return retval #not found
+
+@Action #Route(default=True)
+def servetemplate(kw, retval):
+    path = kw._name
+    template = kw.__server__.template_loader.get_template(path)
+    if template:
+        return template.render(params=kw._params, urlvars=kw.get('urlvars',{}), db=kw.__server__.domStore)
+    else:
+        return retval
