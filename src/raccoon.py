@@ -374,7 +374,7 @@ class RequestProcessor(utils.object_with_threadlocals):
         self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
 
         self.nsMap.update(DefaultNsMap)
-
+        
         if kw.get('configHook'):
             kw['configHook'](kw)
 
@@ -958,8 +958,8 @@ def run(vars, out=sys.stdout):
         for logger in logging.Logger.manager.loggerDict.itervalues():
             logger.disabled = 0
 
-    kw = translateCmdArgs(vars)
-    root = HTTPRequestProcessor(appName='root', appVars=kw)
+    kw = translateCmdArgs(vars)    
+    root = HTTPRequestProcessor(a=kw.get('a'), appName='root', appVars=kw) # XXX probably shouldn't check this in
 
     if 'DEBUG_FILENAME' in vars:
         debugFileName = vars['DEBUG_FILENAME']
