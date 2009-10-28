@@ -645,6 +645,20 @@ def getTransactionContext(contexturi):
        return '' #not a txn context (e.g. empty or context:application, etc.)
    return txnpart[index:]
 
+def defaultMergeFollow(resource, add):
+   if isBnode(resource):
+       #XXX optimize by extracting owner
+       owner = None#trytoextractowner(resource)
+       if owner:
+           add(owner)
+           return (), [None]
+
+       #follow all parents and children
+       return [None], [None]
+   else:
+       #dont follow anything
+       return (),()
+
 class MergeableGraphManager(NamedGraphManager):
     '''
     * ("branchid"."revisionnum",")+ ordered by branchid. branchid and revisionnum are left padded so that lexicographic comparison works.
@@ -685,7 +699,7 @@ class MergeableGraphManager(NamedGraphManager):
     def getBranchRev(rev,branchid):
         for node in rev.split(','):
             if node.startswith(branchid):
-                return node[len(branchId):]
+                return node[len(branchid):]
 
     def _increment(self, rev):
         if not rev:
@@ -763,21 +777,7 @@ class MergeableGraphManager(NamedGraphManager):
         #and local changes bnode:a and remote changes bnode:b
         #we need to detect a conflict
         
-        def defaultFollow(resource, add):
-            if isBnode(resource):
-                #XXX optimize by extracting owner
-                owner = None#trytoextractowner(resource)
-                if owner:
-                    add(owner)
-                    return (), [None]
-
-                #follow all parents and children
-                return [None], [None]
-            else:
-                #dont follow anything
-                return (),()
-        
-        followFunc = followFunc or defaultFollow
+        followFunc = followFunc or defaultMergeFollow
         
         closures = []
         for r in resources:
@@ -798,11 +798,42 @@ class MergeableGraphManager(NamedGraphManager):
                             add(s.object)
                 #add parents
                 for pred in parentPreds:
-                    for s in self.getStatements(object=r, predicate=pred, objecttype=OBJECT_TYPE_RESOURCE):
+                    for s in self.getStatements(object=r, predicate=pred, 
+                                            objecttype=OBJECT_TYPE_RESOURCE):
                         add(s.subject)
             closures.append(closure)
 
         return closures
+    
+    
+    def resolveConflicts(self, conflicts, remotechanges, localchanges):
+        '''
+        stategies: error, create special merge context, discard later, later wins
+        
+        take earlier, take later, take both, exclude both
+        
+        "level" to apply:
+         
+        all changes 
+        "merge group"
+        resource with bnodes
+        resource
+        property with lists
+        property item (statement)
+        '''
+        
+        #default strategy:
+        # take the later version of the resource        
+        for (resources, local, remote) in conflicts:            
+            pass
+        #changes different from just committing the incoming changeset
+        
+        #issue -- order of merge 
+        #node A commit a1 already, node B commited b1 first
+        #node merges b1 and send a2b2 with resolved changes
+        #that resolution has to be the exact same as what node B would have done 
+        #if it received and resolved a1     
+        return adds, removes
     
     def merge(self, changeset):
         '''
@@ -856,10 +887,10 @@ class MergeableGraphManager(NamedGraphManager):
             if remote and local:
                 conflicts.append( (closure, local, remote) )
                         
-        if conflicts:            
+        if conflicts:
             assert False, 'merging conflicts not yet implemented! %s current %s' % (
                                 changeset.baserevision, self.currentVersion)
-            self.conflictstrategy
+            self.resolveConflicts(conflicts)
             #stategies: error, create special merge context, discard later, later wins
         else:
             #no conflicts just add changeset
