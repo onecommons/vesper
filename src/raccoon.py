@@ -372,7 +372,7 @@ class RequestProcessor(utils.object_with_threadlocals):
         self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
 
         self.nsMap.update(DefaultNsMap)
-
+        
         if kw.get('configHook'):
             kw['configHook'](kw)
 
@@ -995,7 +995,7 @@ class AppConfig(utils.attrdict):
             initLogConfig(self['logconfig'])
 
         kw = translateCmdArgs(self)
-        root = HTTPRequestProcessor(appName='root', appVars=kw)
+        root = HTTPRequestProcessor(a=kw.get('a'), appName='root', appVars=kw)
         dict.__setattr__(self, '_server', root)
         return self._server
         
