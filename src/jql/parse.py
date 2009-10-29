@@ -698,7 +698,7 @@ def p_error(p):
     if p:
         p.lexer.errorlog.error("Syntax error at '%s' (line %d char %d)" % (p.value, p.lineno, p.lexpos))
     else:
-        p.lexer.errorlog.error("Syntax error at EOF")
+        threadlocals.lexer.errorlog.error("Syntax error at EOF")
 
 def p_empty(p):
     'empty :'
@@ -756,7 +756,8 @@ threadlocals = threading.local()
 
 def parse(query, functions, debug=False):
     #get a separate logger for each thread so that concurrent parsing doesn't
-    #intermix messages        
+    #intermix messages
+    #XXX don't use python logging for this        
     errorlog=logging.getLogger('parser.%s' % thread.get_ident())
     try:
         lexer = threadlocals.lexer
