@@ -475,6 +475,34 @@ class RequestProcessor(utils.object_with_threadlocals):
                     self.txnSvc.abort()    #need this to clean up the transaction
         return retVal
 
+    if sys.version_info[:2] > (2,4):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def inTransaction(self, kw=None):
+            kw = kw or {}
+            self.txnSvc.begin()
+            self.txnSvc.state.kw = kw
+
+            try:
+                yield self
+            except:
+                if self.txnSvc.isActive(): #else its already been aborted
+                    self.txnSvc.abort()
+                raise
+            else:
+                if self.txnSvc.isActive(): #could have already been aborted
+                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                    if self.txnSvc.isDirty():
+                        if kw.get('__readOnly'):
+                            self.log.warning(
+                            'a read-only transaction was modified and aborted')
+                            self.txnSvc.abort()
+                        else:
+                            self.txnSvc.commit()
+                    else: #don't bother committing
+                        self.txnSvc.abort()    #need this to clean up the transaction
+
     def doActions(self, sequence, kw=None, retVal=None,
                   errorSequence=None, newTransaction=False):
         if kw is None: kw = {}
