@@ -9,8 +9,8 @@ class TxnStateTest(unittest.TestCase):
 
     def setUp(self):
         self.ts = TransactionService()
-        self.p  = LogParticipant()
-        self.log = self.p.log = []
+        self.log = []
+        self.p  = LogParticipant(self.log)
 
     def testOutside(self):
         ts = self.ts
@@ -68,16 +68,29 @@ class TxnStateTest(unittest.TestCase):
             ('finish',ts,True), ('abort',ts), ('finish',ts,False),
         ]
 
+    def testExceptionDuringCommit(self):
+        ts = self.ts
+        ts.begin()
+        ts.join(self.p)
+        ts.join(BrokenParticipant(self.log))
+        try:
+            ts.commit()
+        except:
+            self.failUnless(ts.state.cantCommit)
+            self.failUnless(not ts.state.safeToJoin)
+        else:
+            self.failUnless(0, 'should have thrown an exception')
 
 class LogParticipant(TransactionParticipant):
-
+    def __init__(self, log):
+        self.log = log
+        
     def readyToVote(self, txnService):
         self.log.append(("readyToVote", txnService))
         return True
 
     def voteForCommit(self, txnService):
         self.log.append(("voteForCommit", txnService))
-
 
     def commitTransaction(self, txnService):
         self.log.append(("commit", txnService))
@@ -89,6 +102,11 @@ class LogParticipant(TransactionParticipant):
         super(LogParticipant, self).finishTransaction(txnService, committed)
         self.log.append(("finish", txnService, committed))
 
+class BrokenParticipant(LogParticipant):
+    def commitTransaction(self, txnService):
+        self.log.append(("raise error in commit", txnService))
+        raise RuntimeError('test unexpected error while committing')
+    
 class UnreadyParticipant(LogParticipant):
 
     def readyToVote(self, txnService):
@@ -108,11 +126,12 @@ class ProcrastinatingParticipant(LogParticipant):
 class VotingTest(unittest.TestCase):
 
     def setUp(self):
+        log = []
+        self.log = log
         self.ts = TransactionService()
-        self.p_u  = UnreadyParticipant()
-        self.p_p  = ProcrastinatingParticipant()
-        self.p_n  = LogParticipant()
-        self.log = self.p_u.log = self.p_p.log = self.p_n.log = []
+        self.p_u  = UnreadyParticipant(log)
+        self.p_p  = ProcrastinatingParticipant(log)
+        self.p_n  = LogParticipant(log)
 
     def testUnready(self):
         ts = self.ts

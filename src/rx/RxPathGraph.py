@@ -28,7 +28,7 @@ from RxPath import Statement, isBnode, Triple
 import logging, time
 from rx import RxPath
 from rx.utils import attrdict
-log = logging.getLogger("RxPath")
+log = logging.getLogger("dbmanager")
 
 CTX_NS = u'http://rx4rdf.sf.net/ns/archive#'
 
@@ -83,7 +83,7 @@ class CurrentTxN:
     def __init__(self, txnCtxt, baseRev, newRev):
         self.txnContext = txnCtxt
         self.baseRev = baseRev
-        self.currRev = newRev
+        self.currentRev = newRev
         self.adds = {} #original_stmt => (primarystore stmt or none, txn_stmt)
         self.removes = {} #original_stmt => (primarystore stmt or none, txn_stmt)
         
@@ -232,14 +232,12 @@ class NamedGraphManager(RxPath.Model):
                 #parts = lastScope.split(';')
                 #latest = parts[1]
                 
-                self.currentVersion = self._increment(latest)
+                return self._increment(latest)
             else:
                 self.lastLatest = None
-                self.currentVersion = self._increment(self.currentVersion)
+                return self._increment(self.currentVersion)
         else:
-            self.currentVersion = self._increment(self.currentVersion)
-        
-        return getTxnContextUri(self.modelUri, self.currentVersion)
+            return self._increment(self.currentVersion)
     
     def isContextForPrimaryStore(self, context):
         '''
@@ -386,31 +384,40 @@ class NamedGraphManager(RxPath.Model):
             ctxStmts.append(revStmt)
         
         #XXX do we need to handle StatementWithOrder specially?
-        changeset = attrdict(revision = self.currentVersion, 
+        changeset = attrdict(revision = txn.currentRev, 
                 baserevision=txn.baseRev, timestamp=txn.timestamp, 
                 origin=self.branchId , statements = ctxStmts)
-        self.notifyChangeset(changeset)
+        try:
+            self.notifyChangeset(changeset)
+        except:
+            #we're in the middle of commit() so its important not propagate this
+            log.error("notifyChangeset raised an exception", exc_info=True)
     
     def createTxnTimestamp(self):        
         return time.time()
             
     def commit(self, ** kw):
+        if not self._currentTxn:
+            #no txn in commit!
+            return
+
         self.currentTxn.timestamp = self.createTxnTimestamp() 
         ctxStmts = self._finishCtxResource()
         if self.revisionModel != self.managedModel:
             self.revisionModel.commit( ** kw)     
         #commit the transaction
-        self.managedModel.commit(** kw)        
-        #if successful, broadcast changeeset        
+        self.managedModel.commit(** kw)
+        self.currentVersion = self.currentTxn.currentRev
+        #if successful, broadcast changeeset
         self.sendChangeset(ctxStmts)    
         self._currentTxn = None
 
     def initializeTxn(self):
         #increment version and set new transaction and context
-        currentRev = self.currentVersion
-        ctxUri = self.incrementTxnContext()
+        newRev= self.incrementTxnContext()
+        ctxUri = getTxnContextUri(self.modelUri, newRev)
         assert ctxUri
-        self._currentTxn = CurrentTxN(ctxUri, currentRev, self.currentVersion)
+        self._currentTxn = CurrentTxN(ctxUri, self.currentVersion, newRev)
         self._createCtxResource()
 
     def _createCtxResource(self):
@@ -426,15 +433,15 @@ class NamedGraphManager(RxPath.Model):
                 CTX_NS + 'TransactionContext', OBJECT_TYPE_RESOURCE, txnContext)
             )
         
-        self._markLatest(txnContext)
+        self._markLatest(txnContext, self._currentTxn.currentRev)
 
-    def _markLatest(self, txnContext):
+    def _markLatest(self, txnContext, txnRev):
         if self.markLatest:
             if self.lastLatest:
                 self.revisionModel.removeStatement(self.lastLatest)
             #assert self.currentVersion, 'currentVersion not set'
             self.lastLatest = Statement(txnContext, CTX_NS + 'latest',
-                    unicode(self.currentVersion), OBJECT_TYPE_LITERAL, txnContext)
+                    unicode(txnRev), OBJECT_TYPE_LITERAL, txnContext)
             self.revisionModel.addStatement(self.lastLatest)
 
     def _finishCtxResource(self):
@@ -450,7 +457,7 @@ class NamedGraphManager(RxPath.Model):
         ctxStmts.append(Statement(txnContext, CTX_NS+'baseRevision',
             unicode(self._currentTxn.baseRev), OBJECT_TYPE_LITERAL, txnContext))
         ctxStmts.append(Statement(txnContext, CTX_NS+'hasRevision',
-            unicode(self.currentVersion), OBJECT_TYPE_LITERAL, txnContext))        
+            unicode(self._currentTxn.currentRev), OBJECT_TYPE_LITERAL, txnContext))        
         ctxStmts.append(Statement(txnContext, CTX_NS+'createdOn',
             unicode(self._currentTxn.timestamp), OBJECT_TYPE_LITERAL, txnContext))
         
@@ -729,6 +736,7 @@ class MergeableGraphManager(NamedGraphManager):
         Directly adds changeset statements to the revision store
         and adds and removes statements from the primary store.
         '''
+        assert not self._currentTxn
         txnContext = None
         for s in changeset.statements:
             scope = s[4]
@@ -751,7 +759,7 @@ class MergeableGraphManager(NamedGraphManager):
         else:
             self.currentVersion = changeset.revision        
         assert txnContext
-        self._markLatest(txnContext)
+        self._markLatest(txnContext, self.currentVersion)
 
     def createMergeChangeset(self, otherrev, adds=(), removes=()):
         '''
@@ -848,6 +856,11 @@ class MergeableGraphManager(NamedGraphManager):
             raise RuntimeError('cannot merge while transaction in progress')
         if not isinstance(changeset, attrdict):
             changeset = attrdict(changeset)
+
+        if changeset.origin == self.branchId:
+            #handle receiving own changeset
+            raise RuntimeError("merge received changeset from itself: " + self.branchId)
+            
         if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
             if changeset.baserevision in self.pendingQueue:
                 self.merge(self.pendingQueue[changeset.baserevision])
@@ -855,24 +868,25 @@ class MergeableGraphManager(NamedGraphManager):
                 #xxx queue should be persistent because we're SOL if 
                 #we miss a changeset
                 self.pendingQueue[changeset.baserevision] = changeset            
-                #XXX log
-                print ('adding to pending queue because base revision "%s" is missing' 
-                                                    % changeset.baserevision)
+                log.warning('adding to pending queue because base revision "%s" is missing' 
+                                                    , changeset.baserevision)
                 return False
             else:
                 raise RuntimeError(
                 'can not perform merge because base revision "%s" is missing' 
                                                     % changeset.baserevision)
+
         if not changeset.baserevision or changeset.baserevision == self.currentVersion:
             #just add changeset, no need for merge changeset
             self.addChangesetStatements(changeset)            
             return True
         
+        
+        
         remoteResources = set(s[0] for s in changeset.statements)                
         remoteResources.update(set(s[2] for s in changeset.statements 
                                         if s[3] == OBJECT_TYPE_RESOURCE))
         
-            
         localResources = self.getChangedResourcesAfterBranchRevision(
                     changeset.baserevision, changeset.origin)     
                        
@@ -885,6 +899,7 @@ class MergeableGraphManager(NamedGraphManager):
             remote = closure & remoteResources
             local = closure & localResources
             if remote and local:
+                #XXX only conflict if remote and local changes are different
                 conflicts.append( (closure, local, remote) )
                         
         if conflicts:
