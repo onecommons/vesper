@@ -175,6 +175,8 @@ class TransactionService(object):
                 try:
                     p.commitTransaction(self)
                 except:
+                    print 'txn failure!!'
+                    #import traceback; traceback.print_exc()
                     self.errorHandler.commitFailed(self,p)
         finally:
             self.state.inCommit = False 

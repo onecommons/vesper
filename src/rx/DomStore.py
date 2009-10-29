@@ -228,8 +228,10 @@ class BasicStore(DomStore):
     def commitTransaction(self, txnService):
         self.model.commit(**txnService.getInfo())
 
-    def abortTransaction(self, txnService):        
+    def abortTransaction(self, txnService):
         if not self.isDirty(txnService):
+            if self.graphManager:
+               self.graphManager.rollback() 
             return
 
         #from rx import MRUCache
@@ -255,13 +257,17 @@ class BasicStore(DomStore):
         super(BasicStore,self).join(txnService)
         return True
     
-    def add(self, adds, _inTxn=False):
+    def add(self, adds):
         '''
         Adds data to the store.
 
         `adds`: A list of either statements or sjson conforming dicts
         '''
-        inTxn = _inTxn or self.join(self.requestProcessor.txnSvc)
+        if not self.join(self.requestProcessor.txnSvc):
+            #not in a transaction, so call this inside one
+            func = lambda: self.add(adds)
+            return self.requestProcessor.executeTransaction(func)
+        
         stmts, jsonrep = _toStatements(adds)
         resources = set()
         newresources = []
@@ -277,35 +283,27 @@ class BasicStore(DomStore):
             self.newResourceTrigger(newresources)
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
-
-        try: 
-            self.model.addStatements(stmts)
-        except:
-            if not inTxn: self.model.rollback()            
-            raise
-        else:
-            if not inTxn: self.model.commit()
+        
+        self.model.addStatements(stmts)
         return stmts
         
-    def remove(self, removes, _inTxn=False):
+    def remove(self, removes):
         '''
 
         Removes data from the store.
         `removes`: A list of either statements or sjson conforming dicts
         '''
-        inTxn = _inTxn or self.join(self.requestProcessor.txnSvc)
+        if not self.join(self.requestProcessor.txnSvc):
+            #not in a transaction, so call this inside one
+            func = lambda: self.remove(removes)
+            return self.requestProcessor.executeTransaction(func)
+        
         stmts, jsonrep = _toStatements(removes)
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
-
-        try: 
-            self.model.removeStatements(stmts)
-        except:
-            if not inTxn: self.model.rollback()            
-            raise
-        else:
-            if not inTxn: self.model.commit()
+            
+        self.model.removeStatements(stmts)
 
     def update(self, updates):
         '''
@@ -345,8 +343,11 @@ class BasicStore(DomStore):
         `removedResources`: A list of ids of resources that will be removed 
         from the store.
         '''
-        inTxn = self.join(self.requestProcessor.txnSvc)
-
+        if not self.join(self.requestProcessor.txnSvc):
+            #not in a transaction, so call this inside one
+            func = lambda: self.updateAll(update, replace, removedResources)
+            return self.requestProcessor.executeTransaction(func)
+        
         removedResources = set(removedResources or [])
 
         updateStmts, ujsonrep = _toStatements(update)
@@ -392,15 +393,9 @@ class BasicStore(DomStore):
             #        bnode
             removals.extend( stmts )
 
-        try: 
-            self.remove(removals, _inTxn=True)        
-            addStmts = self.add(newStatements, _inTxn=True)
-        except:
-            if not inTxn: self.model.rollback()            
-            raise
-        else:
-            if not inTxn: 
-                self.model.commit()
+        self.remove(removals)        
+        addStmts = self.add(newStatements)
+
         return addStmts, removals
 
     def query(self, query, bindvars=None, explain=None, debug=False, **kw):
@@ -417,11 +412,15 @@ class BasicStore(DomStore):
             def __init__(self, graphManager):
                 self.graphManager = graphManager
                 
-            def merge(self, requestProcessor, changeset):
+            def merge(self, requestProcessor, changeset):                
                 if requestProcessor.txnSvc.isActive():
                     self.join(requestProcessor.txnSvc)
-                return self.graphManager.merge(changeset)
-                                
+                    return self.graphManager.merge(changeset)                    
+                else:
+                    #not in a transaction, so call this inside one
+                    func = lambda: self.merge(requestProcessor, changeset)
+                    return requestProcessor.executeTransaction(func)
+                                                
             def commitTransaction(self, txnService):
                 if self.graphManager.revisionModel != self.graphManager.managedModel:
                     self.graphManager.revisionModel.commit(**txnService.getInfo())     
@@ -432,15 +431,5 @@ class BasicStore(DomStore):
                 if self.graphManager.revisionModel != self.graphManager.managedModel:
                     self.graphManager.revisionModel.rollback()
         
-        inTxn = self.requestProcessor.txnSvc.isActive()
         merger = Merger(self.graphManager)
-        try:
-            merged = merger.merge(self.requestProcessor, changeset)
-        except:
-            if not inTxn:
-                merger.abortTransaction(self.requestProcessor.txnSvc)
-            raise
-        else:
-            if not inTxn:
-                merger.commitTransaction(self.requestProcessor.txnSvc)
-        return merged
+        return merger.merge(self.requestProcessor, changeset)
