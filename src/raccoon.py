@@ -446,11 +446,16 @@ class RequestProcessor(utils.object_with_threadlocals):
         return retVal
 
     def _doActionsTxn(self, sequence, kw, retVal):
+        func = lambda: self._doActionsBare(sequence, kw, retVal)
+        return self.executeTransaction(func, kw, retVal)
+        
+    def executeTransaction(self, func, kw=None, retVal=None):
+        kw = kw or {}
         self.txnSvc.begin()
         self.txnSvc.state.kw = kw
         self.txnSvc.state.retVal = retVal
         try:
-            retVal = self._doActionsBare(sequence, kw, retVal)
+            retVal = func()
         except:
             if self.txnSvc.isActive(): #else its already been aborted
                 self.txnSvc.abort()
@@ -528,7 +533,7 @@ class RequestProcessor(utils.object_with_threadlocals):
                         details = ''.join(
                             traceback_module.format_exception(
                                         type, value, traceback) )
-                        return locals()
+                        return utils.attrdict(locals())
 
                     kw['_errorInfo'] = getErrorKWs()
                     self.log.warning("invoking error handler on exception:\n"+

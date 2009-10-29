@@ -14,6 +14,14 @@ expectedChangedSet = {'origin': '0A', 'timestamp': 0,
  'statements': 
  [('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#hasRevision', u'0A00001', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;0A00001;;', 'R', 'context:txn:test:;0A00001'), ('context:add:context:txn:test:;0A00001;;', u'http://rx4rdf.sf.net/ns/archive#applies-to', '', 'R', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://rx4rdf.sf.net/ns/archive#TransactionContext', 'R', 'context:txn:test:;0A00001'), ('a_resource', 'comment', 'page content.', 'L', 'context:add:context:txn:test:;0A00001;;'), ('a_resource', 'label', 'foo', 'R', 'context:add:context:txn:test:;0A00001;;')] }
 
+def printdiff(a, b):
+    import difflib
+    from pprint import pprint,pformat
+    d = difflib.SequenceMatcher(None, a, b)
+    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
+       (tag, i1, i2, pformat(a[i1:i2]), j1, j2, pformat(b[j1:j2])) )
+     for tag, i1, i2, j1, j2 in d.get_opcodes() if tag != 'equal'])
+
 class RaccoonTestCase(unittest.TestCase):
     def setUp(self):
         logging.BASIC_FORMAT = "%(asctime)s %(levelname)s %(name)s:%(message)s"
@@ -66,45 +74,52 @@ class RaccoonTestCase(unittest.TestCase):
         root.domStore.model.createTxnTimestamp = lambda *args: 0
         self.notifyChangeset = None
         def testNotifyChangeset(changeset):
-            self.notifyChangeset = changeset            
-            self.assertEquals(changeset, expectedChangedSet)
+            self.notifyChangeset = changeset
+            def x(d):
+                return ['%s=%s' % (k,v) for k,v in sorted(d.items()) 
+                                                    if k != 'statements']
+            diff = printdiff(x(changeset), x(expectedChangedSet))                    
+            self.assertEquals(changeset, expectedChangedSet, diff)
         root.domStore.model.notifyChangeset = testNotifyChangeset
         
         self.failUnless(root.loadModelHookCalled)
-        self.failUnless(not root.domStore.model._currentTxn)
+        self.failUnless(not root.domStore.model._currentTxn)        
+        self.assertEquals(root.domStore.model.currentVersion, '0')
         
         result = root.runActions('http-request', dict(_name='foo'))
-        response = "<html><body>page content.</body></html>"
-        self.assertEquals(response, result)
+        response = "<html><body>page content.</body></html>"        
+        self.assertEquals(response, result)        
+        self.assertEquals(root.domStore.model.currentVersion, '0A00001')
         
         self.assertEquals(root.updateResults['_added'], [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
         self.assertEquals(root.updateResults['_addedStatements'], [('a_resource', 'comment', 'page content.', 'L', ''), ('a_resource', 'label', 'foo', 'R', '')])
         self.assertEquals(root.updateResults['_removedStatements'], [])
         self.assertEquals(root.updateResults['_removed'], [])        
-
+        self.failUnless(self.notifyChangeset)
+                
         root.updateResults = {}
-        result = root.runActions('http-request', dict(_name='jj'))        
+        result = root.runActions('http-request', dict(_name='jj'))                
         self.assertEquals('<html><body>not found!</body></html>', result)
-
+        self.assertEquals(root.domStore.model.currentVersion, '0A00001')
+        
         self.failUnless('_addedStatements' not in root.updateResults)
         self.failUnless('_added' not in root.updateResults)
         self.failUnless('_removedStatements' not in root.updateResults)
         self.failUnless('_removed' not in root.updateResults)
-        self.failUnless(self.notifyChangeset)
         
-        #XXX test merging with self -- should be no op
-        #root.domStore.merge(self.notifyChangeset)
-        
+        try:
+            #merging own changeset should throw an error:
+            root.domStore.merge(self.notifyChangeset)
+        except RuntimeError, e:
+            self.assertEquals(str(e), 'merge received changeset from itself: 0A')
+        else:
+            self.fail('should have raised an error')
+
         root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
         self.failUnless( root2.domStore.merge(self.notifyChangeset) )
-        #try:
-        #    root2.txnSvc.begin()
-        #    self.failUnless( root2.domStore.merge(self.notifyChangeset) )
-        #except:
-        #    root2.txnSvc.abort()
-        #    raise
-        #else:
-        #    root2.txnSvc.commit()
+        
+        #XXX merging same changeset again should be an no-op
+        #self.failUnless( root2.domStore.merge(self.notifyChangeset) )
         
         self.assertEquals(root2.domStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
@@ -182,6 +197,7 @@ class RaccoonTestCase(unittest.TestCase):
                 {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
 
     def testCreateApp(self):
+        #this is minimal logconfig that python's logger seems to accept:
         app = raccoon.createApp(static_path=['static'], 
           logconfig = '''
           [loggers]
