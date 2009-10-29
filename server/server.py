@@ -178,16 +178,19 @@ def servefile(kw, retval):
         return file(path)
     return retval
 
+"""
+XXX disable until mako bug fixed
 @Action
 def displayError(kw, retVal):
     type = kw['_errorInfo']['type']
     value = kw['_errorInfo']['value']
     tb = kw['_errorInfo']['traceback']
     return mako.exceptions.html_error_template().render(traceback=(type,value,tb))
+actions['http-request-error'] = [displayError]    
+"""
 
 actions = {
   'http-request': rx.route.gensequence,
-  'http-request-error': [displayError]
 }
 
 CONF = {
