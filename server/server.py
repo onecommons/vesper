@@ -7,8 +7,8 @@ from rx.route import Route
 from raccoon import Action
 
 import os
-from string import Template
 
+import mako
 from mako.lookup import TemplateLookup
 
 TEMPLATE_DIR="server/templates"
@@ -51,7 +51,7 @@ def load_data(data):
 def index(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
     params = kw['_params']
-
+    
     if method == 'GET':
         sample = ''
         if 'hist' in params:
@@ -80,7 +80,7 @@ def index(kw, retval):
 def update(kw, retval):
     method=kw['_environ']['REQUEST_METHOD']
     params = kw['_params']
-    
+
     if method == 'GET':
         sample = ''
         if 'hist' in params:
@@ -99,13 +99,12 @@ def update(kw, retval):
         dom_store = kw['__server__'].domStore
         postdata = kw['_params']['data']
         store_query(postdata, update=True)
-        
+
         data = load_data(postdata)
         tmp = dom_store.update(data)
         from pprint import pformat
         return pformat(tmp)
 
-    
 @Route("hist")
 def hist(kw, retval):
     # method=kw['_environ']['REQUEST_METHOD']
@@ -179,39 +178,47 @@ def servefile(kw, retval):
         return file(path)
     return retval
 
+@Action
+def displayError(kw, retVal):
+    type = kw['_errorInfo']['type']
+    value = kw['_errorInfo']['value']
+    tb = kw['_errorInfo']['traceback']
+    return mako.exceptions.html_error_template().render(traceback=(type,value,tb))
 
-# using STORAGE_URL sets modelFactory and STORAGE_PATH
-#STORAGE_URL="tyrant://localhost:1978"
-#STORAGE_URL="rdf://out2.nt"
-STORAGE_URL="mem://"
+actions = {
+  'http-request': rx.route.gensequence,
+  'http-request-error': [displayError]
+}
 
-###############################
-# set up stomp replication
-###############################
-# saveHistory=True
-# branchId="0B"
-# REPLICATION_HOSTS=[('tokyo-vm', 61613)]
-# REPLICATION_CHANNEL="TEST9"
-# 
-# rep = rx.replication.get_replicator(branchId, REPLICATION_CHANNEL, hosts=REPLICATION_HOSTS)
-# DOM_CHANGESET_HOOK = rep.replication_hook
-# 
-# @Action
-# def startReplication(kw, retVal):
-#     rep.start(kw.__server__)    
-# 
-# actions = {
-#   'http-request' : rx.route.gensequence,
-#   'load-model':[startReplication]
-# }
-###############################
+CONF = {
+    'STORAGE_URL':"mem://",
+    'actions':actions,
+}
 
 parser = OptionParser()
 (options, args) = parser.parse_args()
 if len(args) > 0:
-    STORAGE_URL = args[0]
+    execfile(args[0], globals(), CONF)
+
+if 'REPLICATION_CHANNEL' in CONF:
+    CONF['saveHistory'] = True
+    rep = rx.replication.get_replicator(CONF['branchId'], CONF['REPLICATION_CHANNEL'], hosts=CONF['REPLICATION_HOSTS'])
+    CONF['DOM_CHANGESET_HOOK'] = rep.replication_hook
+    
+    @Action
+    def startReplication(kw, retVal):
+        rep.start(kw.__server__)
+        
+    def addAction(name, func):
+        action_map = CONF['actions']
+        if name in action_map:
+            action_map[name].append(func)
+        else:
+            action_map[name] = [func]
+            
+    addAction('load-model', startReplication)
     
 try:
-    raccoon.run(globals())
+    app = raccoon.createApp(**CONF).run()
 except KeyboardInterrupt:
     print "exiting!"
