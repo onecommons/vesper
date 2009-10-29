@@ -11,6 +11,8 @@ from twisted.internet import reactor
 
 import raccoon, rx.replication, rx.route
 
+# uncomment to test against an existing stomp message queue
+USE_EXISTING_MQ = None #"test-queue:61613"
 
 def invokeAPI(name, data, where=None, port=8000):
     "make a rhizome api call"
@@ -43,17 +45,23 @@ def startMorbidQueue(port):
     reactor.listenTCP(options['port'], stomp_factory, interface=options['interface'])
     reactor.run()
 
-def startRhizomeInstance(nodeId, port, queuePort, channel):
-    print "creating rhizome instance:%s (%d)" % (nodeId, port)
+def startRhizomeInstance(nodeId, port, queueHost, queuePort, channel):
+    print "creating rhizome instance:%s (%s:%d)" % (nodeId, queueHost, port)
     conf = {
         'STORAGE_URL':"mem://",
         'saveHistory':True,
         'branchId':nodeId,
-        'REPLICATION_HOSTS':[('localhost', queuePort)],
+        'REPLICATION_HOSTS':[(queueHost, queuePort)],
         'REPLICATION_CHANNEL':channel
         
     }
-    rep = rx.replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=True)
+    # assume remote queue implements message ack
+    if USE_EXISTING_MQ:
+        autoAck=False
+    else:
+        autoAck=True
+    
+    rep = rx.replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
     conf['DOM_CHANGESET_HOOK'] = rep.replication_hook
     
     @raccoon.Action
@@ -73,23 +81,30 @@ def startRhizomeInstance(nodeId, port, queuePort, channel):
 class BasicReplicationTest(unittest.TestCase):
     
     def setUp(self):
-        self.morbidQ_port   = random.randrange(5000,9999)
+        if USE_EXISTING_MQ:
+            (mq_host, mq_port) = USE_EXISTING_MQ.split(':')
+            mq_port = int(mq_port)
+        else:
+            mq_host = "localhost"
+            mq_port = random.randrange(5000,9999)
+            self.morbidProc = multiprocessing.Process(target=startMorbidQueue, args=(mq_port,))
+            self.morbidProc.start()        
+        
         self.replicationTopic = "UNITTEST" + str(random.randrange(100,999))
         self.rhizomeA_port = random.randrange(5000,9999)
         self.rhizomeB_port = random.randrange(5000,9999)
         
-        self.morbidProc = multiprocessing.Process(target=startMorbidQueue, args=(self.morbidQ_port,))
-        self.morbidProc.start()
-        self.rhizomeA   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", self.rhizomeA_port, self.morbidQ_port, self.replicationTopic))
+        self.rhizomeA   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", self.rhizomeA_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeA.start()
-        self.rhizomeB   = multiprocessing.Process(target=startRhizomeInstance, args=("BB", self.rhizomeB_port, self.morbidQ_port, self.replicationTopic))
+        self.rhizomeB   = multiprocessing.Process(target=startRhizomeInstance, args=("BB", self.rhizomeB_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeB.start()
         time.sleep(1) # XXX
         
     def tearDown(self):
         self.rhizomeA.terminate()
         self.rhizomeB.terminate()
-        self.morbidProc.terminate()        
+        if hasattr(self, 'morbidProc'):
+            self.morbidProc.terminate()
     
     def testSingleMessage(self):
         "testing single-message replication"
