@@ -212,6 +212,10 @@ if 'REPLICATION_CHANNEL' in CONF:
     def startReplication(kw, retVal):
         rep.start(kw.__server__)
         
+    @Action
+    def stopReplication(kw, retVal):
+        rep.stop()
+        
     def addAction(name, func):
         action_map = CONF['actions']
         if name in action_map:
@@ -220,6 +224,7 @@ if 'REPLICATION_CHANNEL' in CONF:
             action_map[name] = [func]
             
     addAction('load-model', startReplication)
+    addAction('shutdown', stopReplication)
     
 try:
     app = raccoon.createApp(**CONF).run()

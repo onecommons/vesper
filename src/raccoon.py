@@ -798,6 +798,7 @@ Please check the URL to ensure that the path is correct.</p>
         try:
             httpd.serve_forever()
         finally:
+            self.runActions('shutdown')
             self.saveRequestHistory()
 
 class UploadFile(object):

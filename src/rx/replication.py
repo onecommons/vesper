@@ -95,7 +95,6 @@ class StompQueueReplicator(object):
                                 ack='client', headers=subscribe_headers)
         self.start_sending_thread()
         
-    
     def start_sending_thread(self):
         def worker():
             while True:
