@@ -143,6 +143,14 @@ def debugp(*args, **kw):
 def htmlQuote(data):
     return data.replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
 
+def pprintdiff(a, b):
+    import difflib
+    from pprint import pformat
+    d = difflib.SequenceMatcher(None, a, b)
+    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
+       (tag, i1, i2, pformat(a[i1:i2]), j1, j2, pformat(b[j1:j2])) )
+     for tag, i1, i2, j1, j2 in d.get_opcodes() if tag != 'equal'])
+
 def diff(new, old, cutoffOffset = -100, sep = '\n'):
     '''
     returns a list of changes needed to transform the first string to the second unless the length

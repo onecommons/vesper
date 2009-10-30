@@ -14,14 +14,6 @@ expectedChangedSet = {'origin': '0A', 'timestamp': 0,
  'statements': 
  [('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#hasRevision', u'0A00001', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;0A00001;;', 'R', 'context:txn:test:;0A00001'), ('context:add:context:txn:test:;0A00001;;', u'http://rx4rdf.sf.net/ns/archive#applies-to', '', 'R', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://rx4rdf.sf.net/ns/archive#TransactionContext', 'R', 'context:txn:test:;0A00001'), ('a_resource', 'comment', 'page content.', 'L', 'context:add:context:txn:test:;0A00001;;'), ('a_resource', 'label', 'foo', 'R', 'context:add:context:txn:test:;0A00001;;')] }
 
-def printdiff(a, b):
-    import difflib
-    from pprint import pprint,pformat
-    d = difflib.SequenceMatcher(None, a, b)
-    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
-       (tag, i1, i2, pformat(a[i1:i2]), j1, j2, pformat(b[j1:j2])) )
-     for tag, i1, i2, j1, j2 in d.get_opcodes() if tag != 'equal'])
-
 class RaccoonTestCase(unittest.TestCase):
     def setUp(self):
         logging.BASIC_FORMAT = "%(asctime)s %(levelname)s %(name)s:%(message)s"
@@ -78,7 +70,7 @@ class RaccoonTestCase(unittest.TestCase):
             def x(d):
                 return ['%s=%s' % (k,v) for k,v in sorted(d.items()) 
                                                     if k != 'statements']
-            diff = printdiff(x(changeset), x(expectedChangedSet))                    
+            diff = utils.pprintdiff(x(changeset), x(expectedChangedSet))                    
             self.assertEquals(changeset, expectedChangedSet, diff)
         root.domStore.model.notifyChangeset = testNotifyChangeset
         
@@ -226,7 +218,6 @@ class RaccoonTestCase(unittest.TestCase):
         )
         root = app.load()
         self.failUnless(root)
-        
         
 if __name__ == '__main__':
     import sys    
