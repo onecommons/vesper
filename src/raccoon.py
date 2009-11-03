@@ -307,7 +307,8 @@ class RequestProcessor(utils.object_with_threadlocals):
             execfile(path, kw)
 
         if appVars:
-            kw.update(appVars)
+            kw.update(appVars)        
+        self.config = utils.defaultattrdict(appVars or {})
 
         if kw.get('beforeConfigHook'):
             kw['beforeConfigHook'](kw)
@@ -505,7 +506,8 @@ class RequestProcessor(utils.object_with_threadlocals):
 
     def doActions(self, sequence, kw=None, retVal=None,
                   errorSequence=None, newTransaction=False):
-        if kw is None: kw = {}
+        if kw is None: 
+            kw = utils.attrdict()
 
         kw['__requestor__'] = self.requestDispatcher
         kw['__server__'] = self
@@ -590,7 +592,7 @@ class RequestProcessor(utils.object_with_threadlocals):
 
         #merge previous prevkw, overriding vars as necessary
         prevkw = kw.get('_prevkw', {}).copy()
-        templatekw = {}
+        templatekw = utils.attrdict()
         for k, v in kw.items():
             #initialize the templates variable map copying the
             #core request kws and copy the r est (the application
@@ -733,7 +735,7 @@ class HTTPRequestProcessor(RequestProcessor):
 
         _responseCookies = Cookie.SimpleCookie()
         _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
-        kw = dict(_environ=utils.attrdict(environ),
+        kw = utils.attrdict(_environ=utils.attrdict(environ),
             _uri = wsgiref.util.request_uri(environ),
             _baseUri = wsgiref.util.application_uri(environ),
             _responseCookies = _responseCookies,
@@ -826,6 +828,7 @@ Please check the URL to ensure that the path is correct.</p>
         try:
             httpd.serve_forever()
         finally:
+            self.runActions('shutdown')
             self.saveRequestHistory()
 
 class UploadFile(object):
@@ -1048,7 +1051,7 @@ class AppConfig(utils.attrdict):
             port = self.get('PORT', 8000)
             if self.get('firepython_enabled'):
                 import firepython.middleware
-                middleware = firepython.middleware.FirePythonWSGI(root.wsgi_app)
+                middleware = firepython.middleware.FirePythonWSGI
             else:
                 middleware = None
             httpserver = self.get('httpserver')
@@ -1057,7 +1060,7 @@ class AppConfig(utils.attrdict):
             root.runWsgiServer(port, httpserver, middleware)
 
         return root
-    
+
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
     root = createApp(
         STORAGE_URL = storageURL,

@@ -24,7 +24,10 @@ def assert_stmts_match(expected_stmts, result_stmts):
         assert False
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False,refPrefix=''):
-    test_json = [ json.loads(src) ]
+    if isinstance(src, (str,unicode)):
+        test_json = [ json.loads(src) ]
+    else:
+        test_json = src
     result_stmts = sjson(generateBnode='counter', refPrefix=refPrefix).to_rdf( test_json )
     #print 'results_stmts'
     #pprint( result_stmts)
@@ -162,6 +165,7 @@ def test():
     assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs, refPrefix='@')
     #test missing ids and exclude_blankids
     #test shared
+
     print 'tests pass'
 
 

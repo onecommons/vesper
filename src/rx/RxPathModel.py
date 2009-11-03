@@ -565,22 +565,28 @@ class TransactionMemModel(TransactionModel, MemModel): pass
 class FileModel(MemModel):
 
     def __init__(self, source='', defaultStatements=(), context='',
-                                             incrementHook=None, **kw):
+                            incrementHook=None, serializeOptions=None, **kw):
         ntpath, stmts, format = loadRDFFile(source, defaultStatements,
                                         context, incrementHook=incrementHook)
-        if canWriteFormat(format):
+        
+        if self.canWriteFormat(format):
             self.path = source
-            self.format = format            
-        else:            
+            self.format = format
+        else:
+            #source is in a format we can read by not write
+            #so output ntriples if we need to write
             self.path = ntpath
             self.format = 'ntriples'
-            
+        self.serializeOptions = serializeOptions
         MemModel.__init__(self, stmts)    
+
+    def canWriteFormat(self, format):
+        return canWriteFormat(format)
 
     def commit(self, **kw):
         outputfile = file(self.path, "w+", -1)
         stmts = self.getStatements()
-        serializeRDF_Stream(stmts, outputfile, self.format)
+        serializeRDF_Stream(stmts, outputfile, self.format,self.serializeOptions)
         outputfile.close()
 
 class TransactionFileModel(TransactionModel, FileModel): pass
@@ -593,17 +599,9 @@ class IncrementalNTriplesFileModelBase(FileModel):
     '''    
     loadNtriplesIncrementally = True
 
-    def __init__(self, source='', defaultStatements=(), context='',
-                                             incrementHook=None, **kw):
-        ntpath, stmts, format = loadRDFFile(source, defaultStatements,
-                                        context, incrementHook=incrementHook)
-        if format not in ('ntriples', 'ntjson'):
-            self.path = ntpath
-            self.format = 'ntriples'
-        else:
-            self.path = source
-            self.format = format
-        MemModel.__init__(self, stmts)    
+    def canWriteFormat(self, format):
+        #only these formats support incremental output
+        return format in ('ntriples', 'ntjson')
         
     def commit(self, **kw):                
         import os.path, time
@@ -636,6 +634,16 @@ def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
     '''
+    extmap = { '.nt' : 'ntriples',
+      '.nj' : 'ntjson', 
+      '.rdf' : 'rdfxml',
+      '.json' : 'sjson',
+      '.yaml' : 'yaml',
+    }
+    #try to guess from extension
+    base, ext = os.path.splitext(path)
+    format = extmap.get(ext, 'unknown')        
+
     if os.path.exists(path):
         from rx import Uri
         uri = Uri.OsPathToUri(path)
@@ -643,18 +651,10 @@ def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
             options = dict(incrementHook=incrementHook)
         else:
             options = {}
-        stmts, format = parseRDFFromURI(uri, scope=context,
+        stmts, format = parseRDFFromURI(uri, type=format, scope=context,
                                 options=options, getType=True)
     else:
         stmts = defaultStatements
-        #try to guess from extension
-        base, ext = os.path.splitext(path)
-        format = { '.nt' : 'ntriples',
-          '.nj' : 'ntjson', 
-          '.rdf' : 'rdfxml',
-          '.json' : 'sjson',
-          '.yaml' : 'yaml',
-        }.get(ext, 'unknown')        
         
     #some stores only support writing to a NTriples file 
     if not path.endswith('.nt'):

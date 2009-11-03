@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import raccoon, rx.route, rx.replication
+import raccoon, rx.route
 from rx.python_shim import *
 from optparse import OptionParser
 from rx.route import Route
@@ -196,7 +196,7 @@ actions = {
 
 CONF = {
     'STORAGE_URL':"mem://",
-    'actions':actions,
+    'actions':actions
 }
 
 parser = OptionParser()
@@ -204,7 +204,8 @@ parser = OptionParser()
 if len(args) > 0:
     execfile(args[0], globals(), CONF)
 
-if 'REPLICATION_CHANNEL' in CONF:
+if CONF.get('REPLICATION_CHANNEL'):
+    import rx.replication
     CONF['saveHistory'] = True
     rep = rx.replication.get_replicator(CONF['branchId'], CONF['REPLICATION_CHANNEL'], hosts=CONF['REPLICATION_HOSTS'])
     CONF['DOM_CHANGESET_HOOK'] = rep.replication_hook

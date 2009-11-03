@@ -3,7 +3,8 @@ from raccoon import *
 from rx.utils import defaultattrdict
 import os.path
 from urllib import url2pathname
-import re
+import re, logging
+log = logging.getLogger("server")
 
 var_regex = re.compile(r'''
     \{          # The exact character "{"
@@ -50,7 +51,10 @@ class Router(object):
                 kw['urlvars'] = defaultattrdict(urlvars)
                 return controller
         return None
-
+        
+    def get_routes(self):
+        return [(r[0].pattern, r[1].action) for r in self.routes]
+    
 routes = Router()
 
 def Route(path, routes = routes, **vars):
@@ -79,6 +83,7 @@ def _servefile(kw, retval, uri):
     server = kw.__server__
     for prefix in server.static_path:            
         filepath = os.path.join(prefix.strip(), path)        
+        print 'filepath', filepath
         #check to make sure the path url wasn't trying to sneak outside the path (e.g. by using "..")
         if server.SECURE_FILE_ACCESS:
             if not os.path.abspath(filepath).startswith(os.path.abspath(prefix)):
@@ -97,6 +102,11 @@ def servetemplate(kw, retval):
     path = kw._name
     template = kw.__server__.template_loader.get_template(path)
     if template:
-        return template.render(params=kw._params, urlvars=kw.get('urlvars',{}), db=kw.__server__.domStore)
+        return template.render(params=kw._params, 
+                        urlvars=kw.get('urlvars',{}), 
+                        request=kw, 
+                        config=kw.__server__.config,
+                        server=kw.__server__, 
+                        db=kw.__server__.domStore)
     else:
         return retval
