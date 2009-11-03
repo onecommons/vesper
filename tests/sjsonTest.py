@@ -1,5 +1,6 @@
 from sjson import *
 from pprint import pprint,pformat
+from rx.utils import pprintdiff
 
 def assert_json_match(expected, result, dosort=False):
     if dosort and isinstance(expected, list):
@@ -9,20 +10,13 @@ def assert_json_match(expected, result, dosort=False):
     expected = json.dumps(expected, sort_keys=True)
     assert result == expected, pprint((result, '!=', expected))
 
-def printdiff(a, b):
-    import difflib
-    d = difflib.SequenceMatcher(None, a, b)
-    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
-          (tag, i1, i2, pformat(a[i1:i2]), j1, j2, pformat(b[j1:j2])) )
-        for tag, i1, i2, j1, j2 in d.get_opcodes() if tag != 'equal'])
-
 def assert_stmts_match(expected_stmts, result_stmts):
-    assert set(result_stmts) == set(expected_stmts), printdiff(
+    assert set(result_stmts) == set(expected_stmts), pprintdiff(
                         result_stmts,expected_stmts)
 
     if not RxPath.graph_compare(expected_stmts, result_stmts):
         print 'graph_compare failed'
-        print printdiff(ge._hashtuple(), gr._hashtuple())
+        print pprintdiff(ge._hashtuple(), gr._hashtuple())
         #print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')
         #print 'expected _:1', RxPath.Graph(expected_stmts).vhash('_:1')
         #print 'result _:1', RxPath.Graph(result_stmts).vhash('_:1')
@@ -30,7 +24,10 @@ def assert_stmts_match(expected_stmts, result_stmts):
         assert False
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False,refPrefix=''):
-    test_json = [ json.loads(src) ]
+    if isinstance(src, (str,unicode)):
+        test_json = [ json.loads(src) ]
+    else:
+        test_json = src
     result_stmts = sjson(generateBnode='counter', refPrefix=refPrefix).to_rdf( test_json )
     #print 'results_stmts'
     #pprint( result_stmts)
@@ -168,6 +165,7 @@ def test():
     assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs, refPrefix='@')
     #test missing ids and exclude_blankids
     #test shared
+
     print 'tests pass'
 
 

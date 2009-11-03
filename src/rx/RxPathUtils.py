@@ -479,21 +479,23 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             if isinstance(contents, str):
                 if type == 'yaml':
                     import yaml
-                    content = yaml.safe_load(contents)
+                    contents = yaml.safe_load(contents)
                 else:
                     contents = json.loads(contents)    
 
             options['scope'] = scope
             #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
-                options['generateBnode']=generateBnode
+                options['generateBnode']='uuid'
             
-            return sjson.tostatements(contents, options), type
+            stmts = sjson.tostatements(contents, options), type
+            return stmts
         else:
             raise ParseException('unsupported type: ' + type)
     except:
-        #import traceback; traceback.print_exc()
-        raise ParseException()
+        #XXX why isn't this working?:
+        #raise ParseException("error parsing "+type)
+        raise
 
 def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
                     options=None, getType=False):
@@ -520,15 +522,12 @@ def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass
     return RxPath.createDOM(model, uri2prefixMap or {}, modelUri=uri,
                         schemaClass = schemaClass or RxPathSchema.BaseSchema) 
 
-def serializeRDF(statements, type, uri2prefixMap=None,
-                         fixUp=None, fixUpPredicate=None):
+def serializeRDF(statements, type, uri2prefixMap=None, options=None):
     stringIO = StringIO.StringIO()
-    serializeRDF_Stream(statements, stringIO, type, uri2prefixMap=uri2prefixMap,
-                         fixUp=fixUp, fixUpPredicate=fixUpPredicate)
+    serializeRDF_Stream(statements, stringIO, type, uri2prefixMap, options)
     return stringIO.getvalue()
     
-def serializeRDF_Stream(statements, stream, type, uri2prefixMap=None,
-                         fixUp=None, fixUpPredicate=None):
+def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     '''    
     type can be one of the following:
         "rdfxml", "ntriples", "ntjson", "json", "yaml", or "sjson"
@@ -582,14 +581,18 @@ def serializeRDF_Stream(statements, stream, type, uri2prefixMap=None,
         writeTriples(statements, stream)
     elif type == 'ntjson':
         writeTriples(statements, stream, writejson=True)
-    elif type == 'sjson' or type == 'yaml':
+    elif type == 'sjson':
         import sjson 
         #XXX use uri2prefixMap
-        return json.dump( sjson.tojson(statements),stream)
+        options = options or {}
+        return json.dump( sjson.tojson(statements),stream, **options)
     elif type == 'yaml':
-        import sjson, yaml 
-        #XXX use uri2prefixMap
-        return yaml.safe_dump( sjson.tojson(statements), stream)
+        import sjson, yaml         
+        #for yaml options see http://pyyaml.org/wiki/PyYAMLDocumentation#Theyamlpackage
+        #also note default_style=" ' | >  for escaped " unescaped ' literal | folded >        
+        #use default_flow_style=False for json-style output
+        options = options or {}
+        return yaml.safe_dump( sjson.tojson(statements), stream, **options)
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]

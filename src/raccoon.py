@@ -307,7 +307,8 @@ class RequestProcessor(utils.object_with_threadlocals):
             execfile(path, kw)
 
         if appVars:
-            kw.update(appVars)
+            kw.update(appVars)        
+        self.config = utils.defaultattrdict(appVars or {})
 
         if kw.get('beforeConfigHook'):
             kw['beforeConfigHook'](kw)
@@ -475,9 +476,38 @@ class RequestProcessor(utils.object_with_threadlocals):
                     self.txnSvc.abort()    #need this to clean up the transaction
         return retVal
 
+    if sys.version_info[:2] > (2,4):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def inTransaction(self, kw=None):
+            kw = kw or {}
+            self.txnSvc.begin()
+            self.txnSvc.state.kw = kw
+
+            try:
+                yield self
+            except:
+                if self.txnSvc.isActive(): #else its already been aborted
+                    self.txnSvc.abort()
+                raise
+            else:
+                if self.txnSvc.isActive(): #could have already been aborted
+                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                    if self.txnSvc.isDirty():
+                        if kw.get('__readOnly'):
+                            self.log.warning(
+                            'a read-only transaction was modified and aborted')
+                            self.txnSvc.abort()
+                        else:
+                            self.txnSvc.commit()
+                    else: #don't bother committing
+                        self.txnSvc.abort()    #need this to clean up the transaction
+
     def doActions(self, sequence, kw=None, retVal=None,
                   errorSequence=None, newTransaction=False):
-        if kw is None: kw = {}
+        if kw is None: 
+            kw = utils.attrdict()
 
         kw['__requestor__'] = self.requestDispatcher
         kw['__server__'] = self
@@ -562,7 +592,7 @@ class RequestProcessor(utils.object_with_threadlocals):
 
         #merge previous prevkw, overriding vars as necessary
         prevkw = kw.get('_prevkw', {}).copy()
-        templatekw = {}
+        templatekw = utils.attrdict()
         for k, v in kw.items():
             #initialize the templates variable map copying the
             #core request kws and copy the r est (the application
@@ -705,7 +735,7 @@ class HTTPRequestProcessor(RequestProcessor):
 
         _responseCookies = Cookie.SimpleCookie()
         _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
-        kw = dict(_environ=utils.attrdict(environ),
+        kw = utils.attrdict(_environ=utils.attrdict(environ),
             _uri = wsgiref.util.request_uri(environ),
             _baseUri = wsgiref.util.application_uri(environ),
             _responseCookies = _responseCookies,
@@ -1021,7 +1051,7 @@ class AppConfig(utils.attrdict):
             port = self.get('PORT', 8000)
             if self.get('firepython_enabled'):
                 import firepython.middleware
-                middleware = firepython.middleware.FirePythonWSGI(root.wsgi_app)
+                middleware = firepython.middleware.FirePythonWSGI
             else:
                 middleware = None
             httpserver = self.get('httpserver')
@@ -1030,7 +1060,7 @@ class AppConfig(utils.attrdict):
             root.runWsgiServer(port, httpserver, middleware)
 
         return root
-    
+
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
     root = createApp(
         STORAGE_URL = storageURL,
