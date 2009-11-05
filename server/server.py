@@ -14,6 +14,8 @@ from mako.lookup import TemplateLookup
 TEMPLATE_DIR="server/templates"
 RESOURCE_DIR="server/resources"
 
+STAT_PROVIDERS = []
+
 template_loader = TemplateLookup(directories=[TEMPLATE_DIR], module_directory='/tmp/rhizome_mako_modules', output_encoding='utf-8', encoding_errors='replace')
 
 # query/update history
@@ -115,6 +117,11 @@ def hist(kw, retval):
     template = template_loader.get_template('history.html')    
     return template.render(**data)
 
+@Route("stats")
+def stats(kw, retval):
+    template = template_loader.get_template('status.html')
+    tmp = [s.stats() for s in STAT_PROVIDERS]
+    return template.render(data=[s.stats() for s in STAT_PROVIDERS])
 
 @Route("api/{action}")
 def api_handler(kw, retval):
@@ -227,6 +234,8 @@ if CONF.get('REPLICATION_CHANNEL'):
             
     addAction('load-model', startReplication)
     addAction('shutdown', stopReplication)
+    
+    STAT_PROVIDERS.append(rep)
     
 try:
     app = raccoon.createApp(**CONF).run()
