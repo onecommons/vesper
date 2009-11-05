@@ -563,9 +563,14 @@ class TransactionModel(object):
 class TransactionMemModel(TransactionModel, MemModel): pass
 
 class FileModel(MemModel):
+    '''
+    Reads the file into memory and write out 
+    '''
 
     def __init__(self, source='', defaultStatements=(), context='',
                             incrementHook=None, serializeOptions=None, **kw):
+        self.initialContext = context
+        self.defaultStatements = defaultStatements
         ntpath, stmts, format = loadRDFFile(source, defaultStatements,
                                         context, incrementHook=incrementHook)
         
@@ -584,11 +589,28 @@ class FileModel(MemModel):
         return canWriteFormat(format)
 
     def commit(self, **kw):
-        outputfile = file(self.path, "w+", -1)
-        stmts = self.getStatements()
-        serializeRDF_Stream(stmts, outputfile, self.format,self.serializeOptions)
-        outputfile.close()
+        from rx.transactions import TxnFileFactory
+        try:
+            #use TxnFileFactory so serializations errors don't corrupt file
+            tff = TxnFileFactory(self.path)
+            outputfile = tff.create('t')
+            stmts = self.getStatements()
+            serializeRDF_Stream(stmts, outputfile, self.format, options=self.serializeOptions)
+            outputfile.close()
+        except:
+            tff.abortTransaction(None)
+            tff.finishTransaction(None, False)
+            raise
+        else:                        
+            tff.commitTransaction(None)
+            tff.finishTransaction(None, True)
 
+    def rollback(self):
+        #reload file
+        #XXX only reloading if dirty would be nice
+        ntpath, stmts, format = loadRDFFile(self.path, self.defaultStatements, self.initialContext)
+        MemModel.__init__(self, stmts)
+        
 class TransactionFileModel(TransactionModel, FileModel): pass
         
 class IncrementalNTriplesFileModelBase(FileModel):

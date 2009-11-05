@@ -356,6 +356,8 @@ def main(testCaseClass):
     try:
         test=sys.argv[sys.argv.index("-r")+1]
     except (IndexError, ValueError):
+        #we need to specify the testCaseClass module to prevent
+        #BasicModelTestCase from running
         unittest.main(testCaseClass.__module__)
     else:
         tc = testCaseClass(test)

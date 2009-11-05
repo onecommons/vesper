@@ -175,13 +175,11 @@ class TransactionService(object):
                 try:
                     p.commitTransaction(self)
                 except:
-                    print 'txn failure!!'
-                    #import traceback; traceback.print_exc()
                     self.errorHandler.commitFailed(self,p)
         finally:
             self.state.inCommit = False 
         
-        self._cleanup(True)
+        self._cleanup(True) 
 
     def fail(self):
         if not self.isActive():
@@ -485,13 +483,18 @@ class TxnFileFactory(TransactionParticipant, FileFactory):
             raise NotImplementedError(
                 "Mixed-mode (read/write) access not supported w/out autocommit"
             )
+        elif 'a' in flags:
+            # Ugh, punt for now
+            raise NotImplementedError(
+                "append not supported w/out autocommit"
+            )        
         else:
-
             # Since we're always creating the file here, we don't use 'a'
             # mode.  We want to be sure to erase any stray contents left over
-            # from another transaction.  XXX Note that this isn't safe for
+            # from another transaction.
+            #XXX Note that this isn't safe for
             # a multiprocess environment!  We should use a lockfile.
-            stream = open(self.tmpName, flags.replace('a','w')+mode)
+            stream = open(self.tmpName, flags+mode)
             self.isDeleted = False
             return stream
 
