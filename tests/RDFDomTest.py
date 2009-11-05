@@ -33,14 +33,7 @@ def RDFDoc(model, nsMap, testHistory=testHistory):
 
 import time
 from rx.RxPathUtils import _parseTriples as parseTriples
-
-def printdiff(a, b):
-    import difflib
-    d = difflib.SequenceMatcher(None, a, b)
-    return '\n'.join([("%7s a[%d:%d] (%s) b[%d:%d] (%s)" %
-          (tag, i1, i2, a[i1:i2], j1, j2, b[j1:j2]))
-        for tag, i1, i2, j1, j2 in d.get_opcodes()])
-         
+from rx.utils import pprintdiff
     
 class RDFDomTestCase(unittest.TestCase):
     ''' tests rdfdom, rxpath, rxslt, and xupdate on a rdfdom
@@ -277,7 +270,7 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
             #print 'newstmts'
             #print newstmts
             #print 'lenght', len(stmts), len(newstmts)
-            self.failUnless(stmts == newstmts, printdiff(stmts, newstmts ))
+            self.failUnless(stmts == newstmts, pprintdiff(stmts, newstmts ))
 
     def testSubtype(self):        
         model = '''_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.

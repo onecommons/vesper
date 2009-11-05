@@ -51,6 +51,18 @@ def flattenSeq(seq, depth=0xFFFF, flattenTypes=None):
                 yield a
 
 def flatten(seq, to=list, depth=0xFFFF, flattenTypes=None, keepSeq=False):
+    '''
+>>> flatten(1)
+1
+>>> flatten([1])
+1    
+>>> flatten([1,2])
+[1, 2]
+>>> flatten([1], keepSeq=1)
+[1]
+>>> flatten(1, keepSeq=1)
+[1]
+'''    
     if not keepSeq and not isinstance(seq, flattenTypes or _flattenTypes):
         return seq
     flattened = to(flattenSeq(seq, depth, flattenTypes))    

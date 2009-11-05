@@ -486,8 +486,10 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             options['scope'] = scope
             #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
-                options['generateBnode']='uuid'
-            
+                options['generateBnode']='uuid'            
+            if 'unambiguousRefs' not in options:
+                options['unambiguousRefs']=True
+
             stmts = sjson.tostatements(contents, options), type
             return stmts
         else:
@@ -585,14 +587,15 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         import sjson 
         #XXX use uri2prefixMap
         options = options or {}
-        return json.dump( sjson.tojson(statements),stream, **options)
+        return json.dump( sjson.tojson(statements, dict(unambiguousRefs=True)),stream, **options)
     elif type == 'yaml':
         import sjson, yaml         
         #for yaml options see http://pyyaml.org/wiki/PyYAMLDocumentation#Theyamlpackage
         #also note default_style=" ' | >  for escaped " unescaped ' literal | folded >        
         #use default_flow_style=False for json-style output
-        options = options or {}
-        return yaml.safe_dump( sjson.tojson(statements), stream, **options)
+        defaultoptions = dict(default_style="'")
+        if options: defaultoptions.update(options)
+        return yaml.safe_dump( sjson.tojson(statements, dict(unambiguousRefs=True)), stream, **defaultoptions)
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]

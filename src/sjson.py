@@ -196,13 +196,13 @@ class sjson(object):
         
     def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
                             scope = '', model=None, preserveRdfTypeInfo=True, 
-                                                          setBNodeOnObj=False,
-                                                          refPrefix=''):
+                    setBNodeOnObj=False, refPrefix='', unambiguousRefs=False):
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = RxPath.BNODE_BASE
         self.addOrderInfo = addOrderInfo
         self.preserveRdfTypeInfo = preserveRdfTypeInfo
+        self.unambiguousRefs = unambiguousRefs
         self.refPrefix = refPrefix
         self.RESOURCE_REGEX = re.compile(r'^%s([\w:/\.\?&\$\-_\+#\@]+)$' % self.refPrefix)
         self.scope = scope
@@ -232,7 +232,11 @@ class sjson(object):
         return prop
 
     def serializeRef(self, uri):
-        return self.refPrefix+self.QName(uri) 
+        if self.unambiguousRefs:
+            r = encodeStmtObject(uri, OBJECT_TYPE_RESOURCE)
+            return r
+        else:
+            return self.refPrefix+self.QName(uri) 
     
     def _setPropSeq(self, propseq, idrefs):
         #XXX what about empty lists?
@@ -592,6 +596,8 @@ class sjson(object):
         return False
         
     def lookslikeUriOrQname(self, s):
+        if self.unambiguousRefs:
+            return False
         #XXX think about customization, e.g. if number were ids
         if not isinstance(s, (str,unicode)):        
             return False
@@ -604,12 +610,17 @@ class sjson(object):
         if isinstance(item, list):
             return item, None
         if isinstance(item, dict):
-            if 'value' not in item or len(item) != 3:
+            size = len(item) 
+            if 'value' not in item or size<2 or size>3:
                 return item, None
             value = item['value']
             objectType = item.get('datatype')
             if not objectType:
                 objectType = item.get('xml:lang')
+            if item.get('type') == 'uri':                
+                objectType = OBJECT_TYPE_RESOURCE
+            elif item.get('type') == 'bnode':
+                return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE
             if not objectType:                
                 return item, None
             else:
