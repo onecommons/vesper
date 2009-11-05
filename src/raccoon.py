@@ -569,9 +569,12 @@ class RequestProcessor(utils.object_with_threadlocals):
                     self.log.warning("invoking error handler on exception:\n"+
                                      kw['_errorInfo']['details'])
                     try:
-                        return self.callActions(errorSequence, kw, retVal,
                         #if we're creating a new transaction,
-                        #it has been aborted by now, so start a new one:
+                        #it has been aborted by now, so start a new one
+                        #however if the error was thrown during commit we're in the midst 
+                        #of a bad transaction and its not safe to create a new one
+                        newTransaction = newTransaction and not self.txnSvc.isActive()
+                        return self.callActions(errorSequence, kw, retVal,
                             newTransaction=newTransaction)
                     finally:
                         del kw['_errorInfo']

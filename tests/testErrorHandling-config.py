@@ -1,8 +1,21 @@
 @Action
 def testaction(kw, retval):
+    if kw._name != 'foo':
+        return retval
     e = Exception('not found')
     e.errorCode = 404
     raise e
+
+@Action
+def testInTransactionAction(kw, retval):
+    if kw._name != 'errorInCommit':
+        return retval
+    kw.__server__.domStore.add({id:"test", "test" : 'hello!'})
+    def badCommit(*args, **kw):
+        #print 'bad commit'
+        raise RuntimeError("this error inside commit")
+    kw.__server__.domStore.model.commit = badCommit
+    return 'success'
 
 @Action    
 def errorhandler(kw, retval):    
@@ -14,7 +27,7 @@ def errorhandler(kw, retval):
         return '503 unhandled error'  
 
 actions = {         
-        'http-request' : [  testaction ],
+        'http-request' : [  testInTransactionAction, testaction ],
         'http-request-error': [ errorhandler ]
         }
 

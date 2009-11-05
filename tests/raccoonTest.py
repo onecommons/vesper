@@ -54,10 +54,17 @@ class RaccoonTestCase(unittest.TestCase):
 
     def testErrorHandling(self):
         root = raccoon.HTTPRequestProcessor(a='testErrorHandling-config.py',model_uri = 'test:')
+        #make the error handler is run and sets the status code to 404 instead of the default 200
         result = root.handleHTTPRequest(dict(_name='foo', 
                     _responseHeaders=dict(_status="200 OK"), _environ={}))
         
         response = "404 not found"
+        self.assertEquals(response, result)
+        
+        result = root.handleHTTPRequest(dict(_name='errorInCommit', 
+                    _responseHeaders=dict(_status="200 OK"), _environ={}))
+        
+        response = '503 unhandled error'
         self.assertEquals(response, result)
 
     def testUpdatesApp(self):
