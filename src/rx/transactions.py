@@ -72,7 +72,7 @@ class TransactionState(object):
     safeToJoin   = True
     cantCommit   = False
     inCommit     = False
-    inAbort      = False
+    inAbort      = False    
     
     def __init__(self):
        self.participants = []
@@ -274,9 +274,9 @@ class RaccoonTransactionState(TransactionState):
         self.newResources = []
         self.kw = {}
         self.retVal = None
+        self.lock = None
 
 class RaccoonTransactionService(TransactionService,utils.object_with_threadlocals):
-    lock = None
     stateFactory = RaccoonTransactionState
 
     def __init__(self, server):        
@@ -350,8 +350,8 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
 
     def join(self, participant):
         super(RaccoonTransactionService, self).join(participant)
-        if not self.lock: #lock on first join
-            self.lock = self.server.getLock()
+        if not self.state.lock: #lock on first join
+            self.state.lock = self.server.getLock()
    
     def _cleanup(self, committed):
         success = not self.state.cantCommit
@@ -361,11 +361,11 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
             self._runActions('after-commit')
 
         try:
+            lock = self.state.lock
             super(RaccoonTransactionService, self)._cleanup(committed)
         finally:
-            if self.lock:  #hmm, can we release the lock earlier?
-                self.lock.release()
-                self.lock = None
+            if lock:  #hmm, can we release the lock earlier?
+                lock.release()
         
     def _prepareToVote(self):
         #todo: treating these two actions as transaction participants either end of the list
