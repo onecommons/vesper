@@ -2,6 +2,7 @@ from rx.python_shim import *
 import logging
 import threading, Queue
 import stomp
+from datetime import datetime
 
 class ChangesetListener(object):
     """
@@ -17,9 +18,12 @@ class ChangesetListener(object):
         
     def on_connected(self, headers, body):
         self.replicator.log.debug("connected!")
+        self.replicator.connected = True
         
-    def on_disconnected(self):
+    def on_disconnected(self, headers, body):
+        # headers and body are (almost?) always null; but stomp.py explodes on python 2.4 without them
         self.replicator.log.warning("lost connection to server! trying to reconnect")
+        self.replicator.connected = False
         
         self.replicator.conn.start()
         self.replicator.conn.connect(wait=True)
@@ -28,6 +32,9 @@ class ChangesetListener(object):
         if len(message) > 0:
             # print 'message: %s' % (message)
             # print '         %s' % str(headers)
+            if not self.replicator.first_ts:
+                self.replicator.first_ts = datetime.now()
+            self.replicator.last_ts = datetime.now()
             
             message_id = headers['message-id']
             self.replicator.log.debug("Node %s processing message:%s" % (self.replicator.clientid, message_id))
@@ -37,22 +44,23 @@ class ChangesetListener(object):
             # sanity check to make sure this is a message we need to care about
             if (headers['clientid'] != obj['origin']):
                 self.replicator.log.warning("Node %s ignoring message id %s with mismatched origins! headers: %s obj:%s" % (self.replicator.clientid, message_id, headers['clientid'], obj['origin']))
+                self.replicator.msg_recv_err += 1
                 # XXX do we ack this or not?
             elif (self.replicator.clientid == headers['clientid']):
                 self.replicator.log.warning("Node %s ignoring message id %s from myself" % (self.replicator.clientid, message_id))
+                self.replicator.msg_recv_err += 1
                 # XXX do we ack this or not?
             else:
+                
                 try:
-                    self.replicator.server.txnSvc.begin()
                     assert not self.replicator.server.domStore.model._currentTxn
                     self.replicator.server.domStore.merge(obj)
-                except:
-                    self.replicator.server.txnSvc.abort()
-                    raise
-                else:
-                    self.replicator.server.txnSvc.commit()
+                    self.replicator.msg_recv += 1
                     if not self.autoAck:
                         self.replicator.conn.ack({'message-id':message_id})
+                except Exception, e:
+                    self.replicator.msg_recv_err += 1
+                    raise e
                 
     def on_error(self, headers, message):
         self.replicator.log.error("stomp error: %s" % message)
@@ -69,8 +77,17 @@ class StompQueueReplicator(object):
         self.channel  = channel
         self.hosts    = hosts
         self.autoAck  = autoAck
+        self.connected = False
         
         self.changeset_queue = Queue.Queue()
+        
+        # statistics
+        self.msg_sent = 0
+        self.msg_recv = 0
+        self.msg_sent_err = 0
+        self.msg_recv_err = 0
+        self.first_ts = None
+        self.last_ts  = None
         
     def start(self, server):
         """
@@ -104,12 +121,13 @@ class StompQueueReplicator(object):
                 self.send_changeset(changeset)
         
         send_thread = threading.Thread(target=worker)
-        send_thread.daemon = True        
+        send_thread.daemon = True
         send_thread.start()
         
     def stop(self):
         self.changeset_queue.put("done")
-        self.conn.disconnect()
+        if self.connected:
+            self.conn.disconnect()
         
     def replication_hook(self, changeset):
         self.changeset_queue.put(changeset)
@@ -123,8 +141,27 @@ class StompQueueReplicator(object):
         data = json.dumps(changeset) #,sort_keys=True, indent=4)
         try:
             self.conn.send(data, destination='/topic/%s' % self.channel, headers=HEADERS)
+            self.msg_sent += 1
         except Exception, e:
             self.log.error("exception posting changeset", e)
+            self.msg_sent_err += 1
+    
+    def stats(self):
+        if self.first_ts and self.last_ts:
+            elapsed = self.last_ts - self.first_ts
+        else:
+            elapsed = None
+        return ('Replication', [
+            ('clientid', self.clientid),
+            ('channel', self.channel),
+            ('messages sent', self.msg_sent),
+            ('messages received', self.msg_recv),
+            ('send errors', self.msg_sent_err),
+            ('receive errors', self.msg_recv_err),
+            ('last message received', self.last_ts),
+            ('elapsed', elapsed)
+        ])
+        
 
 def get_replicator(clientid, channel, host=None, port=61613, hosts=None, autoAck=False):
     """
