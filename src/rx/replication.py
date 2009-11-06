@@ -18,9 +18,12 @@ class ChangesetListener(object):
         
     def on_connected(self, headers, body):
         self.replicator.log.debug("connected!")
+        self.replicator.connected = True
         
-    def on_disconnected(self):
+    def on_disconnected(self, headers, body):
+        # headers and body are (almost?) always null; but stomp.py explodes on python 2.4 without them
         self.replicator.log.warning("lost connection to server! trying to reconnect")
+        self.replicator.connected = False
         
         self.replicator.conn.start()
         self.replicator.conn.connect(wait=True)
@@ -74,6 +77,7 @@ class StompQueueReplicator(object):
         self.channel  = channel
         self.hosts    = hosts
         self.autoAck  = autoAck
+        self.connected = False
         
         self.changeset_queue = Queue.Queue()
         
@@ -122,7 +126,8 @@ class StompQueueReplicator(object):
         
     def stop(self):
         self.changeset_queue.put("done")
-        self.conn.disconnect()
+        if self.connected:
+            self.conn.disconnect()
         
     def replication_hook(self, changeset):
         self.changeset_queue.put(changeset)
