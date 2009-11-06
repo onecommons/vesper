@@ -1,6 +1,6 @@
 from rx.python_shim import *
 import logging
-import threading, Queue
+import threading, Queue, time
 import stomp
 from datetime import datetime
 
@@ -13,8 +13,9 @@ class ChangesetListener(object):
         self.replicator = replicator
         self.autoAck = autoAck
     
-    # def on_connecting(self, host_and_port):
-    #     print "connecting to %s:%s" % host_and_port
+    def on_connecting(self, host_and_port):
+        self.replicator.log.debug("connecting to %s:%s" % host_and_port)
+        self.replicator.connected_to = host_and_port
         
     def on_connected(self, headers, body):
         self.replicator.log.debug("connected!")
@@ -59,6 +60,7 @@ class ChangesetListener(object):
                     if not self.autoAck:
                         self.replicator.conn.ack({'message-id':message_id})
                 except Exception, e:
+                    self.replicator.log.exception("error storing replicated changeset")
                     self.replicator.msg_recv_err += 1
                     raise e
                 
@@ -78,6 +80,7 @@ class StompQueueReplicator(object):
         self.hosts    = hosts
         self.autoAck  = autoAck
         self.connected = False
+        self.connected_to = None
         
         self.changeset_queue = Queue.Queue()
         
@@ -114,11 +117,20 @@ class StompQueueReplicator(object):
         
     def start_sending_thread(self):
         def worker():
+            log = logging.getLogger("replication")
             while True:
                 changeset = self.changeset_queue.get()
                 if changeset == 'done':
                     break
-                self.send_changeset(changeset)
+                    
+                while changeset != None:
+                    try:
+                        self.send_changeset(changeset)
+                        changeset = None
+                    except Exception:
+                        log.error("couldn't post changeset, waiting to retry")
+                        time.sleep(1)
+                
         
         send_thread = threading.Thread(target=worker)
         send_thread.daemon = True
@@ -136,22 +148,28 @@ class StompQueueReplicator(object):
         HEADERS = {
             'persistent':'true',
             'clientid':self.clientid
-        }        
+        }
         self.log.debug("posting changeset %s to channel %s" % (changeset.revision, self.channel))
         data = json.dumps(changeset) #,sort_keys=True, indent=4)
         try:
             self.conn.send(data, destination='/topic/%s' % self.channel, headers=HEADERS)
             self.msg_sent += 1
         except Exception, e:
-            self.log.error("exception posting changeset", e)
+            self.log.exception("exception posting changeset")
             self.msg_sent_err += 1
+            raise e
     
     def stats(self):
+        if self.connected:
+            state = self.connected_to
+        else:
+            state = "Disconnected"
         if self.first_ts and self.last_ts:
             elapsed = self.last_ts - self.first_ts
         else:
             elapsed = None
         return ('Replication', [
+            ('connected', state),
             ('clientid', self.clientid),
             ('channel', self.channel),
             ('messages sent', self.msg_sent),
@@ -159,7 +177,8 @@ class StompQueueReplicator(object):
             ('send errors', self.msg_sent_err),
             ('receive errors', self.msg_recv_err),
             ('last message received', self.last_ts),
-            ('elapsed', elapsed)
+            ('elapsed', elapsed),            
+            ('send queue size', self.changeset_queue.qsize()),
         ])
         
 
