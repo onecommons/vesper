@@ -128,53 +128,64 @@ def api_handler(kw, retval):
     dom_store = kw['__server__'].domStore
     params = kw['_params']
     action = kw['urlvars']['action']
-    
+
     if action not in ('query', 'update', 'delete', 'add'):
         raise Exception("404 action not found") # todo    
-    if 'data' not in params:
-        raise Exception("500 missing required parameter") # todo
-
-    out = {}
+    
+    # print action
+    # print params
+    
+    out = {'action':action}
     try:
         if action == 'query':
-            r = dom_store.query(params['data'])
-            r = list(r) # XXX
-            out['data'] = r
-        elif action == 'update':            
-            root = load_data(params['data']) # XXX this should probably change
+            if 'where' not in params:
+                raise Exception("500 missing required parameter")
             
-            query = "{*, where(%s)}" % root['where']
+            r = dom_store.query(params['where'])
+            # print r
+            out.update(r)
+        elif action == 'update':
+            
+            updates = load_data(params['data'])
+            where = params['where']
+
+            query = "{id, *, where(%s)}" % params['where']
             # print "querying:", query
-            target = list(dom_store.query(query))
             
-            assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
+            target = dom_store.query(query)['results']
+            
+            assert len(target) >= 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]
             # print "target object:"
             # print target
-            
-            updates = root['data']
+
             for k in updates.keys():
                 # print "updating attribute:", k
                 target[k] = updates[k]
-                
-            # print "updated target:"
+
+            # print "storing updated target:"
             # print target
-            
+
             changed = dom_store.update(target) # returns statements modified; not so useful
-            
+            out['count'] = len(changed)
+
         elif action == 'add':
             data = load_data(params['data'])
-            out['added'] = dom_store.add(data)
+            stmts = dom_store.add(data)
+            out['count'] = len(stmts)
         elif action == 'delete':
             print "XXX delete action not supported!"
             pass
-            
+
         out['success'] = True
     except Exception, e:
         out['success'] = False
         out['error'] = str(e)
 
-    return json.dumps(out,sort_keys=True, indent=4)
+    # print out
+    tmp = json.dumps(out,sort_keys=True, indent=4)
+    print tmp
+    return tmp
 
 @Route('resources/{file:.+}')
 def servefile(kw, retval):
