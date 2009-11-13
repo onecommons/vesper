@@ -626,7 +626,9 @@ def canWriteFormat(format):
     
 #see w3.org/TR/rdf-testcases/#ntriples 
 #todo: assumes utf8 encoding and not string escapes for unicode 
-Removed = object()
+class _Removed(object): 
+    def __repr__(self): return 'Removed' 
+Removed = _Removed()
 Comment = object()
 def _parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
                   baseuri=None, yieldcomments=False):

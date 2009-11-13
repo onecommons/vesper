@@ -9,6 +9,7 @@ from rx import RxPath, transactions
 import StringIO, os, os.path
 import logging
 from rx.utils import debugp
+from rx import RxPathGraph
 
 def _toStatements(contents):
     import sjson
@@ -99,8 +100,8 @@ class BasicStore(DomStore):
           to initialize the model if it needs to be created
         '''
         self.requestProcessor = requestProcessor
-        self.modelFactory = modelFactory or RxPath.TransactionFileModel
-        self.versionModelFactory = versionModelFactory or modelFactory or RxPath.IncrementalNTriplesFileModel
+        self.modelFactory = modelFactory
+        self.versionModelFactory = versionModelFactory
         self.schemaFactory = schemaFactory 
         self.APPLICATION_MODEL = APPLICATION_MODEL        
         self.STORAGE_PATH = STORAGE_PATH        
@@ -111,7 +112,8 @@ class BasicStore(DomStore):
         self.storageTemplateOptions = storageTemplateOptions
         self.branchId = branchId
         self.changesetHook = DOM_CHANGESET_HOOK
-            
+        self._txnparticipants = []
+
     def loadDom(self):        
         requestProcessor = self.requestProcessor
         self.log = logging.getLogger("domstore." + requestProcessor.appName)
@@ -126,35 +128,38 @@ class BasicStore(DomStore):
             #setupHistory didn't initialize the store, so do it now
             #modelFactory will load the store specified by `source` or create
             #new one at that location and initializing it with `defaultStmts`
-            model = self.modelFactory(source=source, 
-                                            defaultStatements=defaultStmts)
-
+            modelFactory = self.modelFactory or RxPath.FileModel
+            model = modelFactory(source=source, defaultStatements=defaultStmts)
+                
         #if there's application data (data tied to the current revision
         #of your app's implementation) include that in the model
         if self.APPLICATION_MODEL:
-            from rx.RxPathGraph import APPCTX #'context:application:'
             stmtGen = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
-                requestProcessor.MODEL_RESOURCE_URI, scope=APPCTX) 
-                                        
+                requestProcessor.MODEL_RESOURCE_URI, scope=RxPathGraph.APPCTX) 
             appmodel = RxPath.MemModel(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
             #the application data in the model and update it if its difference 
-            #from what's stored (of course this requires a context-aware store)
+            #from what's stored (this requires a context-aware store)
             model = RxPath.MultiModel(model, appmodel)
         
         #turn on update logging if a log file is specified, which can be used to 
         #re-create the change history of the store
         if self.transactionLog:
-            model = RxPath.MirrorModel(model, RxPath.IncrementalNTriplesFileModel(
-                self.transactionLog, []) )
-
-        self.model = model
+            if model.updateAdvisory:
+                logClass = RxPath.IncrementalNTriplesFileModelBase
+            else:
+                logClass = RxPath.IncrementalNTriplesFileModel
+            model = RxPath.MirrorModel(model, logClass(self.transactionLog, []))
 
         if self.saveHistory:
-            from rx import RxPathGraph
+            model, historyModel = self._addModelTxnParticipants(model, historyModel)
             self.model = self.graphManager = RxPathGraph.MergeableGraphManager(model, 
-                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.branchId)
+                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.branchId)            
+            if self._txnparticipants:
+                self._txnparticipants.insert(0, #must go first
+                        TwoPhaseTxnGraphManagerAdapter(self.graphManager))
         else:
+            self.model = self._addModelTxnParticipants(model)[0]
             self.graphManager = None
         
         if self.changesetHook:
@@ -177,7 +182,6 @@ class BasicStore(DomStore):
         requestProcessor = self.requestProcessor
         if self.saveHistory:
             #if we're going to be recording history we need a starting context uri
-            from rx import RxPathGraph
             initCtxUri = RxPathGraph.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
         else:
             initCtxUri = ''
@@ -186,35 +190,53 @@ class BasicStore(DomStore):
         defaultStmts = RxPath.parseRDFFromString(self.STORAGE_TEMPLATE, 
                         requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri, 
                         options=self.storageTemplateOptions) 
-                
-        #if we're using a separate store to hold the change history, load it now
-        #(it's called delmodel because it only stores removals as the history 
-        #is recorded soley as adds and removes)
-        if self.VERSION_STORAGE_PATH:
-            normalizeSource = getattr(self.versionModelFactory, 
-                    'normalizeSource', DomStore._normalizeSource)
-            versionStoreSource = normalizeSource(self, requestProcessor,
-                                                 self.VERSION_STORAGE_PATH)
-            revisionModel = self.versionModelFactory(source=versionStoreSource,
-                                                defaultStatements=[])
-        else:
-            revisionModel = None
+        
+        if self.saveHistory == 'split':                                                
+            versionModelFactory = self.versionModelFactory
+            if not versionModelFactory:
+                if self.VERSION_STORAGE_PATH and self.modelFactory:
+                    #if a both a version path and the modelfactory was set, use the model factory
+                    versionModelFactory = self.modelFactory
+                elif self.STORAGE_PATH or self.VERSION_STORAGE_PATH: #use the default
+                    versionModelFactory = RxPath.IncrementalNTriplesFileModelBase
+                else:
+                    versionModelFactory = RxPath.MemModel
 
-        #open or create the model (the datastore)
+            if not self.VERSION_STORAGE_PATH and issubclass(versionModelFactory, RxPath.FileModel):
+                #generate path based on primary path
+                assert self.STORAGE_PATH
+                import os.path
+                versionStoreSource = os.path.splitext(self.STORAGE_PATH)[0] + '-history.nt'
+            else:
+                versionStoreSource = self.VERSION_STORAGE_PATH
+            
+            if versionStoreSource:
+                normalizeSource = getattr(self.versionModelFactory, 
+                        'normalizeSource', DomStore._normalizeSource)
+                versionStoreSource = normalizeSource(self, requestProcessor,
+                                                     versionStoreSource)
+            revisionModel = versionModelFactory(source=versionStoreSource,
+                                                      defaultStatements=[])
+        else:
+            #either no history or no separate model
+            revisionModel = None
+        
+        #WARNING this feature hasn't been tested in a long time and is probably broken
+        #XXX: write unittest or remove this code
         #if savehistory is on and we are loading a store that has the entire 
         #change history (e.g. we're loading the transaction log) we also load 
         #the history into a separate model
         #
         #note: to override loadNtriplesIncrementally, set this attribute
-        #on your custom modelFactory
-        if self.saveHistory and getattr(
+        #on your custom modelFactory        
+        if self.saveHistory == 'split' and getattr(
                 self.modelFactory, 'loadNtriplesIncrementally', False):
             if not revisionModel:
-                revisionModel = RxPath.TransactionMemModel()
+                revisionModel = RxPath.MemModel()
             dmc = RxPathGraph.DeletionModelCreator(revisionModel)
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
-            lastScope = dmc.lastScope        
+            lastScope = dmc.lastScope
         else:
             model = None
             lastScope = None
@@ -224,24 +246,24 @@ class BasicStore(DomStore):
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    
         return txnService.state.additions or txnService.state.removals
-        
-    def commitTransaction(self, txnService):
+    
+    def is2PhaseTxn(self):
+        return not not self._txnparticipants
+
+    def commitTransaction(self, txnService):        
+        if self.is2PhaseTxn():
+            return
         self.model.commit(**txnService.getInfo())
 
     def abortTransaction(self, txnService):
+        if self.is2PhaseTxn():
+            return 
+        
         if not self.isDirty(txnService):
             if self.graphManager:
                self.graphManager.rollback() 
             return
-
-        #from rx import MRUCache
-        #key = self.dom.getKey()
-
         self.model.rollback()
-                        
-        #if isinstance(key, MRUCache.InvalidationKey):
-        #    if txnService.server.actionCache:
-        #        txnService.server.actionCache.invalidate(key)
 
     def getTransactionContext(self):
         if self.graphManager:
@@ -253,9 +275,42 @@ class BasicStore(DomStore):
             return False
         if hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
-            txnService.state.kw['__current-transaction'] = txnCtxtResult        
+            txnService.state.kw['__current-transaction'] = txnCtxtResult
+        
         super(BasicStore,self).join(txnService)
+        
+        for participant in self._txnparticipants:
+            participant.join(txnService)
         return True
+
+    def _addModelTxnParticipants(self, model, historyModel=None):
+        if historyModel:
+            txnOk = model.updateAdvisory or isinstance(model, 
+                                           transactions.TransactionParticipant)
+            if txnOk:
+                txnOk = historyModel.updateAdvisory or isinstance(historyModel,
+                                           transactions.TransactionParticipant)
+        else:
+            txnOk = model.updateAdvisory or isinstance(model, 
+                                           transactions.TransactionParticipant)
+        
+        if txnOk:
+            def add(model):
+                if not model:
+                    return model
+                if not isinstance(model, transactions.TransactionParticipant):
+                    participant = TwoPhaseTxnModelAdapter(model)
+                    model = ModelWrapper(model, participant)
+                else:
+                    participant = model
+                self._txnparticipants.append(participant)
+                return model
+            
+            return [add(m) for m in model, historyModel]
+        else:
+            self.log.warning(
+"model(s) doesn't support updateAdvisory, unable to participate in 2phase commit")
+            return model, historyModel
     
     def add(self, adds):
         '''
@@ -289,7 +344,6 @@ class BasicStore(DomStore):
         
     def remove(self, removes):
         '''
-
         Removes data from the store.
         `removes`: A list of either statements or sjson conforming dicts
         '''
@@ -403,7 +457,6 @@ class BasicStore(DomStore):
         return jql.getResults(query, self.model,bindvars,explain,debug)
 
     def merge(self,changeset): 
-        from rx import RxPathGraph
         assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
         
         #graphManager.merge() needs special transaction logic since we don't 
@@ -411,15 +464,21 @@ class BasicStore(DomStore):
         class Merger(transactions.TransactionParticipant):
             def __init__(self, graphManager):
                 self.graphManager = graphManager
-                
+                self.dirty = False
+
+            def isDirty(self,txnService):
+                '''return True if this transaction participant was modified'''
+                return self.dirty
+
             def merge(self, requestProcessor, changeset):                
                 if requestProcessor.txnSvc.isActive():
                     self.join(requestProcessor.txnSvc)
-                    return self.graphManager.merge(changeset)                    
+                    self.dirty = self.graphManager.merge(changeset)
+                    return self.dirty
                 else:
                     #not in a transaction, so call this inside one
                     func = lambda: self.merge(requestProcessor, changeset)
-                    return requestProcessor.executeTransaction(func)
+                    return requestProcessor.executeTransaction(func) 
                                                 
             def commitTransaction(self, txnService):
                 if self.graphManager.revisionModel != self.graphManager.managedModel:
@@ -430,6 +489,142 @@ class BasicStore(DomStore):
                 self.graphManager.managedModel.rollback()
                 if self.graphManager.revisionModel != self.graphManager.managedModel:
                     self.graphManager.revisionModel.rollback()
+
+            def finishTransaction(self, txnService, committed):
+                super(Merger,self).finishTransaction(txnService, committed)
+                self.dirty = False
         
         merger = Merger(self.graphManager)
         return merger.merge(self.requestProcessor, changeset)
+
+class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
+    '''
+    Adapts models which doesn't support transactions or only support simple (one-phase) transactions.
+    '''    
+    def __init__(self, model):
+        self.model = model
+        self.committed = False
+        self.undo = []
+        assert model.updateAdvisory, 'need this for undo to work accurately'
+    
+    def isDirty(self,txnService):
+        '''return True if this transaction participant was modified'''
+        return txnService.state.additions or txnService.state.removals    
+    
+    def voteForCommit(self, txnService):
+        #the only way we can tell if commit will succeed is to do it now 
+        #if not self.model.autocommit:
+        self.model.commit(**txnService.getInfo())
+        #else: already committed
+        self.committed = True
+                                        
+    def commitTransaction(self, txnService):
+        #already commited, nothing to do
+        assert self.committed
+    
+    def abortTransaction(self, txnService):
+        if not self.committed and not self.model.autocommit:            
+            self.model.rollback()
+        else:
+            #already committed, commit a compensatory transaction
+            #if we're in recovery mode make sure the change isn't already in the store
+            for stmt in self.undo:
+                if stmt[0] is RxPath.Removed:
+                    #if not recover or self.model.getStatements(*stmt[1]):
+                    self.model.addStatement( stmt[1] )
+                else:
+                    self.model.removeStatement( stmt[0] )            
+            if self.undo:# and not self.model.autocommit:
+                try:
+                    self.model.commit()
+                except:
+                    pass
+
+    def finishTransaction(self, txnService, committed):
+        super(TwoPhaseTxnModelAdapter,self).finishTransaction(txnService, committed)
+        self.undo = []
+        self.committed = False
+
+class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
+    '''
+    Each underlying model is a wrapped with a TwoPhaseTxnModelAdapter if necessary.
+    This must be be listed before those participants
+    '''
+    
+    ctxStmts = None
+    
+    def __init__(self, graph):
+        assert isinstance(graph, RxPathGraph.NamedGraphManager)
+        self.graph = graph
+
+    def isDirty(self,txnService):
+        '''return True if this transaction participant was modified'''
+        return txnService.state.additions or txnService.state.removals    
+
+    def readyToVote(self, txnService):
+        #need to do this now so the underlying model gets ctxStmts before it commits        
+        self.ctxStmts = self.graph._finishCtxResource()
+        return True
+    
+    #no-op -- txnparticipants for underlying models will commit     
+    #def voteForCommit(self, txnService): pass
+    
+    def commitTransaction(self, txnService):
+        assert self.ctxStmts
+        self.graph._finalizeCommit(self.ctxStmts)
+
+    def abortTransaction(self, txnService):
+        if self.ctxStmts:
+            #undo the transaction we just voted for
+            graph = self.graph
+            assert not graph._currentTxn, 'shouldnt be inside a transaction'
+           
+            #set the current revision to one prior to this
+            baseRevisions = [s.object for s in ctxStmts if s[1] == RxPathGraph.CTX_NS+'baseRevision']
+            assert len(baseRevisions) == 1
+            baseRevision = baseRevisions[0]
+            #note: call _markLatest makes db changes so this abort needs to be 
+            #called before underlying models' abort
+            graph._markLatest(baseRevision)
+            graph.currentVersion = baseRevision
+                            
+    def finishTransaction(self, txnService, committed):
+        super(TwoPhaseTxnGraphManagerAdapter,self).finishTransaction(txnService, committed)
+        self.graph._currentTxn = None
+        self.ctxStmts = None
+
+class ModelWrapper(RxPath.Model):
+
+    def __init__(self, model, adapter):
+        self.model = model
+        self.adapter = adapter
+        
+    def __getattribute__(self, name):
+        #we can't use __getattr__ because we don't want base class attributes
+        #returned, we want those to be delegated
+        if name in ModelWrapper.__dict__ or name in ('model', 'adapter'):
+            return object.__getattribute__(self, name)
+        else:
+            assert name not in ('addStatement', 'removeStatement', 'addStatements')
+            return getattr(object.__getattribute__(self, 'model'), name)
+
+    def addStatement(self, statement):
+        '''add the specified statement to the model'''
+        added = self.model.addStatement(statement)
+        if added:
+            self.adapter.undo.append((statement,))
+        return added
+
+    def removeStatement(self, statement):
+        '''removes the statement'''
+        removed = self.model.removeStatement(statement)
+        if removed:
+            self.adapter.undo.append((RxPath.Removed, statement))
+        return removed
+        
+    #disable optimized paths
+    def addStatements(self, stmts):
+        return RxPath.Model.addStatements(self, stmts)
+
+    def removeStatements(self, stmts):
+        return RxPath.Model.removeStatements(self, stmts)

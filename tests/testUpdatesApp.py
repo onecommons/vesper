@@ -38,4 +38,4 @@ actions = { 'http-request' : [updateAction, queryAction],
 'load-model':[testLoadModelHook]
         }
 
-saveHistory = True
+saveHistory = 'split'

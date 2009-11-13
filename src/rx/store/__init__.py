@@ -2,7 +2,7 @@ __all__ = ['get_factory']
 
 _proto_map = { # XXX don't hardcode this
     'tyrant':'rx.store.RxPathModelTyrant.TransactionTyrantModel',
-    'rdf':'rx.RxPath.IncrementalNTriplesFileModel',
+    'rdf':'rx.RxPath.FileModel',
     'mem':'rx.RxPathModel.MemModel',
     'bdb':'rx.store.RxPathModelBdb.TransactionBdbModel'
 }

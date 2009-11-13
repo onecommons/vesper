@@ -10,6 +10,7 @@
 '''
 from rx import utils
 from rx.RxPathUtils import *
+from rx.python_shim import *
 
 import os.path, sys, traceback
 
@@ -89,6 +90,7 @@ class Tupleset(object):
     
 class Model(Tupleset):
     canHandleStatementWithOrder = False
+    updateAdvisory = False    
     bnodePrefix = BNODE_BASE
     
     ### Transactional Interface ###
@@ -214,6 +216,8 @@ class MemModel(Model):
     '''
     simple in-memory module
     '''
+    updateAdvisory = True
+    
     def __init__(self,defaultStatements=None, **kw):
         self.by_s = {}
         self.by_p = {}
@@ -328,6 +332,8 @@ class MultiModel(Model):
     autocommit = property(lambda self: self.models[0].autocommit,
                  lambda self, set: setattr(self.models[0], 'autocommit', set))
     
+    updateAdvisory = property(lambda self: self.models[0].updateAdvisory)
+    
     def commit(self, **kw):
         self.models[0].commit(**kw)
 
@@ -383,7 +389,7 @@ class MultiModel(Model):
         
     def removeStatement(self, statement ):
         '''removes the statement'''
-        self.models[0].removeStatement( statement)
+        return self.models[0].removeStatement( statement)
 
 class MirrorModel(Model):
     '''
@@ -400,6 +406,9 @@ class MirrorModel(Model):
         lambda self, set: [setattr(m, 'autocommit', set) for m in self.models] and None
         )
     
+    #true if true for all models
+    updateAdvisory = property(lambda self: all(m.updateAdvisory for m in self.models) )
+    
     def commit(self, **kw):
         for model in self.models:
             model.commit(**kw)
@@ -414,12 +423,18 @@ class MirrorModel(Model):
                                             objecttype,context, asQuad)
                      
     def addStatement(self, statement ):
-        for model in self.models:
-            model.addStatement( statement )
+        retval = False
+        for model in self.models:            
+            if model.addStatement( statement ):
+                retval = True
+        return retval
         
     def removeStatement(self, statement ):
+        retval = False
         for model in self.models:
-            model.removeStatement( statement )
+            if model.removeStatement( statement ):
+                retval = True
+        return retval
 
 class ViewModel(MirrorModel):
     '''
@@ -440,7 +455,6 @@ class ViewModel(MirrorModel):
                       objecttype=None,context=None, asQuad=True, hints=None):        
         return self.models[0].getStatements(subject, predicate, object,
                                             objecttype,context,asQuad)
-
     def commit(self, **kw):
         raise RuntimeError("invalid operation for ViewModel")
 
@@ -459,26 +473,31 @@ class TransactionModel(object):
         
     TransactionalMyModel(TransactionModel, MyModel): pass
     '''
-    queue = None    
-
+    queue = None 
+    updateAdvisory = False
+    
     def __init__(self, *args, **kw):
+        #don't create a transaction for the initial statements
+        self.autocommit = True 
         super(TransactionModel, self).__init__(*args, **kw)
         self.autocommit = False
-    
+
     def commit(self, **kw):        
         if not self.queue:
-            return     
+            return
         for stmt in self.queue:
             if stmt[0] is Removed:
                 super(TransactionModel, self).removeStatement( stmt[1] )
             else:
+                assert len(stmt) == 1
                 super(TransactionModel, self).addStatement( stmt[0] )
         super(TransactionModel, self).commit(**kw)
 
         self.queue = []
         
     def rollback(self):
-        #todo: if self.autocommit: raise exception
+        if self.autocommit:        
+            super(TransactionModel, self).rollback()
         self.queue = []
 
     def _match(self, stmt, subject = None, predicate = None, object = None,
@@ -537,13 +556,12 @@ class TransactionModel(object):
         '''add the specified statement to the model'''
         if self.autocommit:
             return super(TransactionModel, self).addStatement(statement)        
-        #print 'addStmt', statement
+        
         if self.queue is None: 
             self.queue = []        
         try:
             i = self.queue.index( (Removed, statement))
-            del self.queue[i]
-            return
+            del self.queue[i]            
         except ValueError:
             #print 'addingtoqueue'
             self.queue.append( (statement,) )            
@@ -617,20 +635,44 @@ class IncrementalNTriplesFileModelBase(FileModel):
     '''
     Incremental save changes to an NTriples "transaction log"
     Use in a class hierarchy for Model where self has a path attribute
-    and TransactionModel is preceeds this in the MRO.
+    and TransactionModel preceeds this in the MRO.
     '''    
     loadNtriplesIncrementally = True
+    changelist = None
 
     def canWriteFormat(self, format):
         #only these formats support incremental output
         return format in ('ntriples', 'ntjson')
-        
+
+    def _getChangeList(self):
+        changelist = self.changelist
+        if changelist is None:
+            changelist = self.changelist = []
+        return changelist
+
+    def addStatement(self, statement ):
+        '''add the specified statement to the model''' 
+        added = super(IncrementalNTriplesFileModelBase, self).addStatement(statement)
+        changelist = self._getChangeList()
+        if added and changelist is not None:
+            changelist.append( (statement,) )
+        return added
+
+    def removeStatement(self, statement ):
+        '''add the specified statement to the model'''               
+        removed = super(IncrementalNTriplesFileModelBase, self).removeStatement(statement)
+        changelist = self._getChangeList()
+        if removed and changelist is not None:
+            changelist.append( (Removed, statement) )
+        return removed
+
     def commit(self, **kw):                
         import os.path, time
         if os.path.exists(self.path):
             outputfile = file(self.path, "a+")
+            changelist = self._getChangeList()
             def unmapQueue():
-                for stmt in self.queue:
+                for stmt in changelist:
                     if stmt[0] is Removed:
                         yield Removed, stmt[1]
                     else:
@@ -648,8 +690,15 @@ class IncrementalNTriplesFileModelBase(FileModel):
             outputfile.close()
         else: #first time
             super(IncrementalNTriplesFileModelBase, self).commit()
+        self.changelist = []
 
-class IncrementalNTriplesFileModel(TransactionModel, IncrementalNTriplesFileModelBase): pass
+    def rollback(self):        
+        self.changelist = []
+
+class IncrementalNTriplesFileModel(TransactionModel, IncrementalNTriplesFileModelBase):
+    
+    def _getChangeList(self):
+        return self.queue
 
 def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
     '''
