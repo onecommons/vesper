@@ -28,7 +28,7 @@ from RxPath import Statement, isBnode, Triple
 import logging, time
 from rx import RxPath
 from rx.utils import attrdict
-log = logging.getLogger("dbmanager")
+log = logging.getLogger("db")
 
 CTX_NS = u'http://rx4rdf.sf.net/ns/archive#'
 
@@ -121,6 +121,9 @@ class NamedGraphManager(RxPath.Model):
             setattr(self.managedModel, 'autocommit', set) or
             setattr(self.revisionModel, 'autocommit', set)
         )
+   
+    updateAdvisory = property(lambda self: self.managedModel.updateAdvisory
+                                        and self.revisionModel.updateAdvisory)
     
     def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None):
         '''
@@ -397,16 +400,21 @@ class NamedGraphManager(RxPath.Model):
         return time.time()
             
     def commit(self, ** kw):
-        if not self._currentTxn:
-            #no txn in commit!
-            return
+        assert self._currentTxn
+        #if not self._currentTxn:
+        #    #no txn in commit!
+        #    return
 
-        self.currentTxn.timestamp = self.createTxnTimestamp() 
         ctxStmts = self._finishCtxResource()
         if self.revisionModel != self.managedModel:
             self.revisionModel.commit( ** kw)     
         #commit the transaction
         self.managedModel.commit(** kw)
+        self._finalizeCommit(ctxStmts)
+        return ctxStmts
+
+    def _finalizeCommit(self, ctxStmts): 
+        assert self._currentTxn
         self.currentVersion = self.currentTxn.currentRev
         #if successful, broadcast changeeset
         self.sendChangeset(ctxStmts)    
@@ -433,22 +441,25 @@ class NamedGraphManager(RxPath.Model):
                 CTX_NS + 'TransactionContext', OBJECT_TYPE_RESOURCE, txnContext)
             )
         
-        self._markLatest(txnContext, self._currentTxn.currentRev)
+        self._markLatest(self._currentTxn.currentRev)
 
-    def _markLatest(self, txnContext, txnRev):
+    def _markLatest(self, txnRev):
         if self.markLatest:
             if self.lastLatest:
                 self.revisionModel.removeStatement(self.lastLatest)
             #assert self.currentVersion, 'currentVersion not set'
+            txnContext = getTxnContextUri(self.modelUri, txnRev)
             self.lastLatest = Statement(txnContext, CTX_NS + 'latest',
                     unicode(txnRev), OBJECT_TYPE_LITERAL, txnContext)
             self.revisionModel.addStatement(self.lastLatest)
 
     def _finishCtxResource(self):
+        assert self._currentTxn
+        self.currentTxn.timestamp = self.createTxnTimestamp()
+        
         if not self.createCtxResource:
             return
-
-        assert self._currentTxn
+        
         txnContext = self._currentTxn.txnContext
         assert txnContext
 
@@ -737,7 +748,6 @@ class MergeableGraphManager(NamedGraphManager):
         and adds and removes statements from the primary store.
         '''
         assert not self._currentTxn
-        txnContext = None
         for s in changeset.statements:
             scope = s[4]
             if scope.startswith(ADDCTX):
@@ -748,8 +758,6 @@ class MergeableGraphManager(NamedGraphManager):
                 originalscope = splitContext(scope)[EXTRACTCTX]
                 orgstmt = Statement(scope=originalscope, *s[:4])
                 self._removePrimaryStoreStatement(orgstmt)
-            if scope.startswith(TXNCTX):
-                txnContext = scope
             self.revisionModel.addStatement(s)
                 
         if changeset.baserevision == self.initialRevision and self.currentVersion != self.initialRevision:
@@ -758,8 +766,8 @@ class MergeableGraphManager(NamedGraphManager):
             self.currentVersion = ','.join( sorted([self.currentVersion, changeset.revision]) )
         else:
             self.currentVersion = changeset.revision        
-        assert txnContext
-        self._markLatest(txnContext, self.currentVersion)
+
+        self._markLatest(self.currentVersion)
 
     def createMergeChangeset(self, otherrev, adds=(), removes=()):
         '''
