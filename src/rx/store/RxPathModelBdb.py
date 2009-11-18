@@ -1,7 +1,12 @@
 __all__ = ['BdbModel', 'TransactionBdbModel']
+
+import logging
+log = logging.getLogger("bdb")
+
 from rx.python_shim import *
 from rx.RxPathModel import *
 import bsddb, bsddb.db
+
 try:
     bsddb.db.DB_GET_BOTH_RANGE
 except AttributeError:
@@ -88,6 +93,7 @@ class BdbModel(Model):
         
         if source is not None:
             source = os.path.abspath(source) # bdb likes absolute paths for everything
+            log.debug("opening db at:" + source)
             # source should specify a directory
             if not os.path.exists(source):
                 os.makedirs(source)
@@ -99,6 +105,10 @@ class BdbModel(Model):
         else:
             newdb = True
             pPath = sPath = None
+            
+        log.debug("pPath:" + pPath)
+        log.debug("sPath:" + sPath)
+        log.debug("is new:" + str(newdb))
 
         db = bsddb.db
         self.env = bsddb.db.DBEnv()
@@ -111,12 +121,13 @@ class BdbModel(Model):
         self.sDb.db.set_get_returns_none(2)
         
         if newdb and defaultStatements:            
-            self.addStatements(defaultStatements)     
-
+            self.addStatements(defaultStatements)
+            
     def close(self):
-        #XXX should self.env be closed too?
+        log.debug("closing db")
         self.pDb.close()
         self.sDb.close()
+        self.env.close()
         
     def getStatements(self, subject = None, predicate = None, object = None,
                       objecttype=None,context=None, asQuad=True, hints=None):
