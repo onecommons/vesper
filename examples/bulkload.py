@@ -31,12 +31,11 @@ def testaction(kw, retval):
             f = open(_LOAD, 'r')
             data = json.load(f)
             dom_store.add(data) # update is very slow for this use case
-            print "data loaded from", _LOAD            
+            print "data loaded from", _LOAD
         else:
             print "opening", _DUMP
             f = open(_DUMP, 'w')
             data = dom_store.query(QUERY)
-            print data
             if 'errors' in data:
                 print " ERROR "
                 for x in data['errors']:
@@ -57,8 +56,6 @@ actions = {
   'run-cmds' : [testaction]
 }
 
-EXEC_CMD_AND_EXIT=True
-
 parser = OptionParser("usage: %prog [options] STORAGE_URL")
 parser.add_option("-l", "--load", dest="load", help="load data from file")
 parser.add_option("-d", "--dump", dest="dump", help="dump data to file")
@@ -73,5 +70,11 @@ _LOAD=options.load
 _DUMP=options.dump
 if not _LOAD and not _DUMP:
     parser.error("Must specify either a load or a dump file")
-    
-raccoon.run(globals())
+
+CONF = {
+    'STORAGE_URL':STORAGE_URL,
+    'actions':actions,
+    'EXEC_CMD_AND_EXIT': True
+}
+
+app = raccoon.createApp(**CONF).run()
