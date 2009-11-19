@@ -58,6 +58,31 @@ class BasicModelTestCase(unittest.TestCase):
         # add a new statement and confirm the search succeeds
         s1 = Statement(subj, 'pred', "obj")
         model.addStatement(s1)
+        s2 = Statement(subj, 'pred2', "obj2")
+        model.addStatement(s2)
+        
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1, s2]))
+
+        if not self.persistentStore:
+            return
+        
+        model.commit()
+        model = self.getModel()
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1, s2]))
+        
+        model.removeStatement(s2)
+        s3 = Statement(subj, 'pred3', "obj3")
+        model.addStatement(s3)
+        
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1, s3]))
+
+        model.commit()
+        model = self.getModel()
+        r1 = model.getStatements(subject=subj)
+        self.assertEqual(set(r1), set([s1, s3]))
 
     def testGetStatements(self):
         model = self.getModel()
@@ -139,6 +164,11 @@ class BasicModelTestCase(unittest.TestCase):
 
         r2 = model.getStatements(subject=subj)
         self.assertEqual(set(r2), set()) # object is gone
+        
+        if self.persistentStore:
+            model.commit()
+            model = self.getModel()
+            self.assertEqual(set(r2), set()) # object is gone
 
     def testSetBehavior(self):
         "confirm model behaves as a set"
@@ -315,12 +345,14 @@ class BasicModelTestCase(unittest.TestCase):
         print 'added %s statements in %s seconds' % (BIG * 7, time.time() - start)
         
         try:
-            if self.persistentStore and hasattr(model, 'close'):
-                print 'closing'
-                sys.stdout.flush()
-                start = time.time()
-                model.close()
-                print 'closed in %s seconds, re-opening' % (time.time() - start)
+            if self.persistentStore:
+                model.commit()
+                if hasattr(model, 'close'):
+                    print 'closing'
+                    sys.stdout.flush()
+                    start = time.time()
+                    model.close()
+                    print 'closed in %s seconds, re-opening' % (time.time() - start)                    
                 model = self.getModel()
         except:
             import traceback
@@ -360,7 +392,12 @@ def main(testCaseClass):
         #BasicModelTestCase from running
         unittest.main(testCaseClass.__module__)
     else:
+        path = test.split('.')
+        if len(path) > 1:
+            testCaseClass = getattr(__import__(testCaseClass.__module__), path[0])
+            test = path[1]
         tc = testCaseClass(test)
+            
         testfunc = getattr(tc, test)
         tc.setUp()
         try:

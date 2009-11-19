@@ -280,6 +280,8 @@ class BdbModel(Model):
         scursor = self.sDb.db.cursor()
         if scursor.set_both(_to_safe_str(stmt[0]), _encodeValues(stmt[1], stmt[2], stmt[3], stmt[4]) ):
             scursor.delete()
+            return True
+        return False
 
 class TransactionBdbModel(TransactionModel, BdbModel):
     '''

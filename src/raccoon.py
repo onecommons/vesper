@@ -32,9 +32,9 @@ except ImportError:
 import logging
 DEFAULT_LOGLEVEL = logging.INFO
 
-logging.BASIC_FORMAT = "%(asctime)s %(levelname)s %(name)s:%(message)s"
-logging.root.setLevel(DEFAULT_LOGLEVEL)
-logging.basicConfig()
+#logging.BASIC_FORMAT = "%(asctime)s %(levelname)s %(name)s:%(message)s"
+#logging.root.setLevel(DEFAULT_LOGLEVEL)
+#logging.basicConfig()
 
 log = logging.getLogger("raccoon")
 _defexception = utils.DynaExceptionFactory(__name__)
@@ -458,11 +458,11 @@ class RequestProcessor(utils.object_with_threadlocals):
         try:
             retVal = func()
         except:
-            if self.txnSvc.isActive(): #else its already been aborted
+            if not self.txnSvc.state.aborted:
                 self.txnSvc.abort()
             raise
         else:
-            if self.txnSvc.isActive(): #could have already been aborted
+            if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
                 self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
                 self.txnSvc.state.retVal = retVal
                 if self.txnSvc.isDirty():
@@ -470,10 +470,13 @@ class RequestProcessor(utils.object_with_threadlocals):
                         self.log.warning(
                         'a read-only transaction was modified and aborted')
                         self.txnSvc.abort()
-                    else:
+                    elif not self.txnSvc.state.cantCommit:
                         self.txnSvc.commit()
-                else: #don't bother committing
-                    self.txnSvc.abort()    #need this to clean up the transaction
+                else:
+                    #nothings changed, don't bother committing
+                    #but need to clean up the transaction
+                    self.txnSvc._cleanup(False)
+                       
         return retVal
 
     if sys.version_info[:2] > (2,4):
@@ -488,21 +491,23 @@ class RequestProcessor(utils.object_with_threadlocals):
             try:
                 yield self
             except:
-                if self.txnSvc.isActive(): #else its already been aborted
+                if not self.txnSvc.state.aborted:
                     self.txnSvc.abort()
                 raise
             else:
-                if self.txnSvc.isActive(): #could have already been aborted
+                if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
                     self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
                     if self.txnSvc.isDirty():
                         if kw.get('__readOnly'):
                             self.log.warning(
                             'a read-only transaction was modified and aborted')
                             self.txnSvc.abort()
-                        else:
+                        elif not self.txnSvc.state.cantCommit:
                             self.txnSvc.commit()
-                    else: #don't bother committing
-                        self.txnSvc.abort()    #need this to clean up the transaction
+                    else:
+                        #nothings changed, don't bother committing
+                        #but need to clean up the transaction
+                        self.txnSvc._cleanup(False)
 
     def doActions(self, sequence, kw=None, retVal=None,
                   errorSequence=None, newTransaction=False):

@@ -55,7 +55,7 @@ def flatten(seq, to=list, depth=0xFFFF, flattenTypes=None, keepSeq=False):
 >>> flatten(1)
 1
 >>> flatten([1])
-1    
+1
 >>> flatten([1,2])
 [1, 2]
 >>> flatten([1], keepSeq=1)
@@ -441,18 +441,6 @@ def shaDigestString(line):
     sha = sha1()
     sha.update(line)
     return b2a_base64(sha.digest())[:-1]
-                
-class InterfaceDelegator:
-    '''assumes only methods will be called on this object and the methods always return None'''
-    def __init__(self, handlers):
-        self.handlers = handlers
-    
-    def call(self, name, args, kw):
-        for h in self.handlers:
-            getattr(h, name)(*args, **kw)
-        
-    def __getattr__(self, name):
-        return lambda *args, **kw: self.call(name, args, kw)
 
 class Bitset(object):
     '''

@@ -72,7 +72,8 @@ class TransactionState(object):
     safeToJoin   = True
     cantCommit   = False
     inCommit     = False
-    inAbort      = False    
+    inAbort      = False
+    aborted      = False 
     
     def __init__(self):
        self.participants = []
@@ -206,6 +207,7 @@ class TransactionService(object):
                     self.errorHandler.abortFailed(self,p)
         finally:
             self.state.inAbort = False 
+            self.state.aborted = True 
 
         self._cleanup(False)
 
@@ -353,13 +355,14 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         if not self.state.lock: #lock on first join
             self.state.lock = self.server.getLock()
    
-    def _cleanup(self, committed):
-        success = not self.state.cantCommit
-
-        #if transaction completed successfully
-        if success:
+    def _cleanup(self, committed):        
+        if committed:
+            #if transaction completed successfully
             self._runActions('after-commit')
-
+        elif self.state.aborted:
+            self._runActions('after-abort')
+        #else: nothing happened, i.e. a transaction with no writes
+            
         try:
             lock = self.state.lock
             super(RaccoonTransactionService, self)._cleanup(committed)
@@ -368,32 +371,32 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                 lock.release()
         
     def _prepareToVote(self):
-        #todo: treating these two actions as transaction participants either end of the list
+        #xxx: treating these two actions as transaction participants either end of the list
         #with the action running in voteForCommit() would be more elegant
-        #but right now the txn doesn't clean up if a vote fails
         
         #we're about to complete the transaction,
         #here's the last chance to modify it
         try:
-            self._runActions('before-prepare')
+            self._runActions('before-commit')
         except:
             self.abort()
             raise
 
         super(RaccoonTransactionService, self)._prepareToVote()
-
-        #the transaction is about to be comitted
+        
+    def _vote(self):
+        super(RaccoonTransactionService, self)._vote()
+        
+        #all participants have successfully voted to commit the transaction
         #this trigger let's you look at the completed state
-        #and gives you a chance to abort the transaction        
+        #and gives you one last chance to abort the transaction        
         assert not self.state.safeToJoin 
         try:
             #print self.state.additions
-            self._runActions('before-commit')
+            self._runActions('finalize-commit')
         except:
             self.abort()
             raise
-            
-        return True
 
 class FileFactory(object):
     """Stream factory for a local file object"""

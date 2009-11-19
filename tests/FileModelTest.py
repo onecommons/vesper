@@ -101,5 +101,11 @@ class IncrementalFileModelTestCase(FileModelTestCase):
     def testCommitFailure(self):
         pass #this test needs to be disabled for IncrementalNTriplesFileModel
 
+class TransactionIncrementalFileModelTestCase(IncrementalFileModelTestCase):
+
+    def getModel(self):
+        model = IncrementalNTriplesFileModel(self.tmpfilename)
+        return model#self._getModel(model)
+
 if __name__ == '__main__':
     modelTest.main(FileModelTestCase)
