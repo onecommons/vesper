@@ -75,7 +75,7 @@ def runQuery(query, model):
     (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, bindvars=None, explain=None, debug=False,addChangeMap=False):
+def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=False):
     '''
     Returns a dict with the following keys:
         
@@ -123,13 +123,13 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,addChangeM
     
     # XXX may not be valid anymore
     """
-    if addChangeMap:
+    if forUpdate:
         if not results:
             response['resources'] = []
         else:
-            if not instance(results[0], dict):
+            if instance(results[0], dict):
                 raise NotImplementedError('cant figure out addChangeMap')
-            response['resources'] = [res['id'] for res in results]
+                response['resources'] = [res['id'] for res in results]
     """
     return response
 
@@ -138,10 +138,10 @@ def buildAST(query):
     from jql import parse, engine
     return parse.parse(query, engine.SimpleQueryEngine.queryFunctions)
     
-def evalAST(ast, model, bindvars=None, explain=None, debug=False):
+def evalAST(ast, model, bindvars=None, explain=None, debug=False, forUpdate=False):
     #rewriteAST(ast)
     from jql import engine
-    queryContext = QueryContext(model, ast, explain, bindvars, debug)
+    queryContext = QueryContext(model, ast, explain, bindvars, debug, forUpdate)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
@@ -153,7 +153,7 @@ class QueryContext(object):
     currentValue = None
     shapes = { dict : rx.utils.defaultattrdict }
     
-    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0):
+    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
@@ -163,10 +163,11 @@ class QueryContext(object):
         self.depth=depth
         self.constructStack = []
         self.engine = None
+        self.forUpdate = forUpdate
 
     def __copy__(self):
         copy = QueryContext(self.initialModel, self.ast, self.explain, self.bindvars,
-                                              self.debug, self.depth)
+                                              self.debug, self.depth, self.forUpdate)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow

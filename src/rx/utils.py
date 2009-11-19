@@ -55,7 +55,7 @@ def flatten(seq, to=list, depth=0xFFFF, flattenTypes=None, keepSeq=False):
 >>> flatten(1)
 1
 >>> flatten([1])
-1    
+1
 >>> flatten([1,2])
 [1, 2]
 >>> flatten([1], keepSeq=1)

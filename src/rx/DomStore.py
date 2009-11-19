@@ -452,9 +452,9 @@ class BasicStore(DomStore):
 
         return addStmts, removals
 
-    def query(self, query, bindvars=None, explain=None, debug=False, **kw):
+    def query(self, query, bindvars=None, explain=None, debug=False, forUpdate=False, **kw):
         import jql
-        return jql.getResults(query, self.model,bindvars,explain,debug)
+        return jql.getResults(query, self.model,bindvars,explain,debug,forUpdate)
 
     def merge(self,changeset): 
         assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
