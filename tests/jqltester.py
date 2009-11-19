@@ -31,7 +31,7 @@ class Test(object):
 
 class Suite(object):    
     defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None,
-                skipParse=False, model=None, name=None, query=None, group=None)
+        skipParse=False, model=None, name=None, query=None, group=None, forUpdate=False)
 
     def __init__(self):
         self.tests = []
@@ -247,16 +247,14 @@ def main(t, cmdargs=None):
         else:
             debug = None
         
-        if not options.quiet: 
-            print "construct " + (options.printdebug and '(with debug)' or '')
         if ast:
             testresults = list(jql.evalAST(ast, test.model, test.bindvars,
-                                    explain=explain, debug=debug))
+                            explain=explain, debug=debug, forUpdate = test.forUpdate))
         else:
             testresults = None
         
         if not options.quiet:        
-            print "Construct Results:"
+            print "Construct Results:", (options.printdebug and '(with debug)' or '')
             pprint.pprint(testresults)
 
         if test.results is not None:

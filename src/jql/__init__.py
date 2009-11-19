@@ -106,7 +106,7 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     
     if ast != None:        
         try:
-            results = list(evalAST(ast, model, bindvars, explain, debug))
+            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate))
             response['results'] = results
         except QueryException, qe:            
             errors.append('error: %s' % qe.message)
@@ -141,7 +141,7 @@ def buildAST(query):
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, forUpdate=False):
     #rewriteAST(ast)
     from jql import engine
-    queryContext = QueryContext(model, ast, explain, bindvars, debug, forUpdate)
+    queryContext = QueryContext(model, ast, explain, bindvars, debug, forUpdate=forUpdate)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
