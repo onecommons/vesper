@@ -612,6 +612,24 @@ t.model = modelFromJson([
     ]
 )
 
+t('{*}', 
+[{'id': '1',
+  'values': {'id': '_:j:e:object:1:1',
+             'prop1': 'foo',
+             'prop2': 3,
+             'prop3': None,
+             'prop4': True}},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2',
+  'values': {'id': '_:j:e:object:2:2',
+             'prop1': 'bar',
+             'prop2': None,
+             'prop3': False,
+             'prop4': '',
+             'prop5': 0}},
+ {'id': '4', 'values': [1, '1', 1.1000000000000001]}],
+forUpdate=True)
+
 t.group = 'types'
 
 #XXX shouldn't including anoymous children in results
