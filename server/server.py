@@ -6,7 +6,7 @@ from optparse import OptionParser
 from rx.route import Route
 from raccoon import Action
 
-import os
+import os, logging
 
 import mako
 from mako.lookup import TemplateLookup
@@ -74,7 +74,7 @@ def index(kw, retval):
         postdata = kw['_params']['data']
         store_query(postdata)
 
-        r = dom_store.query(postdata)
+        r = dom_store.query(postdata, forUpdate=True)
         out = json.dumps(r,sort_keys=True, indent=4)
         return out
     
@@ -141,18 +141,18 @@ def api_handler(kw, retval):
             if 'where' not in params:
                 raise Exception("500 missing required parameter")
             
-            r = dom_store.query(params['where'])
-            # print r
+            r = dom_store.query(params['where'], forUpdate=True)
             out.update(r)
         elif action == 'update':
             
             updates = load_data(params['data'])
             where = params['where']
-
-            query = "{id, *, where(%s)}" % params['where']
+            
+            query = "{ *, where(%s)}" % params['where']
             # print "querying:", query
             
-            target = dom_store.query(query)['results']
+            target = dom_store.query(query, forUpdate=True)['results']
+            # print target
             
             assert len(target) >= 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]
@@ -184,7 +184,7 @@ def api_handler(kw, retval):
 
     # print out
     tmp = json.dumps(out,sort_keys=True, indent=4)
-    print tmp
+    # print tmp
     return tmp
 
 @Route('resources/{file:.+}')
@@ -218,10 +218,16 @@ CONF = {
 }
 
 parser = OptionParser()
+parser.add_option("-s", "--storage", dest="storage", help="storage url")
+parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False)
 (options, args) = parser.parse_args()
+
 if len(args) > 0:
     execfile(args[0], globals(), CONF)
-
+    
+if options.storage:
+    CONF['STORAGE_URL'] = options.storage
+    
 if CONF.get('REPLICATION_CHANNEL'):
     import rx.replication
     CONF['saveHistory'] = True
@@ -247,7 +253,26 @@ if CONF.get('REPLICATION_CHANNEL'):
     addAction('shutdown', stopReplication)
     
     STAT_PROVIDERS.append(rep)
-    
+
+# see if there's a log config file
+serverdir = os.path.dirname(os.path.abspath(__file__))
+logpath = os.path.join(serverdir, "log.conf")
+if os.path.exists(logpath) and os.path.isfile(logpath):
+    print "loading log config file:" + logpath
+    CONF['logconfig'] = logpath
+else:
+    if options.verbose:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    log = logging.getLogger()
+    log.setLevel(loglevel)
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    datefmt="%d %b %H:%M:%S"    
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setFormatter(logging.Formatter(format, datefmt))
+    log.addHandler(stream)
+
 try:
     app = raccoon.createApp(**CONF).run()
 except KeyboardInterrupt:
