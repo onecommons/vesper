@@ -271,7 +271,8 @@ def p_construct0(p):
     if label:
         assert isinstance(label, T.label)
         op.id.appendArg( Label(label[0]) )
-    where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, defaults['where'], groupby)
+    where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, 
+                                    defaults['where'], groupby, defaults['orderby'])
     #XXX add support for ns constructop    
     
     p[0] = Select(op, **defaults)
@@ -423,10 +424,10 @@ def p_funccall(p):
 
 def p_arglist(p):
     """    
-    arglist : arglist COMMA argument
+    arglist : arglist COMMA expression
             | arglist COMMA keywordarg
             | keywordarg
-            | argument
+            | expression
     exprlist : exprlist COMMA expression
              | expression
     constructitemlist : constructitemlist COMMA constructitem
@@ -465,12 +466,6 @@ def p_arglist_empty(p):
     arrayindexlist : empty
     """
     p[0] = []
-
-def p_argument(p):
-    '''
-    argument : expression
-    '''
-    p[0] = p[1]
 
 def p_keyword_argument(p):
     '''
@@ -620,7 +615,7 @@ def p_constructop4(p):
     '''
     constructop : ORDERBY LPAREN sortexplist RPAREN
     '''
-    p[0] = OrderBy(p[3])
+    p[0] = T.constructop(p[1], OrderBy(*p[3]) )
 
 def p_constructop5(p):
     '''

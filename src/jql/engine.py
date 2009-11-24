@@ -517,13 +517,16 @@ def getColumns(keypos, row, tableType=Tupleset):
     yield one row for each row in the nested table, with the cells from the "parent" row
     repeated with each row. For example:
     
-    >>> t = ('a1', [('b1', 'c1'), ('b2', 'c2')] )    
+    >>> t = ('a1', [('b1', 'c1'), ('b2', 'c2')] )
     >>> list( getColumns((1,1), t, list) ) #group by 'c'
     [('c1', ['a1', 'b1']), ('c2', ['a1', 'b2'])]
     
-    >>> t = ('a1', [('b1', [('c1','d1')]), ('b2', [('c2','d1')])] )    
-    >>> list( getColumns((1,1), t, list) ) #group by 'd'
+    >>> t = ('a1', [('b1', [('c1','d1')]), ('b2', [('c2','d1')])] )
+    >>> list( getColumns((1,1,1), t, list) ) #group by 'd'
     [('d1', ['a1', 'b1', 'c1']), ('d1', ['a1', 'b2', 'c2'])]
+
+    >>> list( getColumns((1,1), t, list) )
+    [([('c1', 'd1')], ['a1', 'b1']), ([('c2', 'd1')], ['a1', 'b2'])]
     '''
     keypos = list(keypos)
     pos = keypos.pop(0)
@@ -546,6 +549,10 @@ def getColumns(keypos, row, tableType=Tupleset):
                 yield key, cols+nestedcols
 
 def getColumnsColumns(keypos, columns):
+    '''
+    Return a column list that corresponds to the shape of the rows returned 
+    by the equivalent call to `getColumns`.
+    '''
     keypos = list(keypos)
     pos = keypos.pop(0)
     cols = []
@@ -605,14 +612,14 @@ def groupbyUnordered(tupleset, groupby, debug=False):
             vals.append(outputrow)
 
     for key, values in resources.iteritems():
-        #print 'gb out', [key, values]        
+        #print 'gb out', [key, values]
         if debug:
             #debug will be a columns list
             try:
                 validateRowShape(debug, [key, values]) 
             except AssertionError:
                 print 'source columns', tupleset.columns 
-                raise
+                raise        
         yield [key, values]
 
 def getColumn(pos, row):
@@ -742,7 +749,7 @@ class QueryFuncs(object):
     }
 
     def addFunc(self, name, func, type=None, cost=None, needsContext=False, 
-                                                                    lazy=False):
+                                                            lazy=False, isAggregate=False):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         if cost is None or callable(cost):
@@ -750,7 +757,8 @@ class QueryFuncs(object):
         else:
             costfunc = lambda *args: cost
         self.SupportedFuncs[name] = jqlAST.QueryFuncMetadata(func, type, 
-                        costFunc=costfunc, needsContext=needsContext, lazy=lazy)
+                        costFunc=costfunc, needsContext=needsContext, lazy=lazy,
+                        isAggregate=isAggregate)
 
     def getOp(self, name, *args):
         if isinstance(name, (unicode, str)):
@@ -761,7 +769,7 @@ class QueryFuncs(object):
         funcMetadata = self.SupportedFuncs[name]
         
         return funcMetadata.opFactory(name,funcMetadata,*args)
-
+    
     def __init__(self):
         #add basic functions
         self.addFunc('add', lambda a, b: float(a)+float(b), NumberType)
@@ -775,7 +783,7 @@ class QueryFuncs(object):
         self.addFunc('lower', lambda a: a.lower(), StringType)
         self.addFunc('trim', lambda a,chars=None: a.strip(chars), StringType)
         self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType)
-        self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType)
+        self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType)        
 
 def recurse(context, startid, propname=None):
     '''
@@ -799,11 +807,38 @@ def recurse(context, startid, propname=None):
     return SimpleTupleset(getRows, columns=columns, op='recurse', hint=startid, debug=context.debug)
 
 def ifFunc(context, ifArg, thenArg, elseArg):
-    if ifArg.evaluate(context.engine, context):
-        return thenArg.evaluate(context.engine, context)
+    ifval = ifArg.evaluate(context.engine, context)
+    if ifval:
+        thenval = thenArg.evaluate(context.engine, context)        
+        return thenval
     else:
-        return elseArg.evaluate(context.engine, context)
-    
+        elseval = elseArg.evaluate(context.engine, context)
+        return elseval
+
+def aggFunc(context, arg, func=None):
+    groupbyrow = False
+    if isinstance(arg, jqlAST.Project):
+        if arg.name == '*':
+            groupbyrow = True
+        else:
+            parent = arg.parent
+            while parent:
+                if isinstance(parent, jqlAST.Select):
+                    groupby = parent.groupby
+                    break
+                parent = parent.parent
+            
+            if arg.name == groupby.args[0].name:
+                groupbyrow = True
+        
+    if groupbyrow:
+        #special case to support constructions like count(*)
+        #groupby rows look like [key, groupby]
+        v = context.currentRow[1]
+    else:
+        v = context.engine._evalAggregate(context, arg, True)
+    return func(v)
+
 def isBnode(context, v):    
     return hasattr(v, 'startswith') and (
                 v.startswith(context.initialModel.bnodePrefix))
@@ -813,6 +848,9 @@ def isBnode(context, v):
 #############################################################
 
 def getNullRows(columns):
+    '''
+    Given a column list return a matching row with None for each cell
+    '''
     nullrows = [None] * len(columns)
     for i, c in enumerate(columns):        
         if isinstance(c.type, Tupleset):
@@ -895,13 +933,22 @@ class SimpleQueryEngine(object):
     queryFunctions.addFunc('recurse', recurse, Tupleset, needsContext=True)
     queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
     queryFunctions.addFunc('if', ifFunc, ObjectType, lazy=True)
-    queryFunctions.addFunc('isref', lambda a: a and True or False, BooleanType)    
-    
+    queryFunctions.addFunc('isref', lambda a: a and True or False, BooleanType)
+    for name, func in [('count', lambda a: len(a)), 
+                        ('sum', lambda a: sum(a)),
+                       ('avg', lambda a: sum(a)/len(a)), 
+                       ('min', lambda a: min(a)),
+                       ('max', lambda a: max(a))]:        
+        queryFunctions.addFunc(name, partial(aggFunc, func=func), NumberType, 
+                                                 lazy=True, isAggregate=True)
+
     def isPropertyList(self, context, idvalue):
         '''
         return True if the given resource is a proplist (an internal 
             list resource generated sjson to preserve list order)
         '''
+        if not hasattr(idvalue, 'startswith'):
+            return False
         return idvalue.startswith(context.initialModel.bnodePrefix+'j:proplist:')        
 
     def isListResource(self, context, idvalue):
@@ -910,6 +957,8 @@ class SimpleQueryEngine(object):
         '''
         #this just checks the bnode pattern for lists generated by sjson 
         #other models/mappings may need a different way to figure this out
+        if not hasattr(idvalue, 'startswith'):
+            return False
         prefix = context.initialModel.bnodePrefix+'j:'        
         return idvalue.startswith(prefix+'t:list:') or idvalue.startswith(
                                                             prefix+'e:list:')
@@ -920,6 +969,8 @@ class SimpleQueryEngine(object):
         '''
         #this just checks the bnode pattern for embedded objects generated by sjson 
         #other models/mappings may need a different way to figure this out
+        if not hasattr(idvalue, 'startswith'):
+            return False
         prefix = context.initialModel.bnodePrefix+'j:'
         return idvalue.startswith(prefix+'e:') or idvalue.startswith(prefix+'proplist:')
     
@@ -931,6 +982,8 @@ class SimpleQueryEngine(object):
         #want to add option to exclude all bnodes or user-configurable pattern
         if context.forUpdate:
             return True
+        if not hasattr(idvalue, 'startswith'):
+            return False            
         return not idvalue.startswith(context.initialModel.bnodePrefix+'j:')        
     
     def findPropList(self, context, subject, predicate):
@@ -952,11 +1005,44 @@ class SimpleQueryEngine(object):
             context.currentTupleset = op.where.evaluate(self, context)
         if op.groupby:
             context.currentTupleset = op.groupby.evaluate(self, context)
+        if op.orderby:            
+            context.currentTupleset = op.orderby.evaluate(self, context)
         if op.depth is not None:
             context.depth = op.depth
                                                 
         #print 'where ct', context.currentTupleset
         return op.construct.evaluate(self, context)
+
+    def _evalAggregate(self, context, op, keepSeq=False):
+        v = []
+        #currrentRow is [key, values]
+        currentRow = context.currentRow
+        currentTupleset = context.currentTupleset
+        columns = currentTupleset.columns[1].type.columns
+        currentProjects = context.currentProjects
+        
+        for cell in currentRow[1]:
+            context.currentTupleset = SimpleTupleset(cell,
+                columns=columns, 
+                hint=currentTupleset, 
+                op='evalAggregate', debug=context.debug)            
+            context.currentRow = cell
+            context.projectValues = None
+            projectValues = {}             
+            for project in currentProjects:
+                projectValues[project.name] = project.evaluate(self, context)
+            context.projectValues = projectValues 
+            #print 'projects', projectValues
+            v.append( flatten(op.evaluate(self, context), flattenTypes=Tupleset) )
+        
+        context.projectValues = None
+        context.currentTupleset = currentTupleset
+        context.currentRow = currentRow
+        
+        if not keepSeq and len(v) == 1:
+            return v[0]
+        else:
+            return v
 
     def evalConstruct(self, op, context):
         '''
@@ -1064,18 +1150,26 @@ class SimpleQueryEngine(object):
                                 columns=rowInfoTupleset.columns,
                                 hint=v,
                                 op='nested construct value', debug=context.debug)
-                        else:   
-                            #find projections, evaluate them, error if more than one is a list
-                            #iterate through list an set currentLabel and currentValue                         
+                                
+                            #print '!!v eval', prop, ccontext.currentRow, rowcolumns
+                            v = flatten(prop.value.evaluate(self, ccontext),
+                                                        flattenTypes=Tupleset)
+                        else:
                             v = context.currentRow
                             ccontext.currentTupleset = SimpleTupleset(v,
                                 columns=rowcolumns, 
                                 hint=tupleset, 
                                 op='construct on '+subjectlabel, debug=context.debug)
+                            
+                            ccontext.currentProjects = prop.projects
+                            if (not prop.projects or prop.projects[0] is prop.value
+                                or prop.hasAggFunc or not row or len(row[0]) <= 1):
+                                #don't bother with all the expression-in-list handling below
+                                v = flatten(prop.value.evaluate(self, ccontext),
+                                                            flattenTypes=Tupleset)                                
+                            else:                                
+                                v = self._evalAggregate(ccontext, prop.value)
                         
-                        #print '!!v eval', prop, ccontext.currentRow, rowcolumns
-                        v = flatten(prop.value.evaluate(self, ccontext),
-                                    flattenTypes=Tupleset)                        
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
                             name = flatten(prop.nameFunc.evaluate(self, ccontext))                            
@@ -1117,7 +1211,44 @@ class SimpleQueryEngine(object):
         #columns = [ColumnInfo('construct', object)]            
         return SimpleTupleset(construct, hint=tupleset, op='construct', #columns=columns, 
                                                     debug=context.debug)
-    
+
+    def evalOrderBy(self, op, context):
+        #XXX only order by if orderby is different then current order of tupleset
+        tupleset = MutableTupleset(context.currentTupleset.columns, context.currentTupleset)
+
+        assert all(isinstance(s.exp, jqlAST.Project) for s in op.args), 'only property name lists currently implemented'        
+        #print 'c', tupleset.columns, [s.exp.name for s in op.args]
+        def getpos(project):
+            if project.isPosition():
+                return (project.name,)
+            else:
+                return tupleset.findColumnPos(project.name) 
+        positions = [getpos(s.exp) for s in op.args]
+
+        reverse = all(not s.asc for s in op.args) #all desc
+        if not reverse and not all(s.asc for s in op.args):
+            #mixed asc and desc
+            orders = [s.asc for s in op.args]
+            def orderbyCmp(row1, row2):
+                for pos, order in zip(positions, orders):
+                    v1 = flatten( (c[0] for c in getColumn(pos, row1)))
+                    v2 = flatten( (c[0] for c in getColumn(pos, row2)))
+                    c = cmp(v1,v2)
+                    if c == -1:
+                        return order and -1 or 1
+                    elif c == 1:
+                        return order and 1 or -1
+                return 0
+
+            tupleset.sort(cmp=orderbyCmp)
+        else:                        
+            def extractKey(row):
+                return [flatten( (c[0] for c in getColumn(pos, row))) for pos in positions]
+
+            tupleset.sort(key=extractKey, reverse=reverse)
+
+        return tupleset
+
     def evalGroupBy(self, op, context):
         tupleset = context.currentTupleset
         label = op.name         
@@ -1127,7 +1258,7 @@ class SimpleQueryEngine(object):
         coltype = object        
         columns = [
             ColumnInfo(label, coltype),
-            ColumnInfo('', chooseColumns(position, tupleset.columns) )
+            ColumnInfo('#groupby', chooseColumns(position, tupleset.columns) )
         ] 
         debug = context.debug
         return SimpleTupleset(
@@ -1469,15 +1600,18 @@ class SimpleQueryEngine(object):
         # range of types we could first project on type and use that result to
         # choose the type index. On the other hand, if that projection uses an
         # iteration join it might be nearly expensive as doing the iteration join
-        # on the subject only.
-        assert op.name != '*'
+        # on the subject only.        
+        if context.projectValues:
+            return context.projectValues[op.name]
+        
         if isinstance(op.name, int):
             pos = (op.name,)
         else:
-            pos = context.currentTupleset.findColumnPos(op.name)               
+            pos = context.currentTupleset.findColumnPos(op.name)
             if not pos:
                 #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
-                raise QueryException("'%s' projection not found" % op.name)            
+                raise QueryException("'%s' projection not found" % op.name)
+        
         val = flatten((c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
         if op.constructRefs:            
             assert isinstance(val, list)

@@ -162,6 +162,14 @@ class QueryOp(object):
         return [includeLevel and i or i[0] for i in
             sorted(self._bydepth(), key=lambda k:k[1], reverse=deepestFirst)]
 
+    def isDescendentOf(self, testOp):
+        ancestor = self
+        while ancestor:
+            if ancestor is testOp:
+                return True
+            ancestor = ancestor.parent
+        return False
+
     def appendArg(self, arg):
         assert isinstance(arg, QueryOp)
         self.args.append(arg)
@@ -424,6 +432,9 @@ class AnyFuncOp(QueryOp):
         else:
             return False
     
+    def isAggregate(self):
+        return self.metadata.isAggregate
+    
     #def __repr__(self):
     #    if self.name:
     #        name = self.name[1]
@@ -561,7 +572,7 @@ class QueryFuncMetadata(object):
       }
 
     def __init__(self, func, type=None, opFactory=None, isIndependent=True,
-                                    costFunc=None, needsContext=False, lazy=False):
+                        costFunc=None, needsContext=False, lazy=False, isAggregate=False):
         self.func = func
         self.type = type or ObjectType
         self.isIndependent = isIndependent
@@ -569,6 +580,7 @@ class QueryFuncMetadata(object):
         self.costFunc = costFunc
         self.needsContext = needsContext or lazy
         self.lazy = lazy
+        self.isAggregate = isAggregate
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
@@ -632,6 +644,8 @@ class PropShape(object):
 
 class ConstructProp(QueryOp):
     nameFunc = None
+    hasAggFunc = False
+    
     def __init__(self, name, value, ifEmpty=PropShape.usenull,
                 ifSingle=PropShape.nolist,nameIsFilter=False, nameFunc=False):
         self.name = name #if name is None (and needed) derive from value (i.e. Project)
@@ -646,11 +660,13 @@ class ConstructProp(QueryOp):
         assert ifSingle in (PropShape.nolist, PropShape.uselist)
         self.ifSingle = ifSingle
         self.nameIsFilter = nameIsFilter
+        self.projects = []
 
     def appendArg(self, value):
-        if isinstance(value, Project) and value.name != 0:
+        if isinstance(value, Project):
             #hack: if this is a standalone project expand object references
-            value.constructRefs = True
+            if value.name != 0: #but not for id
+                value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self
 
@@ -731,16 +747,17 @@ class OrderBy(QueryOp):
     def __init__(self, *args):
         self.args = []
         for arg in args:
-            if not isinstance(arg, OrderExp):
+            if not isinstance(arg, SortExp):
                 arg = SortExp(arg)
             self.appendArg(arg)
 
 class SortExp(QueryOp):    
     def __init__(self, expression, desc=False):
         self.exp = expression
+        expression.parent = self
         self.asc = not desc
 
-    args = property(lambda self: self.exp)
+    args = property(lambda self: (self.exp,))
 
 class Select(QueryOp):
     where = None

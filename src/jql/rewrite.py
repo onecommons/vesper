@@ -78,7 +78,7 @@ class _ParseState(object):
             to.parent = from_
         return False
 
-    def _joinFromConstruct(self, construct, where, groupby):
+    def _joinFromConstruct(self, construct, where, groupby, orderby):
         '''
         build a join expression from the construct pattern
         '''
@@ -90,16 +90,22 @@ class _ParseState(object):
                 #(but we skip project(0) -- no reason to join)
                 for child in prop.depthfirst(
                  descendPredicate=lambda op: not isinstance(op, (ResourceSetOp, Construct))):
-                    if isinstance(child, Project) and child.name != '*' and child.fields != [SUBJECT]:
-                        if prop.ifEmpty == PropShape.omit:
-                            child.maybe = True                                              
-                        cchild = copy.copy( child )
-                        if not left:                            
-                            left = cchild
-                        else:
-                            assert child
-                            left = And(left, cchild )
-    
+                    if isinstance(child, Project):                        
+                        if child.name != '*' and child.fields != [SUBJECT]:
+                            if not prop.nameFunc or not child.isDescendentOf(prop.nameFunc):
+                                prop.projects.append(child)
+                            
+                            if prop.ifEmpty == PropShape.omit:
+                                child.maybe = True                                              
+                            cchild = copy.copy( child )
+                            if not left:                            
+                                left = cchild
+                            else:
+                                assert child
+                                left = And(left, cchild )
+                    elif isinstance(child, AnyFuncOp) and child.isAggregate():
+                        prop.hasAggFunc = True
+
                 #treat ommittable properties as outer joins:
                 if prop.ifEmpty == PropShape.omit:
                     for a in prop.args:
@@ -107,11 +113,28 @@ class _ParseState(object):
         
         if groupby:
             project = copy.copy(groupby.args[0])
-            assert isinstance(project, Project)
+            assert isinstance(project, Project), 'groupby currently only supports single property name'
             if not left:
                 left = project
             else:
                 left = And(left, project)
+            #hack around constructRefs hack:
+            for prop in construct.args:
+                if prop.value and prop.value.name == project.name:
+                    if getattr(prop.value, 'constructRefs', False):
+                        #dont construct groupby property
+                        prop.value.constructRefs = False
+        
+        if orderby:
+            for child in orderby.depthfirst():
+                if isinstance(child, Project):
+                    child.maybe = True                                              
+                    cchild = copy.copy( child )
+                    if not left:                            
+                        left = cchild
+                    else:
+                        assert child
+                        left = And(left, cchild )
             
         if left:
             left = self.makeJoinExpr(left)
