@@ -43,7 +43,7 @@ class Suite(object):
         '''
         self._nextdoc.append(doc)
         
-    def __call__(self, query=None, results=None, **kw):
+    def __call__(self, query=None, results=None, model=None, **kw):
         '''
         optional arguments:
         rows: test the tupleset result matches this
@@ -53,6 +53,10 @@ class Suite(object):
         defaults = self.defaults.copy()
         defaults.update(self.__dict__)
         defaults.update(query=query, results=results)
+        if model:
+            if not isinstance(model, RxPath.Model):
+                model = modelFromJson(model)
+            defaults['model'] = model
         defaults.update(kw)
         t = Test(defaults)
         t.doc = '\n'.join(self._nextdoc)

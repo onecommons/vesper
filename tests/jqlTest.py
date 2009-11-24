@@ -77,7 +77,7 @@ t(
 
 
 t(
-''' { ?parentid,      
+''' { ?parentid,        
       'derivedprop' : id * 2,
       'children' : { ?childid,
                    *
@@ -179,6 +179,30 @@ t('''
 ''', [{'foo': 'bar', 'id': '3', 'parent': {'id': '1'}},
  {'foo': 'bar', 'id': '2', 'parent': {'id': '1'}}]
  )
+
+t.group = 'orderby'
+
+t('''{ * orderby(child) }''',
+[{'foo': 'bar', 'id': '3'}, #note: nulls go first
+ {'foo': 'bar', 'id': '2'},
+ {'child': '2', 'id': '_:2', 'parent': '1'},
+ {'child': '3', 'id': '_:1', 'parent': '1'}]
+)
+
+t('''{ * orderby(id desc) }''',
+[{'child': '2', 'id': '_:2', 'parent': '1'},
+ {'child': '3', 'id': '_:1', 'parent': '1'},
+ {'foo': 'bar', 'id': '3'},
+ {'foo': 'bar', 'id': '2'}]
+)
+
+res = [{'child': '3', 'id': '_:1', 'parent': '1'},
+ {'child': '2', 'id': '_:2', 'parent': '1'},
+ {'foo': 'bar', 'id': '2'},
+ {'foo': 'bar', 'id': '3'}]
+ 
+t('''{ * orderby(child desc, id) }''', res)
+t('''{ * orderby(child desc, id asc) }''', res)
 
 t.group = 'outer'
 
@@ -369,9 +393,11 @@ content
 groupby('subject')
 }
 ''', 
-[{'content': ['some text about the commons', 'some more text about the commons'],
+[{'content': ['some text about the commons', 
+              'some more text about the commons'],
   'subject': 'commons'},
-  {'content': 'some text about rhizome', 'subject': 'rhizome'}
+ {'content': 'some text about rhizome', 
+  'subject': 'rhizome'}
 ]
 )
 
@@ -385,6 +411,52 @@ groupby(subject)
               ]},
  {'content': 'some text about rhizome'}]
  )
+
+t('''{
+ subject, 
+ 'count' : count(content)
+ groupby('subject')
+ }
+ ''', 
+ [{'count': 2, 'subject': 'commons'}, {'count': 1, 'subject': 'rhizome'}])
+
+t('''{
+  subject, 
+  'count' : count(*), 
+  'count2': count(subject)
+  groupby(subject)
+  }
+  ''',
+[{'count': 2, 'count2': 2, 'subject': 'commons'}, {'count': 1, 'count2': 1, 'subject': 'rhizome'}])
+
+#expression needs to be evaluated on each item
+
+t('''
+{
+key,
+'valTimesTypeDoubled' : val*type*2, #(-2*1, -4*1, 2*2, 4*2)*2
+'sumOfType1' : sum(if(type==1, val, 0)), #-2 + -4 = -6
+'sumOfType2' : sum(if(type==2, val, 0)),  # 2 + 4  = 6
+'differenceOfSums' : sum(if(type==1, val, 0)) - sum(if(type==2, val, 0))
+groupby(key) 
+}
+''',
+[{'key': 1,
+  'sumOfType1': -6,
+  'sumOfType2': 6,
+  'differenceOfSums': -12.0,
+  'valTimesTypeDoubled': [-4.0, -8.0, 8.0, 16.0]},
+ {'key': 10,
+  'sumOfType1': -60,
+  'sumOfType2': 60,
+  'differenceOfSums': -120.0,
+  'valTimesTypeDoubled': [-40.0, -80.0, 80.0, 160.0]}
+],  
+model = [dict(key=key, type=type, 
+  val=(type%2 and -1 or 1) * key * val)
+for key in 1,10 for type in 1,2 for val in 2,4]
+)
+
 
 t.group = 'recurse'
 

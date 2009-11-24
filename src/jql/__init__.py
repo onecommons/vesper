@@ -16,26 +16,27 @@ Now we can start querying the database. Let's start with query that retrieves al
 
  >>> datastore.query('''
  ... { * }
- ... ''',)
- [{},{}]
+ ... ''')
+ {'errors': [], 'results': [{'foo': 'bar'}]}
  
 Find all JSON objects. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
 
  >>> datastore.query('''
- ... { foo, bar }
- ... ''', pretty=1) 
+ ... { foo }
+ ... ''', pretty=1)
+ {'errors': [], 'results': [{'foo': 'bar'}]}
 
-This is equivalent to the SQL statement "SELECT foo, bar FROM table".
+This is equivalent to the SQL statement "SELECT foo FROM table".
 Note that the objects that don't have foo and bar properties are not selected by the query. 
 This is because the above query is shorthand for this query:
 
  >>> datastore.query('''
  ... { "foo" : foo,
- ...  "bar" : bar 
  ... }
- ... ''', pretty=1) 
+ ... ''', pretty=1)
+ {'errors': [], 'results': [{'foo': 'bar'}]}
 
-Including the `foo` and `bar` properties names in the where clause only selects where the property exists. 
+Including the `foo` properties names in the where clause only selects where the property exists. 
 
 We could give the propery different names just as can "SELECT foo AS fob FROM table" in SQL.
 
@@ -152,6 +153,8 @@ class QueryContext(object):
     currentRow = None
     currentValue = None
     shapes = { dict : rx.utils.defaultattrdict }
+    currentProjects = None
+    projectValues = None
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False):
         self.initialModel = initModel
