@@ -174,7 +174,6 @@ class NamedGraphManager(RxPath.Model):
                 #using single model and searching across all contexts, 
                 #so we need to filter out TXN contexts  
                 stmts = filter(lambda s: self.isContextForPrimaryStore(s.scope), stmts)
-                #XXX limit and offset could be wrong if filter shortens results
                 if not asQuad or hints:
                     stmts.sort()
                     stmts = RxPath.removeDupStatementsFromSortedList(stmts, 
