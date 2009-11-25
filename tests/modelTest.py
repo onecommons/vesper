@@ -12,8 +12,6 @@ import string, random, shutil, time
 from rx.RxPath import *
 from rx import RxPath, RxPathGraph
 
-testHistory = 'split' # 'single' or 'split' or '' (for no graph manager)
-#XXX unit tests fail with 'single' -- find and fix the bug
 graphManagerClass = RxPathGraph.MergeableGraphManager
 #graphManagerClass = RxPathGraph.NamedGraphManager
 
@@ -21,20 +19,11 @@ def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
 
 class BasicModelTestCase(unittest.TestCase):
-    "Tests basic features of the tyrant model class"
-    
+    "Tests basic features of the tyrant model class"    
     persistentStore = True
 
     def _getModel(self, model):
-        if testHistory:            
-            modelUri = RxPath.generateBnode()
-            if testHistory == 'single':
-                revmodel = None
-            else:
-                revmodel = RxPath.TransactionMemModel()
-            return graphManagerClass(model, revmodel, modelUri)
-        else:
-            return model
+        return model
 
     def getModel(self):
         model = MemModel()
@@ -377,6 +366,19 @@ class BasicModelTestCase(unittest.TestCase):
                 self.assertEqual(len(model.getStatements(s[0])), 7)
         print 'did %s subject lookups in %s seconds' % (BIG, time.time() - start)
 
+class GraphModelTestCase(BasicModelTestCase):
+
+    def _getModel(self, model):
+        modelUri = RxPath.generateBnode()
+        return graphManagerClass(model, None, modelUri)
+
+class SplitGraphModelTestCase(BasicModelTestCase):
+    
+    def _getModel(self, model):
+        modelUri = RxPath.generateBnode()
+        revmodel = RxPath.TransactionMemModel()
+        return graphManagerClass(model, revmodel, modelUri)
+    
 BIG = 100 #10000
 def main(testCaseClass):
     if '-b' in sys.argv:

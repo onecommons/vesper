@@ -168,9 +168,9 @@ class NamedGraphManager(RxPath.Model):
         hints = hints or {}
 
         if not context:
-            stmts = self.managedModel.getStatements(subject, predicate, object,
-                objecttype, context, asQuad, hints)
             if context is None and self.revisionModel is self.managedModel:
+                stmts = self.managedModel.getStatements(subject, predicate, object,
+                    objecttype, context, asQuad)                
                 #using single model and searching across all contexts, 
                 #so we need to filter out TXN contexts  
                 stmts = filter(lambda s: self.isContextForPrimaryStore(s.scope), stmts)
@@ -179,6 +179,9 @@ class NamedGraphManager(RxPath.Model):
                     stmts.sort()
                     stmts = RxPath.removeDupStatementsFromSortedList(stmts, 
                         asQuad, **hints)
+            else:
+                stmts = self.managedModel.getStatements(subject, predicate, object,
+                    objecttype, context, asQuad, hints)                
             return stmts
         else:
             if self.isContextForPrimaryStore(context):
