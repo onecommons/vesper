@@ -406,8 +406,8 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         self.assertEquals(getcount(a+'D'), 4)
         self.assertEquals(getcount(a+'F'), 3)
 
-        #modify the DOM and make sure the schema is updated properly
-        rdfDom.commit()
+        #modify the schema and make sure inferences are updated properly
+
         #remove the statement that A is a subproperty of 
         rdfDom.model.removeStatement(
             Statement('http://rx4rdf.sf.net/ns/archive#A', 'http://www.w3.org/2000/01/rdf-schema#subPropertyOf', 
