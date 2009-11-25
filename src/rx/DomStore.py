@@ -91,6 +91,7 @@ class BasicStore(DomStore):
                  VERSION_STORAGE_PATH='',
                  versionModelFactory=None,
                  storageTemplateOptions=None,
+                 modelOptions=None,
                  DOM_CHANGESET_HOOK=None,
                  branchId = '0A', **kw):
         '''
@@ -113,6 +114,7 @@ class BasicStore(DomStore):
         self.branchId = branchId
         self.changesetHook = DOM_CHANGESET_HOOK
         self._txnparticipants = []
+        self.modelOptions = modelOptions or {}
 
     def loadDom(self):        
         requestProcessor = self.requestProcessor
@@ -129,7 +131,8 @@ class BasicStore(DomStore):
             #modelFactory will load the store specified by `source` or create
             #new one at that location and initializing it with `defaultStmts`
             modelFactory = self.modelFactory or RxPath.FileModel
-            model = modelFactory(source=source, defaultStatements=defaultStmts)
+            model = modelFactory(source=source, defaultStatements=defaultStmts,
+                                                            **self.modelOptions)
                 
         #if there's application data (data tied to the current revision
         #of your app's implementation) include that in the model
@@ -193,10 +196,12 @@ class BasicStore(DomStore):
         
         if self.saveHistory == 'split':                                                
             versionModelFactory = self.versionModelFactory
+            versionModelOptions = {}
             if not versionModelFactory:
                 if self.VERSION_STORAGE_PATH and self.modelFactory:
                     #if a both a version path and the modelfactory was set, use the model factory
                     versionModelFactory = self.modelFactory
+                    versionModelOptions = self.modelOptions
                 elif self.STORAGE_PATH or self.VERSION_STORAGE_PATH: #use the default
                     versionModelFactory = RxPath.IncrementalNTriplesFileModelBase
                 else:
@@ -216,7 +221,7 @@ class BasicStore(DomStore):
                 versionStoreSource = normalizeSource(self, requestProcessor,
                                                      versionStoreSource)
             revisionModel = versionModelFactory(source=versionStoreSource,
-                                                      defaultStatements=[])
+                                        defaultStatements=[], **versionModelOptions)
         else:
             #either no history or no separate model
             revisionModel = None
