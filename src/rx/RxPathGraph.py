@@ -402,10 +402,9 @@ class NamedGraphManager(RxPath.Model):
         return time.time()
             
     def commit(self, ** kw):
-        assert self._currentTxn
-        #if not self._currentTxn:
-        #    #no txn in commit!
-        #    return
+        #assert self._currentTxn
+        if not self._currentTxn:            
+            return None #no txn in commit, model wasn't modified
 
         ctxStmts = self._finishCtxResource()
         if self.revisionModel != self.managedModel:
