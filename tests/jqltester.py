@@ -83,7 +83,7 @@ def cp(name, *args, **kw):
 
 _models = {}
 def modelFromJson(modelsrc, modelname=None):
-    model = sjson.sjson(generateBnode='counter').to_rdf(modelsrc)
+    model = sjson.Parser(generateBnode='counter').to_rdf(modelsrc)
     model = RxPath.MemModel(model)
     model.bnodePrefix = '_:'
     if not modelname:

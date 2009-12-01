@@ -115,6 +115,38 @@ constructs items
     * when to use $ref and when to inline the object? If the resource occurs once, inline.
     * when to include id : _bnode and when to omit? By default, include them.
           o we can omit as long as those objects don't need to updated or if the implementation has a way to figure out what bnode is.    
+
+== references ==
+* two components of the language: namemaps and explicit values
+* when reading, if idrefpattern is present, then it will be used to deduce whether or not value is a reference, even if unambiguousRefs is specified
+** idrefpattern : '' removes the patten in the current scope, all values will be treated as literals
+* when writing, may specify a match pattern and an output pattern, add to output and any reference that does not match the pattern will be serialized explicitly, as will any literal that does match the pattern
+
+namemap : {
+namemap : 'nsmap',
+id : 'itemid',
+context : 'scope',
+ids : [ '/foo:(/w+)/http://www#$1' ],
+props : ['/foo:(/w+)/http://foo$1' ],
+refs : [/foo/],
+'date' : '/$3/foo'
+}
+
+* reading from store: needs to write out a namemap so that it can be read back in
+  * internal-refpattern: distingish ref from values: round-trip OK
+  * output ref differently: could prevent internal-refpattern from matching refs
+  * limit to augmenting: /foo/@$1 => @(foo)/$1
+  * datatypes:  
+  * property names, ids, references
+
+user can specify a namemap:
+ref : ref || { '@(ref)' : '$1'} 
+ref : {'ref' : '(regex)'}
+
+'datatype' : 'pattern'+'replace'
+
+datatypemap, datatype map is only converting internal datatype to json datatypes. 
+The other direction is needs to be specified in the datatype.
 '''
 
 from rx.python_shim import *
@@ -129,12 +161,14 @@ try:
 except ImportError:
     use_yaml = False
 
+VERSION = '0.9'
 JSON_BASE = 'sjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
 STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
 PROPSUBJECT = JSON_BASE+'propseqsubject'
+
 
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
@@ -151,15 +185,68 @@ XSD+'int': int,
 XSD+'float' : float,
 }
 
-def _expandqname(qname, nsmap):
-    #assume reverse sort of prefix
-    return qname
-    #XXX    
-    for ns, prefix in nsmap:
-        if qname.startswith(prefix+'$'):
-            suffix = qname[len(prefix)+1:]
-            return ns+suffix
-    return qname
+from rx import Uri
+ABSURI, URIREF = Uri.getURIRegex(allowbnode=True)
+
+_refpatternregex = re.compile(r'''(.*?)
+    (?<!\\)\(
+    (.+)
+    (?<!\\)\)
+    (.*)
+''', re.X)
+
+defaultRefPattern = '(URIREF)'
+
+#XXX add _idrefpatternCache = {}
+
+#find referenced match and swap them? would need to parse the regex ourself
+def _parseIdRefPattern(pattern, serializing=False):
+    '''
+    pattern can be one of:
+
+    literal?'('regex')'literal?
+    or
+    {'<(URIREF)>' : 'http://foo/@@'}
+        
+>>> _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'})
+('\\<(\\w+)\\>', 'http://foo/\\1')
+>>> _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'}, True)
+('http\\:\\/\\/foo\\/(\\w+)', '<\\1>')
+>>> _parseIdRefPattern(r'<(ABSURI)>') ==  ("\\<((?:"+ ABSURI + "))\\>", '\\1')
+True
+    '''
+    if isinstance(pattern, dict):
+        if len(pattern) != 1:
+            raise RuntimeError('parse error: bad idrefpattern: %s' % pattern)
+        pattern, replace = pattern.items()[0]
+    else:
+        replace = '@@' #r'\g<0>'
+
+    #convert backreferences from $1 to \1 (javascript to perl style)
+    #match = re.sub(r'(?<!\$)\$(?=\d{1,2}|\&)', r'\\', p[end+1:])
+    #match = re.sub(r'\&', r'\\g<0>', match)
+   
+    m = re.match(_refpatternregex, pattern)
+    if not m:
+        raise RuntimeError('parse error: bad idrefpattern: %s' % pattern)
+    before, regex, after = m.groups()
+    regex = re.sub(r'(?<!\\)ABSURI', '(?:%s)' % ABSURI, regex)
+    regex = re.sub(r'(?<!\\)URIREF', URIREF, regex) #URIREF already wrapped in (?:)
+
+    pattern = re.escape(before) + '('+regex+')' + re.escape(after)
+    pattern = re.compile(r'\A%s\Z' % pattern)
+    
+    if serializing:
+        #turn `replace` into the inputpattern regex by replacing the @@ 
+        #with the regex in the original pattern
+        inputpattern = ''.join([x=='@@' and '('+regex+')' or re.escape(x) 
+                    for x in re.split(r'((?<!\\)@@)',replace)])
+        #replace is set to the orginal pattern with \1 replacing the regex part
+        replace = before + r'\1' + after
+        return pattern, re.compile(r'\A%s\Z' % inputpattern), replace
+    else:        
+        replace = re.sub(r'((?<!\\)@@)', r'\\1', replace)    
+        return pattern, replace
 
 _defaultBNodeGenerator = 'uuid'
 
@@ -178,49 +265,68 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False):
         return data
 
 def loads(data):
+    '''
+    Load a json-like string with either the json or yaml library, 
+    depending which is installed.
+    (Yaml's' "flow"-syntax provides a more forgiving super-set of json, 
+    allowing single-quoted strings and trailing commas.)
+    '''
     if use_yaml:
         return yaml.safe_load(data)
     else:
         return json.loads(data)
 
-class sjson(object):    
+class Serializer(object):    
     #XXX need separate output nsmap for serializing
     #this nsmap shouldn't be the default for that
     nsmap=[(JSON_BASE,'')] 
-    
-    bnodecounter = 0
-    bnodeprefix = '_:'
-    
+        
     ID = property(lambda self: self.QName(JSON_BASE+'id'))
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
+    
+    def __init__(self, nameMap = None, preserveTypeInfo=False, 
+            includesharedrefs=False, explicitRefObjects=False):
+        self.includesharedrefs = includesharedrefs
+        self.preserveRdfTypeInfo = preserveTypeInfo
+        self.explicitRefObjects = explicitRefObjects
         
-    def __init__(self, addOrderInfo=True, generateBnode=_defaultBNodeGenerator, 
-                            scope = '', model=None, preserveRdfTypeInfo=True, 
-                    setBNodeOnObj=False, refPrefix='', unambiguousRefs=False):
-        self._genBNode = generateBnode
-        if generateBnode == 'uuid': #XXX hackish
-            self.bnodeprefix = RxPath.BNODE_BASE
-        self.addOrderInfo = addOrderInfo
-        self.preserveRdfTypeInfo = preserveRdfTypeInfo
-        self.unambiguousRefs = unambiguousRefs
-        self.refPrefix = refPrefix
-        self.RESOURCE_REGEX = re.compile(r'^%s([\w:/\.\?&\$\-_\+#\@]+)$' % self.refPrefix)
-        self.scope = scope
-        self.model = model
-        self.setBNodeOnObj = setBNodeOnObj
+        self.nameMap = nameMap and nameMap.copy() or {}
+        if explicitRefObjects:
+            if 'refs' in self.nameMap:
+                del self.nameMap['refs']
+        else:
+            if 'refs' not in self.nameMap:            
+                self.nameMap['refs'] = defaultRefPattern
+                        
+        idrefpattern = self.nameMap.get('refs')
+        if idrefpattern:
+            regexes = _parseIdRefPattern(idrefpattern, True)
+        else:
+            regexes = (None, None, None)
+        self.outputRefPattern, self.inputRefPattern, self.refTemplate = regexes
 
     def _value(self, node):
         from rx import RxPathDom
         if isinstance(node.parentNode, RxPathDom.BasePredicate):
             stmt = node.parentNode.stmt
-            return toJsonValue(node.data, stmt.objectType, 
-                                        self.preserveRdfTypeInfo)
-        return node.data
+            objectType = stmt.objectType
+            v = toJsonValue(node.data, objectType, self.preserveRdfTypeInfo)
+        else:
+            v = node.data
+            objectType = OBJECT_TYPE_LITERAL
+
+        if isinstance(v, (str, unicode)) and self.outputRefPattern:
+            if self.outputRefPattern.match(v):
+                #explicitly encode literal so we don't think its a reference
+                return encodeStmtObject(v, objectType)
+        return v
+                
     
     def QName(self, prop):
         '''
         convert prop to QName
         '''
+        #XXX currently just removes JSON_BASE 
         #reverse sorted so longest comes first
         for ns, prefix in self.nsmap:
             if prop.startswith(ns):
@@ -232,11 +338,21 @@ class sjson(object):
         return prop
 
     def serializeRef(self, uri):
-        if self.unambiguousRefs:
-            r = encodeStmtObject(uri, OBJECT_TYPE_RESOURCE)
-            return r
+        if not self.explicitRefObjects:
+            assert self.inputRefPattern
+            #check if the ref looks like our inputRefPattern
+            #if it doesn't, create a explicit ref object
+            if isinstance(uri, (str,unicode)):
+                match = self.inputRefPattern.match(uri)
+            else:
+                match = False
+        
+        if self.explicitRefObjects or not match:            
+            return encodeStmtObject(uri, OBJECT_TYPE_RESOURCE)
         else:
-            return self.refPrefix+self.QName(uri) 
+            assert self.refTemplate
+            return match.expand(self.refTemplate)
+            #return self.QName(uri) 
     
     def _setPropSeq(self, propseq, idrefs):
         #XXX what about empty lists?
@@ -260,37 +376,42 @@ class sjson(object):
                     idrefs.setdefault(obj.uri, []).append((childlist, key))
         return propbag, childlist
 
-    def createObjectRef(self, id, obj, isshared):
+    def createObjectRef(self, id, obj, isshared, model):
         '''
-
         obj: The object referenced by the id, if None, the object was not encountered
         '''
         if obj is not None and not isshared:
             return obj
         else:
-            if not isshared and self.model:
+            if not isshared and model:
                 #look up and serialize the resource
                 #XXX pass on options like includesharedrefs
                 #XXX pass in idrefs
                 #XXX add depth option
-                results = self._to_sjson(self.model.getStatements(id)) 
-                objs = results.get('results')
+                results = self.to_sjson(model.getStatements(id)) 
+                objs = results.get('data')
                 if objs:
                     return objs[0]                    
             return id
 
-    def _to_sjson(self, root, includesharedrefs=False, exclude_blankids=False):
+    def to_sjson(self, root=None, model=None):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
 
+        #XXX add exclude_blankids option?
+        
         #use RxPathDom, expensive but arranges as sorted tree, normalizes RDF collections et al.
         #and is schema aware
         from rx import RxPathDom
         if not isinstance(root, RxPathDom.Node):
             #assume doc is iterator of statements or quad tuples
             #note: order is not preserved
-            root = RxPath.createDOM(RxPath.MemModel(root), schemaClass=RxPath.BaseSchema)
+            if root is not None:
+                rootModel = RxPath.MemModel(root)
+            else:
+                rootModel = model
+            root = RxPath.createDOM(rootModel, schemaClass=RxPath.BaseSchema)
 
         #step 1: build a list of subjectnodes
         if isinstance(root, (RxPathDom.Document, RxPathDom.DocumentFragment)):
@@ -332,6 +453,7 @@ class sjson(object):
 
         #step 2: map them to object or lists, building id => [ objrefs ] dict
         #along the way
+        includesharedrefs = self.includesharedrefs
         results = {}
         lists = {}
         idrefs = {}
@@ -367,7 +489,7 @@ class sjson(object):
                     continue
                 key = self.QName(prop)
                 if key in currentobj:
-                    assert key != self.ID
+                    assert key != self.ID, (key, self.ID)
                     continue #must have be already handled by getPropSeq
 
                 nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop
@@ -407,7 +529,7 @@ class sjson(object):
                 obj = lists[id][1]
             #else:
             #   print id, 'not found in', results, 'or', lists
-            ref = self.createObjectRef(id, obj, isshared)
+            ref = self.createObjectRef(id, obj, isshared, model)
             if ref != id:
                 if obj is None:
                     #createObjectRef created an obj from an unreferenced obj,
@@ -419,51 +541,139 @@ class sjson(object):
                 for obj, key in refs:
                     obj[key] = ref
 
-        retval = { 'results': roots.values() }
-        if not includesharedrefs:
-            retval['objects'] = results
-        #if self.nsmap:
-        #    retval['prefix'] = self.nsmap
+        retval = { 'data': roots.values() }
+        #if not includesharedrefs:
+        #    retval['objects'] = results            
+        if self.nameMap:
+            retval['namemap'] = self.nameMap
+        retval['sjson'] = VERSION
         return retval
 
-    def to_sjson(self, root):
-        results = self._to_sjson(root)
-        results = results['results']
-        return json.dumps(r.values()) #a list
+class ParseContext(object):
+    parentid = ''
+    
+    @staticmethod
+    def initParseContext(nameMap, parent):
+        if nameMap is not None or parent.nameMapChanges():
+            return ParseContext(nameMap, parent)
+        else:
+            return parent
 
+    def __init__(self, nameMap, parent=None):
+        if nameMap is None:
+            assert parent
+            self.nameMap = parent.nameMap
+        else:
+            self.nameMap = nameMap
+        self.parent = parent
+        if parent:
+            self.idName = self.nameMap.get('id', parent.idName)
+            self.contextName = self.nameMap.get('context', parent.contextName)
+            self.namemapName = self.nameMap.get('namemap', parent.namemapName)
+            self.refsValue = self.nameMap.get('refs', parent.refsValue)
+        else:
+            self.idName = self.nameMap.get('id', 'id')
+            self.contextName = self.nameMap.get('context', 'context')
+            self.namemapName = self.nameMap.get('namemap', 'namemap')            
+            self.refsValue = self.nameMap.get('refs')
+        
+        self.reservedNames = [self.idName, self.contextName, 
+            #it's the parent context's namemap propery that is in effect:
+            parent and parent.namemapName or 'namemap']
+                            
+        self.idrefpattern, self.refTemplate = None, None
+        self._setIdRefPattern(self.refsValue)
+    
+    def nameMapChanges(self):
+        if self.parent and self.nameMap != self.parent.nameMap:
+            return True
+        return False
+        
+    def getProp(self, obj, name):
+        nameprop = getattr(self, name+'Name')        
+        return obj.get(nameprop)
+
+    def getName(self, name):
+        return getattr(self, name+'Name')
+    
+    def isReservedPropertyName(self, prop):
+        return prop in self.reservedNames
+            
+    def _expandqname(self, qname):
+        #assume reverse sort of prefix
+        return qname
+        #XXX    
+        for ns, prefix in self.nsmap:
+            if qname.startswith(prefix+'$'):
+                suffix = qname[len(prefix)+1:]
+                return ns+suffix
+        return qname
+        
+    def _setIdRefPattern(self, idrefpattern):
+        if idrefpattern:
+            self.idrefpattern, self.refTemplate = _parseIdRefPattern(idrefpattern)
+        elif idrefpattern is not None: #property present but empty value
+            self.idrefpattern, self.refTemplate = None, None
+
+class Parser(object):
+    
+    bnodecounter = 0
+    bnodeprefix = '_:'
+    
+    def __init__(self,addOrderInfo=True, 
+            generateBnode=_defaultBNodeGenerator, 
+            scope = '', 
+            setBNodeOnObj=False,
+            nameMap=None,
+            useDefaultRefPattern=True):
+
+        self._genBNode = generateBnode
+        if generateBnode == 'uuid': #XXX hackish
+            self.bnodeprefix = RxPath.BNODE_BASE
+        self.scope = scope
+        self.addOrderInfo = addOrderInfo
+        self.setBNodeOnObj = setBNodeOnObj
+    
+        nameMap = nameMap or {}
+        if useDefaultRefPattern and 'refs' not in nameMap:
+            nameMap['refs'] = defaultRefPattern
+        self.defaultParseContext = ParseContext(nameMap)
+    
     def to_rdf(self, json, scope = None):        
         m = RxPath.MemModel() #XXX        
 
         if scope is None:
             scope = self.scope
 
-        parentid = '' 
-        #nsmapstack = [ self.nsmap.copy() ]
-        nsmap = self.nsmap
+        parentid = ''
+        parseContext = self.defaultParseContext
 
         def getorsetid(obj):
-            #nsmap = nsmapstack.pop()
-            nsmapprop = _expandqname('nsmap', nsmap) 
-            nsmapval = obj.get(nsmapprop)
-            if nsmapval is not None:
-                pass #XXX update stack            
-            idprop = _expandqname('id', nsmap) 
-            objId = obj.get(idprop)
+            namemap = parseContext.getProp(obj, 'namemap')
+            newParseContext = ParseContext.initParseContext(namemap, parseContext)
+            objId = newParseContext.getProp(obj, 'id')
             if objId is None:  
                 #mark bnodes for nested objects differently                
                 prefix = parentid and 'j:e:' or 'j:t:'
-                suffix = parentid and (parentid + ':') or ''
+                suffix = parentid and (str(parentid) + ':') or ''
                 objId = self._blank(prefix+'object:'+suffix)
                 if self.setBNodeOnObj:
-                    obj[idprop] = objId
-            return objId, idprop
+                    obj[ newParseContext.getName('id') ] = objId
+            return objId, newParseContext
 
-        if isinstance(json, (str,unicode)):            
-            todo = json = loads(json)            
+        if isinstance(json, (str,unicode)):
+            todo = json = loads(json) 
+        
         if isinstance(json, dict):
-            todo = [json]
+            if 'sjson' in json:
+                todo = json.get('data', [])
+                namemap = parseContext.getProp(json, 'namemap')
+                parseContext = ParseContext.initParseContext(namemap, parseContext)
+            else:
+                todo = [json]
         else:
             todo = list(json)
+        
         if not isinstance(todo, list):
             raise TypeError('whats this?')
         todo = [ (x, getorsetid(x), '') for x in todo]
@@ -482,12 +692,12 @@ class sjson(object):
                 PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) ) #XXX STANDALONESEQTYPE
 
             for i, item in enumerate(val):
-                item, objecttype = self.deduceObjectType(item)
+                item, objecttype = self.deduceObjectType(item, parseContext)
                 if isinstance(item, dict):
-                    itemid, idprop = getorsetid(item)
+                    itemid, itemParseContext = getorsetid(item)
                     m.addStatement( Statement(seq,
                         RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
-                    todo.append( (item, (itemid, idprop), parentid))
+                    todo.append( (item, (itemid, itemParseContext), parentid))
                 elif isinstance(item, list):
                     nestedlistid = _createNestedList(item)
                     m.addStatement( Statement(seq,
@@ -497,26 +707,25 @@ class sjson(object):
             return seq
         
         while todo:
-            obj, (id, idprop), parentid = todo.pop(0)
+            obj, (id, parseContext), parentid = todo.pop(0)
                         
             #XXX support top level lists: 'list:' 
             assert isinstance(obj, dict), "only top-level dicts support right now"            
-            #XXX if obj.nsmap: push nsmap
             #XXX propmap
             #XXX idmap
             if not self.isEmbeddedBnode(id): 
                 #this object isn't embedded so set it as the new parent
                 parentid = id
-            
+                        
             for prop, val in obj.items():
-                if prop == idprop:                    
+                if parseContext.isReservedPropertyName(prop):
                     continue
-                prop = _expandqname(prop, nsmap)
-                val, objecttype = self.deduceObjectType(val)
+                prop = parseContext._expandqname(prop)
+                val, objecttype = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
-                    objid, idprop = getorsetid(val) 
+                    objid, valParseContext = getorsetid(val) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
-                    todo.append( (val, (objid, idprop), parentid) )
+                    todo.append( (val, (objid, valParseContext), parentid) )
                 elif isinstance(val, list):
                     #dont build a PROPSEQTYPE if prop in rdf:_ rdf:first rdfs:member                
                     specialprop = prop.startswith(RDF_MS_BASE+'_') or prop in [
@@ -530,15 +739,15 @@ class sjson(object):
                     #to handle dups, build itemdict
                     itemdict = {}
                     for i, item in enumerate(val):               
-                        item, objecttype = self.deduceObjectType(item)
+                        item, objecttype = self.deduceObjectType(item, parseContext)
                         if isinstance(item, dict):
-                            itemid, idprop = getorsetid(item)
+                            itemid, itemParseContext = getorsetid(item)
                             pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))                            
                             if pos:
                                 pos.append(i)
                             else:
                                 itemdict[(itemid, OBJECT_TYPE_RESOURCE)] = [i]                                                                
-                                todo.append( (item, (itemid, idprop), parentid) )
+                                todo.append( (item, (itemid, itemParseContext), parentid) )
                         elif isinstance(item, list):                        
                             nestedlistid = _createNestedList(item)
                             itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE)] = [i]                                                                                            
@@ -590,23 +799,28 @@ class sjson(object):
             return self._genBNode(prefix)
     
     def isEmbeddedBnode(self, id):
+        if not isinstance(id, (str,unicode)):
+            return False
         prefixlen = len(self.bnodeprefix + 'j:')
         if id.startswith(self.bnodeprefix + 'j:e') or id.startswith(self.bnodeprefix + 'j:proplist:'):
             return True
         return False
-        
-    def lookslikeUriOrQname(self, s):
-        if self.unambiguousRefs:
-            return False
+
+    @staticmethod
+    def lookslikeUriOrQname(s, parseContext):
         #XXX think about customization, e.g. if number were ids
-        if not isinstance(s, (str,unicode)):        
+        if not isinstance(s, (str,unicode)):
             return False
-        m = self.RESOURCE_REGEX.match(s)
-        if m is not None:
-            return m.group(1)
+        if not parseContext.idrefpattern:
+            return False
+        
+        m = parseContext.idrefpattern.match(s)
+        if m is not None:            
+            res = m.expand(parseContext.refTemplate)
+            return res
         return False
- 
-    def deduceObjectType(self, item):    
+
+    def deduceObjectType(self, item, parseContext):    
         if isinstance(item, list):
             return item, None
         if isinstance(item, dict):
@@ -617,16 +831,20 @@ class sjson(object):
             objectType = item.get('datatype')
             if not objectType:
                 objectType = item.get('xml:lang')
-            if item.get('type') == 'uri':                
+            type = item.get('type')
+            if type == 'uri':                
                 objectType = OBJECT_TYPE_RESOURCE
-            elif item.get('type') == 'bnode':
+            elif type == 'bnode':
                 return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE
-            if not objectType:                
-                return item, None
+            if not objectType:
+                if type == 'literal':
+                    return value, OBJECT_TYPE_LITERAL
+                else:
+                    return item, None
             else:
                 return value, objectType 
 
-        res = self.lookslikeUriOrQname(item)
+        res = self.lookslikeUriOrQname(item, parseContext)
         if res:
             return res, OBJECT_TYPE_RESOURCE
         elif item is None:
@@ -665,9 +883,9 @@ class sjson(object):
 
 def tojson(statements, options=None):
     options = options or {}
-    results = sjson(**options)._to_sjson(statements)
-    return results['results']
+    results = Serializer(**options).to_sjson(statements)
+    return results#['results']
 
 def tostatements(contents, options=None):
     options = options or {}
-    return sjson(**options).to_rdf(contents)
+    return Parser(**options).to_rdf(contents)

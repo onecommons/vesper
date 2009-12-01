@@ -120,17 +120,7 @@ DEFAULT_URI_SCHEMES = ('http', 'https', 'file', 'ftp', 'data', 'gopher')
 #=============================================================================
 # Functions that implement aspects of RFC 3986
 #
-_validationSetupCompleted = False
-def _initUriValidationRegex():
-    """
-    Called internally to compile the regular expressions needed by
-    URI validation functions, just once, the first time a function
-    that needs them is called.
-    """
-    global _validationSetupCompleted
-    if _validationSetupCompleted:
-        return
-
+def getURIRegex(allowbnode=False):
     #-------------------------------------------------------------------------
     # Regular expressions for determining the non-URI-ness of strings
     #
@@ -205,7 +195,7 @@ def _initUriValidationRegex():
     host            = r'(?:%s|%s|%s)?' % (IP_literal, IPv4address, reg_name)
     userinfo        = r"(?:[0-9A-Za-z\-_\.!~*'();:@&=+$,]|(?:%[0-9A-Fa-f]{2}))*"
     authority       = r'(?:%s@)?%s(?::%s)?' % (userinfo, host, port)
-    scheme          = r'[A-Za-z][0-9A-Za-z+\-\.]*'
+    scheme          =  r'[%sA-Za-z][0-9A-Za-z+\-\.]*' % (allowbnode and '_' or '')
     #absolute_URI    = r'%s:%s(?:\?%s)?' % (scheme, hier_part, query)
     relative_part   = r'(?:(?://%s%s)|(?:%s)|(?:%s))?' % (authority, path_abempty,
                                                           path_absolute, path_noscheme)
@@ -214,7 +204,22 @@ def _initUriValidationRegex():
                                                           path_absolute, path_rootless)
     URI             = r'%s:%s(?:\?%s)?(?:#%s)?' % (scheme, hier_part, query, fragment)
     URI_reference   = r'(?:%s|%s)' % (URI, relative_ref)
+    
+    return URI, URI_reference
 
+_validationSetupCompleted = False
+def _initUriValidationRegex():
+    """
+    Called internally to compile the regular expressions needed by
+    URI validation functions, just once, the first time a function
+    that needs them is called.
+    """
+    global _validationSetupCompleted
+    if _validationSetupCompleted:
+        return
+
+    URI, URI_reference = getURIRegex()
+    
     STRICT_URI_PYREGEX = r"\A%s\Z" % URI
     STRICT_URIREF_PYREGEX = r"\A(?!\n)%s\Z" % URI_reference
 

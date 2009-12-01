@@ -258,7 +258,7 @@ def encodeStmtObject(object, type, iscompound=False):
     '''
     jsonobj = {}    
     if type == OBJECT_TYPE_RESOURCE:
-        if object.startswith(BNODE_BASE):
+        if isinstance(object, (str,unicode)) and object.startswith(BNODE_BASE):
             bnode = object[BNODE_BASE_LEN:]
             jsonobj['type'] = 'bnode'
             jsonobj['value'] = bnode
@@ -487,8 +487,8 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
                 options['generateBnode']='uuid'            
-            if 'unambiguousRefs' not in options:
-                options['unambiguousRefs']=True
+            if 'useDefaultRefPattern' not in options:
+                options['useDefaultRefPattern']=False
 
             stmts = sjson.tostatements(contents, options), type
             return stmts
@@ -587,7 +587,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         import sjson 
         #XXX use uri2prefixMap
         options = options or {}
-        return json.dump( sjson.tojson(statements, dict(unambiguousRefs=True)),stream, **options)
+        return json.dump( sjson.tojson(statements, dict(preserveTypeInfo=True)),stream, **options)
     elif type == 'yaml':
         import sjson, yaml         
         #for yaml options see http://pyyaml.org/wiki/PyYAMLDocumentation#Theyamlpackage
@@ -595,7 +595,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         #use default_flow_style=False for json-style output
         defaultoptions = dict(default_style="'")
         if options: defaultoptions.update(options)
-        return yaml.safe_dump( sjson.tojson(statements, dict(unambiguousRefs=True)), stream, **defaultoptions)
+        return yaml.safe_dump( sjson.tojson(statements, dict(preserveTypeInfo=True)), stream, **defaultoptions)
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]

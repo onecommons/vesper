@@ -108,6 +108,11 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     if ast != None:        
         try:
             results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate))
+            #XXX: if forUpdate add a sjson header including namemap
+            #this we have a enough info to reconstruct refs and datatypes without guessing
+            #if forUpdate: 
+            #   #need a context.datamap
+            #   sjson.addHeader(context.datamap, response)
             response['results'] = results
         except QueryException, qe:            
             errors.append('error: %s' % qe.message)
@@ -122,16 +127,6 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     if debug:
         response['debug'] = debug.getvalue()        
     
-    # XXX may not be valid anymore
-    """
-    if forUpdate:
-        if not results:
-            response['resources'] = []
-        else:
-            if instance(results[0], dict):
-                raise NotImplementedError('cant figure out addChangeMap')
-                response['resources'] = [res['id'] for res in results]
-    """
     return response
 
 def buildAST(query):

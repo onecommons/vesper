@@ -23,31 +23,40 @@ def assert_stmts_match(expected_stmts, result_stmts):
         #print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
         assert False
 
-def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False,refPrefix=''):
+def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False, intermediateJson=None, serializerNameMap=None):
     if isinstance(src, (str,unicode)):
-        test_json = [ json.loads(src) ]
+        test_json = json.loads(src)
+        if not test_json.get('sjson'):
+            test_json = [test_json]
     else:
         test_json = src
-    result_stmts = sjson(generateBnode='counter', refPrefix=refPrefix).to_rdf( test_json )
+    result_stmts = Parser(generateBnode='counter').to_rdf( test_json )
     #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = sjson(refPrefix=refPrefix)._to_sjson( result_stmts, includesharedrefs=includesharedrefs and True)['results']
+    result_json = Serializer(nameMap=serializerNameMap, includesharedrefs=includesharedrefs).to_sjson( result_stmts)
+    if not serializerNameMap:
+        result_json = result_json['data']
     #pprint( result_json )
-    if includesharedrefs:
-        test_json = includesharedrefs
+    if intermediateJson:
+        test_json = intermediateJson
     assert_json_match(result_json, test_json)
     if backagain:
-        assert_stmts_and_back_match(result_stmts,refPrefix=refPrefix)
+        assert_stmts_and_back_match(result_stmts,serializerNameMap=serializerNameMap)
 
-def assert_stmts_and_back_match(stmts, expectedobj = None, refPrefix=''):
-    result = sjson(refPrefix=refPrefix)._to_sjson( stmts )['results']
+def assert_stmts_and_back_match(stmts, expectedobj = None, serializerNameMap=None, addOrderInfo=True):
+    result = Serializer(nameMap=serializerNameMap).to_sjson( stmts )
+    #print 'serialized', result
     if expectedobj is not None:
-        assert_json_match(expectedobj, result, True)
+        if not serializerNameMap:
+            compare = result['data']
+        else:
+            compare = result
+        assert_json_match(expectedobj, compare, True)
     
-    result_stmts = sjson(generateBnode='counter',refPrefix=refPrefix).to_rdf( result )
+    result_stmts = Parser(generateBnode='counter', addOrderInfo=addOrderInfo).to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
 import unittest
@@ -87,6 +96,7 @@ def test():
         }
     }]
     assert_stmts_and_back_match(stmts, expected)
+    assert_stmts_and_back_match(stmts, addOrderInfo=False)
 
     src = '''
     { "id" : "atestid",
@@ -144,28 +154,72 @@ def test():
     '''
     assert_json_and_back_match(src)
 
+    #test a custom ref pattern 
+    #and then serialize with the same pattern
+    #they should match
     src = '''
-    { "id" : "test",
+    { "sjson" : "%s",
+    "namemap" : { "refs" : "@(URIREF)"},
+    "data" :[{ "id" : "test",
      "circular" : "@test",
      "not a reference" : "test",
       "circularlist" : ["@test", "@test"],
       "circularlist2" : [["@test"],["@test", "@test"]]
-        }
-    '''
-    assert_json_and_back_match(src, refPrefix='@')
+        }]
+    }
+    ''' % VERSION
+    serializerNameMap={ "refs" : "@(URIREF)"}
+    assert_json_and_back_match(src, serializerNameMap=serializerNameMap)
 
-    #test that shardrefs output doesn't try to expand circular references
+    #test that sharedrefs output doesn't try to expand circular references
     #XXX current handling is bad, should give error
-    includesharedrefs = [{
+    #set intermediate json because includesharedrefs flag will generate different json
+    intermediateJson = {"sjson": VERSION,
+    "namemap": {"refs": "@(URIREF)"},
+    "data" : [{
     "circular": "@test",
     "not a reference" : "test",
     "circularlist": ["@test", "@test"],
     "circularlist2": ["@_:j:e:list:test:1", "@_:j:e:list:test:2"],
     "id": "test"}]
-    assert_json_and_back_match(src, False, includesharedrefs=includesharedrefs, refPrefix='@')
-    #test missing ids and exclude_blankids
-    #test shared
+    }
+    assert_json_and_back_match(src, False, serializerNameMap=serializerNameMap,
+                     includesharedrefs=True, intermediateJson=intermediateJson)
 
+    #add statements that are identical to the ones above except they have
+    #different object types (they switch a resource (object reference) for literal
+    #and vice-versa)
+    stmts.extend( 
+        [Statement("http://example.org/book#2", 'test:sequelto' , 
+            'http://example.org/book#1', OBJECT_TYPE_LITERAL),
+         Statement(r2, dc+'title', u"Advanced SPARQL",OBJECT_TYPE_RESOURCE,''),
+        ]
+    )
+    
+    assert_stmts_and_back_match(stmts, addOrderInfo=False)
+    
+    src = dict(namemap = dict(id='itemid', namemap='jsonmap'),
+    itemid = 1,
+    shouldBeARef = 'hello',
+    value = dict(jsonmap=dict(id='anotherid', refs=''),
+            anotherid = 2,
+            #XXX fix assert key != self.ID, (key, self.ID) when serializing
+            #id = 'not an id', #this should be treated as a regular property
+            innerobj = dict(anotherid = 3, shouldBeALiteral='hello2'),
+            shouldBeALiteral='hello')
+    )
+    #expect different output because we don't use the namemaps when serializing
+    intermediateJson = [{"id": 1, "shouldBeARef": "hello", 
+            "value": {"id": 2, 
+                "innerobj": {"id": 3, 
+                            "shouldBeALiteral": {"type": "literal", "value": "hello2"}
+                            }, 
+                "shouldBeALiteral": {"type": "literal", "value": "hello"}
+                }
+            }]
+    assert_json_and_back_match(src, intermediateJson=intermediateJson)
+    
+    
     print 'tests pass'
 
 

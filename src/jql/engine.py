@@ -635,11 +635,11 @@ def getColumn(pos, row):
         for nestedrow in cell:
             assert isinstance(nestedrow, (list, tuple)
                 ) and not isinstance(nestedrow, Tupleset), "%s" % (type(nestedrow))
-            for (c, row) in getColumn(pos, nestedrow):
+            for (c, p, row) in getColumn(pos, nestedrow):
                 #print 'ct', c
-                yield (c, row)
+                yield (c, p, row)
     else:
-        yield (cell, row)
+        yield (cell, p, row)
 
 def chooseColumns(groupby, columns):
     '''
@@ -1143,7 +1143,7 @@ class SimpleQueryEngine(object):
                             else:
                                 pos, rowInfoTupleset = col
 
-                                v = list([irow for cell,irow in getColumn(pos, outerrow)])
+                                v = list([irow for cell, i, irow in getColumn(pos, outerrow)])
                                 #print '!!!v', col, label, v, 'row', row                            
                                 #assert isinstance(col.type, Tupleset)
                                 ccontext.currentTupleset = SimpleTupleset(v,
@@ -1601,7 +1601,7 @@ class SimpleQueryEngine(object):
         # choose the type index. On the other hand, if that projection uses an
         # iteration join it might be nearly expensive as doing the iteration join
         # on the subject only.        
-        if context.projectValues:
+        if context.projectValues: #already evaluated
             return context.projectValues[op.name]
         
         if isinstance(op.name, int):
@@ -1612,8 +1612,10 @@ class SimpleQueryEngine(object):
                 #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
                 raise QueryException("'%s' projection not found" % op.name)
         
-        val = flatten((c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
-        if op.constructRefs:            
+        #val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
+        if op.constructRefs:
+            val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=True)
+            
             assert isinstance(val, list)
             isJsonList, val = self.reorderWithListInfo(context, op, val)    
             handleNil = isJsonList or len(val) > 1
@@ -1627,6 +1629,15 @@ class SimpleQueryEngine(object):
             else:
                 return val
         else:
+            def renderVal(c):
+                '''
+                Output the value based on the current namemap
+                '''
+                val, pos, row = c
+                objectTypePos = pos+1                 
+                #return sjson.output(context.parsecontext, val, row[objectTypePos])
+                return c[0]
+            val = flatten( ( renderVal(c) for c in getColumn(pos, context.currentRow)) )
             return val
 
     def costProject(self, op, context):

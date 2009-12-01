@@ -128,10 +128,13 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(response, result)        
         self.assertEquals(root.domStore.model.currentVersion, '0A00001')
         
-        self.assertEquals(root.updateResults['_added'], [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
-        self.assertEquals(root.updateResults['_addedStatements'], [('a_resource', 'comment', 'page content.', 'L', ''), ('a_resource', 'label', 'foo', 'R', '')])
+        self.assertEquals(root.updateResults['_added']['data'], 
+            [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
+        self.assertEquals(root.updateResults['_addedStatements'], 
+            [('a_resource', 'comment', 'page content.', 'L', ''), 
+            ('a_resource', 'label', 'foo', 'R', '')])
         self.assertEquals(root.updateResults['_removedStatements'], [])
-        self.assertEquals(root.updateResults['_removed'], [])        
+        self.assertEquals(root.updateResults['_removed']['data'], [])        
         self.failUnless(self.notifyChangeset)
         
         #this request doesn't update the store so updateResults should be empty
