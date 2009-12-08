@@ -36,8 +36,8 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includes
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = Serializer(nameMap=serializerNameMap, includesharedrefs=includesharedrefs).to_sjson( result_stmts)
-    if not serializerNameMap:
+    result_json = Serializer(nameMap=serializerNameMap).to_sjson( result_stmts)
+    if serializerNameMap is None:
         result_json = result_json['data']
     #pprint( result_json )
     if intermediateJson:
@@ -50,7 +50,7 @@ def assert_stmts_and_back_match(stmts, expectedobj = None, serializerNameMap=Non
     result = Serializer(nameMap=serializerNameMap).to_sjson( stmts )
     #print 'serialized', result
     if expectedobj is not None:
-        if not serializerNameMap:
+        if serializerNameMap is None:
             compare = result['data']
         else:
             compare = result
@@ -171,21 +171,6 @@ def test():
     serializerNameMap={ "refs" : "@(URIREF)"}
     assert_json_and_back_match(src, serializerNameMap=serializerNameMap)
 
-    #test that sharedrefs output doesn't try to expand circular references
-    #XXX current handling is bad, should give error
-    #set intermediate json because includesharedrefs flag will generate different json
-    intermediateJson = {"sjson": VERSION,
-    "namemap": {"refs": "@(URIREF)"},
-    "data" : [{
-    "circular": "@test",
-    "not a reference" : "test",
-    "circularlist": ["@test", "@test"],
-    "circularlist2": ["@_:j:e:list:test:1", "@_:j:e:list:test:2"],
-    "id": "test"}]
-    }
-    assert_json_and_back_match(src, False, serializerNameMap=serializerNameMap,
-                     includesharedrefs=True, intermediateJson=intermediateJson)
-
     #add statements that are identical to the ones above except they have
     #different object types (they switch a resource (object reference) for literal
     #and vice-versa)
@@ -219,7 +204,24 @@ def test():
             }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
     
-    
+    src = [{"id": "1",
+      "context" : "context1",
+      "prop1": 1,
+      "prop2": ["a_ref", "a value"]
+    }]
+    stmts = [('1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'context1'), StatementWithOrder('1', 'prop2', 'a value', 'L', 'context1', (1,)), StatementWithOrder('1', 'prop2', 'a_ref', 'R', 'context1', (0,)), ('1', 'sjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_1', 'a_ref', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_2', 'a value', 'L', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'sjson:schema#propseqtype', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqprop', 'prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqsubject', '1', 'R', 'context1')]    
+    assert Parser().to_rdf(src) == stmts
+    assert_json_and_back_match(src)
+
+    src = [{"id": "1",
+      "context" : "context1",
+      "prop1": 1,
+      "prop2": ["a_ref", 
+                { 'context' : 'context2', 'prop3' : None, "id": "_:j:e:object:1:1"}
+               ],
+     'prop4' : { 'type' : 'literal', 'value' : 'hello', 'context' : 'context3'}
+    }]
+    assert_json_and_back_match(src)
     print 'tests pass'
 
 

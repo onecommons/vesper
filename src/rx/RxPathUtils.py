@@ -248,7 +248,7 @@ def _decodeJsonRDFValue(object):
 def _encodeStmtObject(stmt, iscompound=False):
     return encodeStmtObject(stmt.object, stmt.objectType, iscompound)
     
-def encodeStmtObject(object, type, iscompound=False):    
+def encodeStmtObject(object, type, iscompound=False, scope=None, valueName='value'):    
     '''
     return a string encoding the object in one of these ways: 
     (from http://www.w3.org/TR/2006/NOTE-rdf-sparql-json-res-20061004/)
@@ -261,10 +261,10 @@ def encodeStmtObject(object, type, iscompound=False):
         if isinstance(object, (str,unicode)) and object.startswith(BNODE_BASE):
             bnode = object[BNODE_BASE_LEN:]
             jsonobj['type'] = 'bnode'
-            jsonobj['value'] = bnode
+            jsonobj[valueName] = bnode
         else:
             jsonobj['type'] = 'uri'
-            jsonobj['value'] = object
+            jsonobj[valueName] = object
         
         if iscompound:
             jsonobj['hint'] = 'compound'
@@ -272,14 +272,15 @@ def encodeStmtObject(object, type, iscompound=False):
         if type.find(':') > -1:
             jsonobj['type'] = "typed-literal"
             jsonobj["datatype"] = type
-            jsonobj['value'] = object
+            jsonobj[valueName] = object
         else:
             jsonobj['type'] = "literal"            
             if type != OBJECT_TYPE_LITERAL:
                 #datatype is the lang
                 jsonobj["xml:lang"] = type                    
-            jsonobj['value'] = object
-
+            jsonobj[valueName] = object
+    if scope is not None:
+        jsonobj['context'] = scope
     return jsonobj
 
 def _encodeRDFAsJson(nodes):    

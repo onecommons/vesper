@@ -250,13 +250,13 @@ True
 
 _defaultBNodeGenerator = 'uuid'
 
-def toJsonValue(data, objectType, preserveRdfTypeInfo=False):
+def toJsonValue(data, objectType, preserveRdfTypeInfo=False, valueName='value'):
     if len(objectType) > 1:
         valueparse = _xsdmap.get(objectType)
         if valueparse:
             return valueparse(data)
         elif preserveRdfTypeInfo:
-            return encodeStmtObject(data, objectType)
+            return encodeStmtObject(data, objectType, valueName=valueName)
         else:
             valueparse = _xsdExtendedMap.get(objectType)
             if valueparse:
@@ -285,8 +285,11 @@ class Serializer(object):
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
     
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
-            includesharedrefs=False, explicitRefObjects=False):
-        self.includesharedrefs = includesharedrefs
+            includeObjectMap=False, explicitRefObjects=False):
+        '''
+        '''
+        #XXX add replaceRefWithObject option: always, ifShared, never (default: ifShared (current behahavior))
+        self.includeObjectMap = includeObjectMap
         self.preserveRdfTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
         
@@ -305,23 +308,27 @@ class Serializer(object):
             regexes = (None, None, None)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = regexes
 
-    def _value(self, node):
+    def _value(self, node, context=None):
+        #XXX use valueName
         from rx import RxPathDom
         if isinstance(node.parentNode, RxPathDom.BasePredicate):
             stmt = node.parentNode.stmt
-            objectType = stmt.objectType
+            objectType = stmt.objectType            
             v = toJsonValue(node.data, objectType, self.preserveRdfTypeInfo)
         else:
             v = node.data
             objectType = OBJECT_TYPE_LITERAL
 
-        if isinstance(v, (str, unicode)) and self.outputRefPattern:
-            if self.outputRefPattern.match(v):
+        if isinstance(v, (str, unicode)):                
+            if context is not None or (self.outputRefPattern 
+                            and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
-                return encodeStmtObject(v, objectType)
+                return encodeStmtObject(v, objectType, scope=context)
+        elif context is not None:            
+            v['context'] = context
+
         return v
                 
-    
     def QName(self, prop):
         '''
         convert prop to QName
@@ -337,7 +344,7 @@ class Serializer(object):
                     return suffix
         return prop
 
-    def serializeRef(self, uri):
+    def serializeRef(self, uri, context):
         if not self.explicitRefObjects:
             assert self.inputRefPattern
             #check if the ref looks like our inputRefPattern
@@ -347,16 +354,15 @@ class Serializer(object):
             else:
                 match = False
         
-        if self.explicitRefObjects or not match:            
-            return encodeStmtObject(uri, OBJECT_TYPE_RESOURCE)
+        if self.explicitRefObjects or not match or context is not None:
+            #XXX use valueName
+            return encodeStmtObject(uri, OBJECT_TYPE_RESOURCE, scope=context)
         else:
             assert self.refTemplate
             return match.expand(self.refTemplate)
             #return self.QName(uri) 
     
-    def _setPropSeq(self, propseq, idrefs):
-        #XXX what about empty lists?
-        from rx import RxPathDom
+    def _setPropSeq(self, propseq):
         childlist = []
         propbag = None
         for p in propseq.childNodes:
@@ -366,24 +372,44 @@ class Serializer(object):
             if prop == PROPBAG:
                 propbag = obj.uri
             elif prop == RxPath.RDF_SCHEMA_BASE+u'member':
-                if isinstance(obj, RxPathDom.Text):
-                    childlist.append( self._value(obj) )
-                elif obj.uri == RDF_MS_BASE + 'nil':
-                    childlist.append( [] )
-                else: #otherwise it's a resource
-                    childlist.append( self.serializeRef(obj.uri) )
-                    key = len(childlist)-1
-                    idrefs.setdefault(obj.uri, []).append((childlist, key))
+                childlist.append( obj )
         return propbag, childlist
 
-    def createObjectRef(self, id, obj, isshared, model):
+    def _finishPropList(self, childlist, idrefs, resScope, nestedLists):
+        from rx import RxPathDom
+        for i, node in enumerate(childlist):
+            if not isinstance(node, RxPathDom.Node):
+                #this list was already processed
+                assert all(not isinstance(node, RxPathDom.Node) for node in childlist)
+                return
+            scope = node.parentNode.stmt.scope
+            if scope == resScope:
+                scope = None #only include scope if its different
+            if isinstance(node, RxPathDom.Text):
+                childlist[i]  = self._value(node, scope)
+            elif node.uri == RDF_MS_BASE + 'nil' and scope is None:
+                childlist[i] = []
+            else: #otherwise it's a resource
+                childlist[i] = self.serializeRef(node.uri, scope)
+                if scope is None:
+                    #only add ref if we don't have to serialize the pScope
+                    idrefs.setdefault(node.uri, []).append(
+                                    (childlist, resScope, i))
+                if node.uri in nestedLists:
+                    #if nested list handle it now
+                    (seqprop, nestedlist) = nestedLists[node.uri]
+                    assert not seqprop
+                    self._finishPropList(nestedlist, idrefs, resScope, nestedLists)
+        assert all(not isinstance(node, RxPathDom.Node) for node in childlist)
+
+    def createObjectRef(self, id, obj, includeObject, model):
         '''
         obj: The object referenced by the id, if None, the object was not encountered
         '''
-        if obj is not None and not isshared:
-            return obj
-        else:
-            if not isshared and model:
+        if includeObject:
+            if obj is not None:
+                return obj
+            if model:
                 #look up and serialize the resource
                 #XXX pass on options like includesharedrefs
                 #XXX pass in idrefs
@@ -392,14 +418,15 @@ class Serializer(object):
                 objs = results.get('data')
                 if objs:
                     return objs[0]                    
-            return id
+        return id
 
-    def to_sjson(self, root=None, model=None):
+    def to_sjson(self, root=None, model=None, scope=''):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
 
         #XXX add exclude_blankids option?
+        defaultScope = scope
         
         #use RxPathDom, expensive but arranges as sorted tree, normalizes RDF collections et al.
         #and is schema aware
@@ -423,6 +450,7 @@ class Serializer(object):
                         #filter out resources with no properties
                         continue
                     if n.matchName(JSON_BASE,'propseqtype'):
+                        #resource has rdf:type propseqtype
                         listnodes.append(n)
                     else:
                         nodes.append(n)
@@ -452,20 +480,19 @@ class Serializer(object):
             raise TypeError('Unexpected root node')
 
         #step 2: map them to object or lists, building id => [ objrefs ] dict
-        #along the way
-        includesharedrefs = self.includesharedrefs
+        #along the way        
         results = {}
         lists = {}
         idrefs = {}
 
-        for listnode in listnodes:
-            seqprop, childlist = self._setPropSeq(listnode, idrefs)
+        for listnode in listnodes:            
+            seqprop, childlist = self._setPropSeq(listnode)
             lists[listnode.uri] = (seqprop, childlist)
 
-        for res in nodes:
+        for res in nodes:            
             if not res.childNodes:
                 #no properties
-                continue
+                continue            
             currentobj = { self.ID : res.uri }
             currentlist = []
             #print 'adding to results', res.uri
@@ -473,24 +500,42 @@ class Serializer(object):
             #print 'res', res, res.childNodes
             
             #deal with sequences first
+            resScopes = {}
             for p in res.childNodes:
-                if p.stmt.predicate == PROPSEQ:
-                    #this will replace sequences                    
+                if p.stmt.predicate == PROPSEQ:                    
+                    #this will replace sequences
                     seqprop, childlist = lists[p.stmt.object]
                     key = self.QName(seqprop)
                     currentobj[ key ] = childlist
                     #print 'adding propseq', p.stmt.object
-                    lists[ p.stmt.object ] = childlist
-                    #idrefs.setdefault(p.stmt.object, []).append( (currentobj, key) )
-
+                else:
+                    pscope = p.stmt.scope
+                    resScopes[pscope] = resScopes.setdefault(pscope, 0) + 1
+            
+            mostcommon = 0
+            resScope = defaultScope
+            for k,v in resScopes.items():
+                if v > mostcommon:
+                    mostcommon = v
+                    resScope = k
+            
+            if resScope != defaultScope:
+                #add context prop if different from default context
+                currentobj['context'] = resScope
+                                        
             for p in res.childNodes:
-                prop = p.stmt.predicate                
+                prop = p.stmt.predicate
                 if prop == PROPSEQ:
                     continue
+                
                 key = self.QName(prop)
                 if key in currentobj:
-                    assert key != self.ID, (key, self.ID)
-                    continue #must have be already handled by getPropSeq
+                    #XXX create namemap that remaps ID if conflict
+                    assert key not in ('context', self.ID), (
+                                    'property with reserved name %s' % key)
+                    #must have be already handled by _setPropSeq
+                    self._finishPropList(currentobj[key], idrefs, resScope, lists)
+                    continue 
 
                 nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop
                 #XXX Test empty and singleton rdf lists and containers
@@ -500,36 +545,44 @@ class Serializer(object):
                     currentlist.append(0)
                 else:
                     parent = currentobj
-
+                
+                if p.stmt.scope != resScope:
+                    pScope = p.stmt.scope
+                else:
+                    pScope = None
+                
                 obj = p.childNodes[0]
                 if isinstance(obj, RxPathDom.Text):
-                    parent[ key ] = self._value(obj)
-                elif obj.uri == RDF_MS_BASE + 'nil':
+                    parent[ key ] = self._value(obj, pScope)
+                elif obj.uri == RDF_MS_BASE + 'nil' and pScope is None:
                     parent[ key ] = []
                 else: #otherwise it's a resource
                     #print 'prop key', key, prop, type(parent)
-                    parent[ key ] = self.serializeRef(obj.uri)
-                    if includesharedrefs or obj.uri != res.uri:
+                    parent[ key ] = self.serializeRef(obj.uri, pScope)
+                    if obj.uri != res.uri and pScope is None:
                         #add ref if object isn't same as subject
-                        idrefs.setdefault(obj.uri, []).append( (parent, key) )
+                        #and we don't have to serialize the pScope
+                        idrefs.setdefault(obj.uri, []).append( (parent, resScope, key) )
 
                 if currentlist and not nextMatches:
                     #done with this list
                     currentobj[ prop ] = currentlist
                     currentlist = []
 
-        #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
+        #3. iterate through id map, if number of refs == 1, replace the reference with the object
         roots = results.copy()
         for id, refs in idrefs.items():
-            isshared = includesharedrefs or len(refs) > 1
+            includeObject = len(refs) <= 1
             obj = None
             if id in results:
                 obj = results[id]
             elif id in lists:
                 obj = lists[id][1]
+                #print 'nestedlist', id, lists[id] 
             #else:
-            #   print id, 'not found in', results, 'or', lists
-            ref = self.createObjectRef(id, obj, isshared, model)
+            #    print id, 'not found in', results, 'or', lists
+            ref = self.createObjectRef(id, obj, includeObject, model)
+            #print 'includeObject', includeObject, id, ref
             if ref != id:
                 if obj is None:
                     #createObjectRef created an obj from an unreferenced obj,
@@ -537,13 +590,21 @@ class Serializer(object):
                     results[id] = ref
                 else:
                     #remove since the obj is referenced
-                    roots.pop(id, None)
-                for obj, key in refs:
-                    obj[key] = ref
+                    roots.pop(id, None) 
+                for parent, parentScope, key in refs:                    
+                    #if ref.context is not set and parent.context is set, set
+                    #ref.context = defaultScope so ref doesn't inherit parent.context
+                    if (not isinstance(ref, dict) or 'context' not in ref
+                                            ) and parentScope != defaultScope:
+                        refcopy = ref.copy()
+                        refcopy['context'] = defaultScope
+                        parent[key] = refcopy
+                    else:
+                        parent[key] = ref
 
         retval = { 'data': roots.values() }
-        #if not includesharedrefs:
-        #    retval['objects'] = results            
+        if self.includeObjectMap:
+            retval['objects'] = results
         if self.nameMap:
             retval['namemap'] = self.nameMap
         retval['sjson'] = VERSION
@@ -553,16 +614,38 @@ class ParseContext(object):
     parentid = ''
     
     @staticmethod
-    def initParseContext(nameMap, parent):
-        if nameMap is not None or parent.nameMapChanges():
-            return ParseContext(nameMap, parent)
+    def initParseContext(obj, parent):
+        if parent:
+            nameMap = parent.getProp(obj, 'namemap')
         else:
-            return parent
+            nameMap = obj.get('namemap')
+            
+        if nameMap is not None or parent.nameMapChanges():
+            #new namemap comes into effect, need to create a parsecontext
+            pc = ParseContext(nameMap, parent)
+            if parent:
+                default = parent.context
+            else:
+                default = None
+            pc.context = pc.getProp(obj, 'context', default)
+            return pc
+        else:
+            if parent:
+                context = parent.getProp(obj, 'context')
+            else: #no parent or namemap
+                context = obj.get('context')
+            if context is not None:
+                #context specified, need to create a parsecontext
+                pc = ParseContext(nameMap, parent)
+                pc.context = context
+                return pc
+
+        #otherwise can just use parent context
+        return parent
 
     def __init__(self, nameMap, parent=None):
         if nameMap is None:
-            assert parent
-            self.nameMap = parent.nameMap
+            self.nameMap = parent and parent.nameMap or {}
         else:
             self.nameMap = nameMap
         self.parent = parent
@@ -570,11 +653,13 @@ class ParseContext(object):
             self.idName = self.nameMap.get('id', parent.idName)
             self.contextName = self.nameMap.get('context', parent.contextName)
             self.namemapName = self.nameMap.get('namemap', parent.namemapName)
+            self.valueName = self.nameMap.get('value', parent.valueName)
             self.refsValue = self.nameMap.get('refs', parent.refsValue)
         else:
             self.idName = self.nameMap.get('id', 'id')
             self.contextName = self.nameMap.get('context', 'context')
-            self.namemapName = self.nameMap.get('namemap', 'namemap')            
+            self.namemapName = self.nameMap.get('namemap', 'namemap')
+            self.valueName = self.nameMap.get('value', 'value')            
             self.refsValue = self.nameMap.get('refs')
         
         self.reservedNames = [self.idName, self.contextName, 
@@ -589,9 +674,9 @@ class ParseContext(object):
             return True
         return False
         
-    def getProp(self, obj, name):
+    def getProp(self, obj, name, default=None):
         nameprop = getattr(self, name+'Name')        
-        return obj.get(nameprop)
+        return obj.get(nameprop, default)
 
     def getName(self, name):
         return getattr(self, name+'Name')
@@ -630,7 +715,6 @@ class Parser(object):
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = RxPath.BNODE_BASE
-        self.scope = scope
         self.addOrderInfo = addOrderInfo
         self.setBNodeOnObj = setBNodeOnObj
     
@@ -638,19 +722,18 @@ class Parser(object):
         if useDefaultRefPattern and 'refs' not in nameMap:
             nameMap['refs'] = defaultRefPattern
         self.defaultParseContext = ParseContext(nameMap)
+        self.defaultParseContext.context = scope
     
     def to_rdf(self, json, scope = None):        
         m = RxPath.MemModel() #XXX        
 
-        if scope is None:
-            scope = self.scope
-
         parentid = ''
         parseContext = self.defaultParseContext
+        if scope is None:
+            scope = parseContext.context
 
         def getorsetid(obj):
-            namemap = parseContext.getProp(obj, 'namemap')
-            newParseContext = ParseContext.initParseContext(namemap, parseContext)
+            newParseContext = ParseContext.initParseContext(obj, parseContext)
             objId = newParseContext.getProp(obj, 'id')
             if objId is None:  
                 #mark bnodes for nested objects differently                
@@ -667,8 +750,7 @@ class Parser(object):
         if isinstance(json, dict):
             if 'sjson' in json:
                 todo = json.get('data', [])
-                namemap = parseContext.getProp(json, 'namemap')
-                parseContext = ParseContext.initParseContext(namemap, parseContext)
+                parseContext = ParseContext.initParseContext(json, parseContext)
             else:
                 todo = [json]
         else:
@@ -692,18 +774,18 @@ class Parser(object):
                 PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) ) #XXX STANDALONESEQTYPE
 
             for i, item in enumerate(val):
-                item, objecttype = self.deduceObjectType(item, parseContext)
+                item, objecttype, itemscope = self.deduceObjectType(item, parseContext)
                 if isinstance(item, dict):
                     itemid, itemParseContext = getorsetid(item)
                     m.addStatement( Statement(seq,
-                        RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, scope) )
+                        RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, itemscope) )
                     todo.append( (item, (itemid, itemParseContext), parentid))
                 elif isinstance(item, list):
                     nestedlistid = _createNestedList(item)
                     m.addStatement( Statement(seq,
-                            RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, scope) )
+                            RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, itemscope) )
                 else: #simple type
-                    m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, scope) )
+                    m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
             return seq
         
         while todo:
@@ -716,12 +798,14 @@ class Parser(object):
             if not self.isEmbeddedBnode(id): 
                 #this object isn't embedded so set it as the new parent
                 parentid = id
-                        
+
+            scope = parseContext.context
+            
             for prop, val in obj.items():
                 if parseContext.isReservedPropertyName(prop):
                     continue
                 prop = parseContext._expandqname(prop)
-                val, objecttype = self.deduceObjectType(val, parseContext)
+                val, objecttype, scope = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
                     objid, valParseContext = getorsetid(val) 
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
@@ -739,7 +823,7 @@ class Parser(object):
                     #to handle dups, build itemdict
                     itemdict = {}
                     for i, item in enumerate(val):               
-                        item, objecttype = self.deduceObjectType(item, parseContext)
+                        item, objecttype, scope = self.deduceObjectType(item, parseContext)
                         if isinstance(item, dict):
                             itemid, itemParseContext = getorsetid(item)
                             pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))                            
@@ -808,7 +892,7 @@ class Parser(object):
 
     @staticmethod
     def lookslikeUriOrQname(s, parseContext):
-        #XXX think about customization, e.g. if number were ids
+        #XXX think about case where if number were ids
         if not isinstance(s, (str,unicode)):
             return False
         if not parseContext.idrefpattern:
@@ -822,12 +906,15 @@ class Parser(object):
 
     def deduceObjectType(self, item, parseContext):    
         if isinstance(item, list):
-            return item, None
+            return item, None, parseContext.context
         if isinstance(item, dict):
-            size = len(item) 
-            if 'value' not in item or size<2 or size>3:
-                return item, None
-            value = item['value']
+            size = len(item)
+            valueName = parseContext.getName('value')            
+            maxsize = 3 + int('context' in item)
+            if valueName not in item or size<2 or size>maxsize:
+                return item, None, parseContext.context
+            value = item[valueName]
+            context = item.get('context', parseContext.context)
             objectType = item.get('datatype')
             if not objectType:
                 objectType = item.get('xml:lang')
@@ -835,28 +922,30 @@ class Parser(object):
             if type == 'uri':                
                 objectType = OBJECT_TYPE_RESOURCE
             elif type == 'bnode':
-                return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE
+                return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
             if not objectType:
                 if type == 'literal':
-                    return value, OBJECT_TYPE_LITERAL
+                    return value, OBJECT_TYPE_LITERAL, context
                 else:
-                    return item, None
+                    #looks like it wasn't an explicit value
+                    return item, None, parseContext.context
             else:
-                return value, objectType 
+                return value, objectType, context
 
+        context = parseContext.context
         res = self.lookslikeUriOrQname(item, parseContext)
         if res:
-            return res, OBJECT_TYPE_RESOURCE
+            return res, OBJECT_TYPE_RESOURCE, context
         elif item is None:
-            return 'null', JSON_BASE+'null'
+            return 'null', JSON_BASE+'null', context
         elif isinstance(item, bool):
-            return (item and 'true' or 'false'), XSD+'boolean'
+            return (item and 'true' or 'false'), XSD+'boolean', context
         elif isinstance(item, int):
-            return unicode(item), XSD+'integer'
+            return unicode(item), XSD+'integer', context
         elif isinstance(item, float):
-            return unicode(item), XSD+'double'
+            return unicode(item), XSD+'double', context
         else:
-            return item, OBJECT_TYPE_LITERAL
+            return item, OBJECT_TYPE_LITERAL, context
 
     def generateListResources(self, m, lists):
         '''
