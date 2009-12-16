@@ -14,7 +14,7 @@ from rx.RxPath import FileModel, TransactionFileModel, IncrementalNTriplesFileMo
 
 class FileModelTestCase(modelTest.BasicModelTestCase):
     
-    EXT = 'json' #also supported: rdf, nt, nj, yaml 
+    EXT = 'json' #also supported: rdf, nt, nj, yaml, mjson
     
     persistentStore = True
     
@@ -29,7 +29,7 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
         return model #self._getModel(model)
 
     def setUp(self):
-        self.tmpdir = tempfile.mkdtemp(prefix="rhizometest")
+        self.tmpdir = tempfile.mkdtemp(prefix="rhizometest."+self.EXT)
         self.tmpfilename = os.path.join(self.tmpdir, 'test.'+self.EXT) 
         
     def tearDown(self):
@@ -77,7 +77,10 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
         modelC = self.getTransactionModel()
         r3c = modelC.getStatements()
         self.assertEqual(set(statements), set(r3c))
-    
+
+class MultipartJsonFileModelTestCase(FileModelTestCase):
+    EXT = 'mjson' 
+
 class TransactionFileModelTestCase(FileModelTestCase):
 
     def getTransactionModel(self):

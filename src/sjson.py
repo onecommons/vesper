@@ -150,10 +150,10 @@ The other direction is needs to be specified in the datatype.
 '''
 
 from rx.python_shim import *
-from rx import RxPath    
+from rx import RxPath
 from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
 from rx.RxPathUtils import encodeStmtObject
-import re
+import re, multipartjson
 
 try:
     import yaml
@@ -271,7 +271,9 @@ def loads(data):
     (Yaml's' "flow"-syntax provides a more forgiving super-set of json, 
     allowing single-quoted strings and trailing commas.)
     '''
-    if use_yaml:
+    if multipartjson.looks_like_multipartjson(data):
+        return multipartjson.loads(data, False)
+    elif use_yaml:
         return yaml.safe_load(data)
     else:
         return json.loads(data)
@@ -285,13 +287,14 @@ class Serializer(object):
     PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
     
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
-            includeObjectMap=False, explicitRefObjects=False):
+            includeObjectMap=False, explicitRefObjects=False, asList=False):
         '''
         '''
         #XXX add replaceRefWithObject option: always, ifShared, never (default: ifShared (current behahavior))
         self.includeObjectMap = includeObjectMap
         self.preserveRdfTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
+        self.asList = asList
         
         self.nameMap = nameMap and nameMap.copy() or {}
         if explicitRefObjects:
@@ -502,7 +505,7 @@ class Serializer(object):
             #deal with sequences first
             resScopes = {}
             for p in res.childNodes:
-                if p.stmt.predicate == PROPSEQ:                    
+                if p.stmt.predicate == PROPSEQ:
                     #this will replace sequences
                     seqprop, childlist = lists[p.stmt.object]
                     key = self.QName(seqprop)
@@ -602,6 +605,12 @@ class Serializer(object):
                     else:
                         parent[key] = ref
 
+        if self.asList:
+            header = dict(sjson=VERSION)
+            if self.nameMap:
+                header['namemap'] = self.nameMap            
+            return [header] + roots.values()
+        
         retval = { 'data': roots.values() }
         if self.includeObjectMap:
             retval['objects'] = results
@@ -676,7 +685,10 @@ class ParseContext(object):
         
     def getProp(self, obj, name, default=None):
         nameprop = getattr(self, name+'Name')        
-        return obj.get(nameprop, default)
+        value = obj.get(nameprop, default)
+        if isinstance(value, multipartjson.BlobRef):
+            value = value.resolve()
+        return value
 
     def getName(self, name):
         return getattr(self, name+'Name')
@@ -755,9 +767,10 @@ class Parser(object):
                 todo = [json]
         else:
             todo = list(json)
-        
-        if not isinstance(todo, list):
-            raise TypeError('whats this?')
+            if todo and 'sjson' in todo[0]:
+                header = todo.pop(0)
+                parseContext = ParseContext.initParseContext(header, parseContext)
+            
         todo = [ (x, getorsetid(x), '') for x in todo]
                 
         def _createNestedList(val):
@@ -904,20 +917,28 @@ class Parser(object):
             return res
         return False
 
-    def deduceObjectType(self, item, parseContext):    
+    def deduceObjectType(self, item, parseContext):
         if isinstance(item, list):
             return item, None, parseContext.context
-        if isinstance(item, dict):
+        if isinstance(item, multipartjson.BlobRef):
+            item = item.resolve()
+        elif isinstance(item, dict):
             size = len(item)
             valueName = parseContext.getName('value')            
             maxsize = 3 + int('context' in item)
             if valueName not in item or size<2 or size>maxsize:
                 return item, None, parseContext.context
             value = item[valueName]
+            if isinstance(value, multipartjson.BlobRef):
+                value = value.resolve()
             context = item.get('context', parseContext.context)
+            if isinstance(context, multipartjson.BlobRef):
+                context = context.resolve()
             objectType = item.get('datatype')
             if not objectType:
                 objectType = item.get('xml:lang')
+            if isinstance(objectType, multipartjson.BlobRef):
+                objectType = objectType.resolve()
             type = item.get('type')
             if type == 'uri':                
                 objectType = OBJECT_TYPE_RESOURCE

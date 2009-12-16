@@ -320,7 +320,7 @@ class NamedGraphManager(RxPath.Model):
             #(but is intended to be reflected in the primary store)
             #we assume there might be multiple statements with different scopes
             #that map to the triple in the primary store
-            #so search the delmodel for live adds, if there's only one,
+            #so search the revisionmodel for live adds, if there's only one,
             #remove the statement from the primary store
             stmts = self.revisionModel.getStatements(*srcstmt[:4])
             stmts.sort(key=self.getTransactionVersion)
@@ -686,7 +686,7 @@ class MergeableGraphManager(NamedGraphManager):
     *** but lexicographic comparison breaks with c2,d2 and b2,d3: b2,d3 is greater (d3 < d2) but compares smaller since "b" < "c". This can be avoided if the branch ids are numbered sequentially -- then more recently created branches will appear at the end of the revision and the shared branches will be compared first.
     *** Order is only signficant between revisions on the same branch, e.g. a3 < a4 is significant but a4,b2,c3 < a4,b3,c2 is not. An heuristic for displaying revision order would be to partition by significant order and order the insignificant revisions by the revision creation timestamp.
     * after merge changeset happens the branch can be dropped from the version string if the branch is retired. This is because there will be no revisions with the retired branchid >= the merge revision.
-    e.g. a1.b2 => merge b + a => a2.b2 => retire b => a3, etc. is ok since will always be > any changeset with b revisions. but once its dropped can no longer compare revisions that didn't contain the branch with merge revision. Note however, if the merged branch was part of the initial revision of the dropped branch then there won't be any revisions like this.
+    e.g. a1.b2 => merge b + a => a2.b2 => retire b => a3, etc. is ok since a3 will always be > any changeset with b revisions. but once it is dropped we can no longer compare revisions that didn't contain the branch with merge revision (e.g. "b" revision without an "a" branch). However note that if the remaining branch was part of the initial revision of the dropped branch then there won't be any revisions like this (e.g if you always branch off a trunk and only retire the branches).
     '''
     
     initialRevision = '0'

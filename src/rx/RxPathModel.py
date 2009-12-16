@@ -709,6 +709,7 @@ def loadRDFFile(path, defaultStatements,context='', incrementHook=None):
       '.nj' : 'ntjson', 
       '.rdf' : 'rdfxml',
       '.json' : 'sjson',
+      '.mjson' : 'mjson',
       '.yaml' : 'yaml',
     }
     #try to guess from extension

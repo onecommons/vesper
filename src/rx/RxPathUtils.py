@@ -388,6 +388,11 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             elif startcontents.startswith('#?zml'):
                 from rx import zml
                 xml = zml.zmlString2xml(contents, mixed=False, URIAdjust=True)
+            else:
+                import multipartjson
+                if multipartjson.looks_like_multipartjson(startcontents):
+                    type = 'mjson'
+                    break
             try:
                 import htmlfilter
                 ns, prefix, local = htmlfilter.getRootElementName(contents)
@@ -475,12 +480,15 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                         raise ParseException("no RDF/XML parser installed")
         elif type == 'json':            
             return _parseRDFJSON(contents, scope), type
-        elif type == 'sjson' or type == 'yaml':
+        elif type == 'sjson' or type == 'yaml' or type == 'mjson':
             import sjson
             if isinstance(contents, str):
                 if type == 'yaml':
                     import yaml
                     contents = yaml.safe_load(contents)
+                elif type == 'mjson':
+                    import multipartjson
+                    content = multipartjson.loads(contents, False)
                 else:
                     contents = json.loads(contents)    
 
@@ -533,7 +541,7 @@ def serializeRDF(statements, type, uri2prefixMap=None, options=None):
 def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     '''    
     type can be one of the following:
-        "rdfxml", "ntriples", "ntjson", "json", "yaml", or "sjson"
+        "rdfxml", "ntriples", "ntjson", "json", "yaml", "mjson", or "sjson"
     '''
     from rx import RxPath
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
@@ -584,16 +592,22 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         writeTriples(statements, stream)
     elif type == 'ntjson':
         writeTriples(statements, stream, writejson=True)
-    elif type == 'sjson':
-        import sjson 
+    elif type == 'sjson' or type == 'mjson':
+        isMjson = type == 'mjson'
+        import sjson, multipartjson
         #XXX use uri2prefixMap
         options = options or {}
-        return json.dump( sjson.tojson(statements, dict(preserveTypeInfo=True)),stream, **options)
+        objs = sjson.tojson(statements, dict(preserveTypeInfo=True, asList=isMjson))
+        if isMjson:
+            return multipartjson.dump(objs, stream, **options)
+        else:
+            return json.dump(objs, stream, **options)
     elif type == 'yaml':
         import sjson, yaml         
         #for yaml options see http://pyyaml.org/wiki/PyYAMLDocumentation#Theyamlpackage
         #also note default_style=" ' | >  for escaped " unescaped ' literal | folded >        
-        #use default_flow_style=False for json-style output
+        #use default_flow_style: True always flow (json-style output), False always block    
+        # default_flow_style=None block if nested collections other flow
         defaultoptions = dict(default_style="'")
         if options: defaultoptions.update(options)
         return yaml.safe_dump( sjson.tojson(statements, dict(preserveTypeInfo=True)), stream, **defaultoptions)
@@ -606,7 +620,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         stream.write(out)
 
 def canWriteFormat(format):
-    if format in ('ntriples', 'ntjson', 'json', 'sjson'):
+    if format in ('ntriples', 'ntjson', 'json', 'sjson', 'mjson'):
         return True
     elif format == 'yaml':
         try:

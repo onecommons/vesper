@@ -245,7 +245,7 @@ class RDFDomTestCase(unittest.TestCase):
 
     def testSerialize(self):
         model = r'''<urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#Contents> .
-<urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#sha1-digest> "ndKxl8RGTmr3u/omnJxVdGnWgXuA=" .
+<urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#sha1-digest> "ndKxl8RGnTmr3u/omnJxVdGnWgXuA=" .
 <urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#hasContent> " llll"@en-US .
 <urn:sha:ndKxl8RGTmr3uomnJxVdGnWgXuA=> <http://rx4rdf.sf.net/ns/archive#content-length> "5"^^http://www.w3.org/2001/XMLSchema#int .
 _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:1 .
@@ -253,11 +253,14 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
 '''
         model = self.loadModel(cStringIO.StringIO(model), 'nt')
         stmts = model.getStatements()
-        for stype in ['ntriples', 'json', 'ntjson', 'sjson']:
+        for stype in ['ntriples', 'json', 'ntjson', 'sjson', 'mjson']:
             #print 'stype', stype
-            json = serializeRDF(stmts, stype)
-            if stype == 'sjson':
-                #print 'json'
+            options = {}
+            if stype == 'mjson':
+                options = dict(blobmax=30)
+            json = serializeRDF(stmts, stype, options=options)
+            if stype in ['sjson', 'mjson']:
+                #print stype
                 #print json
                 options = dict(addOrderInfo=False)
             else:
