@@ -232,7 +232,7 @@ def dump(objs, stream, blobmax=1024, blobmin=30, includeHeader=True,
     count = 0
     def process(chunk, count):
         if chunk[0] == '"' and len(chunk) > blobmin+2 and (
-                        '\n' in chunk or len(chunk) > blobmax+2):
+                        len(chunk) > blobmax+2 or r'\n' in chunk):
             decoded = json.loads(chunk)
             count += 1
             blobid = str(count)

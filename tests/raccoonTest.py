@@ -132,7 +132,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
         self.assertEquals(root.updateResults['_addedStatements'], 
             [('a_resource', 'comment', 'page content.', 'L', ''), 
-            ('a_resource', 'label', 'foo', 'R', '')])
+            ('a_resource', 'label', 'foo', 'L', '')])
         self.assertEquals(root.updateResults['_removedStatements'], [])
         self.assertEquals(root.updateResults['_removed']['data'], [])        
         self.failUnless(self.notifyChangeset)
@@ -331,7 +331,7 @@ class RaccoonTestCase(unittest.TestCase):
                 testState.participant.join(root.txnSvc)
             #generate adds and removes
             store.update([{ 'id' : '1', 'prop' : 2}, 
-            { 'id' : '2', 'prop' : 'test'}
+            { 'id' : '2', 'prop' : '@test'}
             ])                        
             if not before:
                 #join after domStore

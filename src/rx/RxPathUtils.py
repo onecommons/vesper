@@ -499,7 +499,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             if 'useDefaultRefPattern' not in options:
                 options['useDefaultRefPattern']=False
 
-            stmts = sjson.tostatements(contents, options), type
+            stmts = sjson.tostatements(contents, **options), type
             return stmts
         else:
             raise ParseException('unsupported type: ' + type)
@@ -597,7 +597,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         import sjson, multipartjson
         #XXX use uri2prefixMap
         options = options or {}
-        objs = sjson.tojson(statements, dict(preserveTypeInfo=True, asList=isMjson))
+        objs = sjson.tojson(statements, preserveTypeInfo=True, asList=isMjson)
         if isMjson:
             return multipartjson.dump(objs, stream, **options)
         else:
@@ -610,7 +610,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         # default_flow_style=None block if nested collections other flow
         defaultoptions = dict(default_style="'")
         if options: defaultoptions.update(options)
-        return yaml.safe_dump( sjson.tojson(statements, dict(preserveTypeInfo=True)), stream, **defaultoptions)
+        return yaml.safe_dump( sjson.tojson(statements, preserveTypeInfo=True), stream, **defaultoptions)
     elif type == 'json':
         rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
         subjects = [s.subject for s in statements]

@@ -154,21 +154,32 @@ def test():
     '''
     assert_json_and_back_match(src)
 
+    #test circular references
+    src = '''
+    { "id" : "test",
+      "circular" : "@test",
+      "not a reference" : "test",
+      "circularlist" : ["@test", "@test"],
+      "circularlist2" : [["@test"],["@test", "@test"]]
+    }
+    '''
+    assert_json_and_back_match(src)
+
     #test a custom ref pattern 
     #and then serialize with the same pattern
     #they should match
-    src = '''
+    src = r'''
     { "sjson" : "%s",
-    "namemap" : { "refs" : "@(URIREF)"},
+    "namemap" : { "refs" : "ref:(\\w+)"},
     "data" :[{ "id" : "test",
-     "circular" : "@test",
-     "not a reference" : "test",
-      "circularlist" : ["@test", "@test"],
-      "circularlist2" : [["@test"],["@test", "@test"]]
+     "circular" : "ref:test",
+     "not a reference" : "@test",
+      "circularlist" : ["ref:test", "ref:test"],
+      "circularlist2" : [["ref:test"],["ref:test", "ref:test"]]
         }]
     }
     ''' % VERSION
-    serializerNameMap={ "refs" : "@(URIREF)"}
+    serializerNameMap={ "refs" : "ref:(\\w+)"}
     assert_json_and_back_match(src, serializerNameMap=serializerNameMap)
 
     #add statements that are identical to the ones above except they have
@@ -185,21 +196,21 @@ def test():
     
     src = dict(namemap = dict(id='itemid', namemap='jsonmap'),
     itemid = 1,
-    shouldBeARef = 'hello',
-    value = dict(jsonmap=dict(id='anotherid', refs=''),
+    shouldBeARef = '@hello', #default ref pattern is @(URIREF)
+    value = dict(jsonmap=dict(id='anotherid', refs=''), #disable matching
             anotherid = 2,
             #XXX fix assert key != self.ID, (key, self.ID) when serializing
             #id = 'not an id', #this should be treated as a regular property
-            innerobj = dict(anotherid = 3, shouldBeALiteral='hello2'),
-            shouldBeALiteral='hello')
+            innerobj = dict(anotherid = 3, shouldBeALiteral='@hello2'),
+            shouldBeALiteral='@hello')
     )
     #expect different output because we don't use the namemaps when serializing
-    intermediateJson = [{"id": 1, "shouldBeARef": "hello", 
+    intermediateJson = [{"id": 1, "shouldBeARef": "@hello", 
             "value": {"id": 2, 
                 "innerobj": {"id": 3, 
-                            "shouldBeALiteral": {"type": "literal", "value": "hello2"}
+                            "shouldBeALiteral": {"type": "literal", "value": "@hello2"}
                             }, 
-                "shouldBeALiteral": {"type": "literal", "value": "hello"}
+                "shouldBeALiteral": {"type": "literal", "value": "@hello"}
                 }
             }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
@@ -207,7 +218,7 @@ def test():
     src = [{"id": "1",
       "context" : "context1",
       "prop1": 1,
-      "prop2": ["a_ref", "a value"]
+      "prop2": ["@a_ref", "a value"]
     }]
     stmts = [('1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'context1'), StatementWithOrder('1', 'prop2', 'a value', 'L', 'context1', (1,)), StatementWithOrder('1', 'prop2', 'a_ref', 'R', 'context1', (0,)), ('1', 'sjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_1', 'a_ref', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_2', 'a value', 'L', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'sjson:schema#propseqtype', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqprop', 'prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqsubject', '1', 'R', 'context1')]    
     assert Parser().to_rdf(src) == stmts

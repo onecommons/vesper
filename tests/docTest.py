@@ -1,10 +1,10 @@
 import doctest
 import unittest
 import glob
-import jql, jql.engine, multipartjson
+import jql, jql.engine, sjson, multipartjson
 
 suite = unittest.TestSuite()
-for mod in (jql,jql.engine, multipartjson):
+for mod in (jql,jql.engine, sjson, multipartjson):
     suite.addTest(doctest.DocTestSuite(mod))
 
 #for path in glob.glob('../doc/source/*.rst'):

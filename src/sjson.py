@@ -195,24 +195,39 @@ _refpatternregex = re.compile(r'''(.*?)
     (.*)
 ''', re.X)
 
-defaultRefPattern = '(URIREF)'
+#by default we only find refs that match this pattern
+#we picked an unusual pattern because to require ref pattern
+#to be specified then to have false positives
+defaultSerializeRefPattern = '@(URIREF)'
+defaultParseRefPattern = '@(URIREF)'
 
 #XXX add _idrefpatternCache = {}
 
+#XXX add prop refs support: proprefs" : [
+# "foo|bar" , {"(\w{1,5})" : "http://foo/@@"},
+# '!prop1|prop2' , '<(URIREF)>',
+#  '.*' , { 'foo:(\w+)' : "http://foo/@@", 'bar:(\w+)' : "http://bar/@@"}
+#]
+#XXX support multiple patterns as dict or array
+
 #find referenced match and swap them? would need to parse the regex ourself
 def _parseIdRefPattern(pattern, serializing=False):
-    '''
+    r'''
     pattern can be one of:
 
     literal?'('regex')'literal?
     or
+    { pattern : replacement}
+    e.g.
     {'<(URIREF)>' : 'http://foo/@@'}
         
->>> _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'})
-('\\<(\\w+)\\>', 'http://foo/\\1')
->>> _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'}, True)
-('http\\:\\/\\/foo\\/(\\w+)', '<\\1>')
->>> _parseIdRefPattern(r'<(ABSURI)>') ==  ("\\<((?:"+ ABSURI + "))\\>", '\\1')
+>>> p, r = _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'})
+>>> p.pattern, r
+('\\A\\<(\\w+)\\>\\Z', 'http://foo/\\1')
+>>> output, input, r = _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'}, True)
+>>> output.pattern, input.pattern, r
+('\\A\\<(\\w+)\\>\\Z', '\\Ahttp\\:\\/\\/foo\\/(\\w+)\\Z', '<\\1>')
+>>> _parseIdRefPattern(r'<(ABSURI)>')[0].pattern ==  "\\A\\<((?:"+ ABSURI + "))\\>\\Z"
 True
     '''
     if isinstance(pattern, dict):
@@ -302,7 +317,7 @@ class Serializer(object):
                 del self.nameMap['refs']
         else:
             if 'refs' not in self.nameMap:            
-                self.nameMap['refs'] = defaultRefPattern
+                self.nameMap['refs'] = defaultSerializeRefPattern
                         
         idrefpattern = self.nameMap.get('refs')
         if idrefpattern:
@@ -347,7 +362,7 @@ class Serializer(object):
                     return suffix
         return prop
 
-    def serializeRef(self, uri, context):
+    def serializeRef(self, prop, uri, context):
         if not self.explicitRefObjects:
             assert self.inputRefPattern
             #check if the ref looks like our inputRefPattern
@@ -378,7 +393,7 @@ class Serializer(object):
                 childlist.append( obj )
         return propbag, childlist
 
-    def _finishPropList(self, childlist, idrefs, resScope, nestedLists):
+    def _finishPropList(self, prop, childlist, idrefs, resScope, nestedLists):
         from rx import RxPathDom
         for i, node in enumerate(childlist):
             if not isinstance(node, RxPathDom.Node):
@@ -393,7 +408,7 @@ class Serializer(object):
             elif node.uri == RDF_MS_BASE + 'nil' and scope is None:
                 childlist[i] = []
             else: #otherwise it's a resource
-                childlist[i] = self.serializeRef(node.uri, scope)
+                childlist[i] = self.serializeRef(prop, node.uri, scope)
                 if scope is None:
                     #only add ref if we don't have to serialize the pScope
                     idrefs.setdefault(node.uri, []).append(
@@ -402,7 +417,7 @@ class Serializer(object):
                     #if nested list handle it now
                     (seqprop, nestedlist) = nestedLists[node.uri]
                     assert not seqprop
-                    self._finishPropList(nestedlist, idrefs, resScope, nestedLists)
+                    self._finishPropList(prop, nestedlist, idrefs, resScope, nestedLists)
         assert all(not isinstance(node, RxPathDom.Node) for node in childlist)
 
     def createObjectRef(self, id, obj, includeObject, model):
@@ -537,7 +552,7 @@ class Serializer(object):
                     assert key not in ('context', self.ID), (
                                     'property with reserved name %s' % key)
                     #must have be already handled by _setPropSeq
-                    self._finishPropList(currentobj[key], idrefs, resScope, lists)
+                    self._finishPropList(key, currentobj[key], idrefs, resScope, lists)
                     continue 
 
                 nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop
@@ -561,7 +576,7 @@ class Serializer(object):
                     parent[ key ] = []
                 else: #otherwise it's a resource
                     #print 'prop key', key, prop, type(parent)
-                    parent[ key ] = self.serializeRef(obj.uri, pScope)
+                    parent[ key ] = self.serializeRef(key, obj.uri, pScope)
                     if obj.uri != res.uri and pScope is None:
                         #add ref if object isn't same as subject
                         #and we don't have to serialize the pScope
@@ -677,6 +692,7 @@ class ParseContext(object):
                             
         self.idrefpattern, self.refTemplate = None, None
         self._setIdRefPattern(self.refsValue)
+        self.currentProp = None
     
     def nameMapChanges(self):
         if self.parent and self.nameMap != self.parent.nameMap:
@@ -732,11 +748,11 @@ class Parser(object):
     
         nameMap = nameMap or {}
         if useDefaultRefPattern and 'refs' not in nameMap:
-            nameMap['refs'] = defaultRefPattern
+            nameMap['refs'] = defaultParseRefPattern
         self.defaultParseContext = ParseContext(nameMap)
         self.defaultParseContext.context = scope
     
-    def to_rdf(self, json, scope = None):        
+    def to_rdf(self, json, scope = None):
         m = RxPath.MemModel() #XXX        
 
         parentid = ''
@@ -818,6 +834,7 @@ class Parser(object):
                 if parseContext.isReservedPropertyName(prop):
                     continue
                 prop = parseContext._expandqname(prop)
+                parseContext.currentProp = prop
                 val, objecttype, scope = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
                     objid, valParseContext = getorsetid(val) 
@@ -878,6 +895,8 @@ class Parser(object):
                                 
                 else: #simple type
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )
+            parseContext.currentProp = None
+            
         return m.getStatements()
 
     def _blank(self, prefix=''):
@@ -927,6 +946,7 @@ class Parser(object):
             valueName = parseContext.getName('value')            
             maxsize = 3 + int('context' in item)
             if valueName not in item or size<2 or size>maxsize:
+                #not an explicit value object, just return it
                 return item, None, parseContext.context
             value = item[valueName]
             if isinstance(value, multipartjson.BlobRef):
@@ -991,11 +1011,9 @@ class Parser(object):
             for pos, (item, objecttype) in ordered:
                 m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(pos+1), item, objecttype, scope) )
 
-def tojson(statements, options=None):
-    options = options or {}
+def tojson(statements, **options):
     results = Serializer(**options).to_sjson(statements)
     return results#['results']
 
-def tostatements(contents, options=None):
-    options = options or {}
+def tostatements(contents, **options):
     return Parser(**options).to_rdf(contents)
