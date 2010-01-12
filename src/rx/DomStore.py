@@ -19,7 +19,7 @@ def _toStatements(contents):
         if isinstance(contents[0], (tuple, RxPath.BaseStatement)):
             return contents, None #looks like a list of statements
     #assume sjson:
-    return sjson.tostatements(contents), contents
+    return sjson.tostatements(contents, setBNodeOnObj=True), contents
 
 class DomStore(transactions.TransactionParticipant):
     '''
@@ -345,7 +345,7 @@ class BasicStore(DomStore):
             self.addTrigger(stmts, jsonrep)
         
         self.model.addStatements(stmts)
-        return stmts
+        return jsonrep or stmts
         
     def remove(self, removes):
         '''
@@ -363,6 +363,7 @@ class BasicStore(DomStore):
             self.removeTrigger(stmts, jsonrep)
             
         self.model.removeStatements(stmts)
+        return jsonrep or stmts
 
     def update(self, updates):
         '''

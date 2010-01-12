@@ -147,6 +147,22 @@ class StatementWithOrder(Statement):
     def __repr__(self):
         return 'StatementWithOrder'+repr((self+(self.listpos,)))
 
+class ResourceUri(object):
+    '''
+    Marker class
+    '''
+    @staticmethod
+    def new(s):
+        if isinstance(s, unicode):
+            return ResourceUriU(s)
+        else:
+            return ResourceUriS(s)
+
+class ResourceUriS(str, ResourceUri):
+    __slots__ = ()
+
+class ResourceUriU(unicode, ResourceUri):
+    __slots__ = ()
 
 class ParseException(utils.NestedException):
     def __init__(self, msg = ''):                

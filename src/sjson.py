@@ -770,6 +770,8 @@ class Parser(object):
                 objId = self._blank(prefix+'object:'+suffix)
                 if self.setBNodeOnObj:
                     obj[ newParseContext.getName('id') ] = objId
+            elif not isinstance(objId, (unicode, str)):
+                objId = str(objId) #OBJECT_TYPE_RESOURCEs need to be strings
             return objId, newParseContext
 
         if isinstance(json, (str,unicode)):
@@ -837,7 +839,7 @@ class Parser(object):
                 parseContext.currentProp = prop
                 val, objecttype, scope = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
-                    objid, valParseContext = getorsetid(val) 
+                    objid, valParseContext = getorsetid(val)
                     m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
                     todo.append( (val, (objid, valParseContext), parentid) )
                 elif isinstance(val, list):
@@ -959,13 +961,13 @@ class Parser(object):
                 objectType = item.get('xml:lang')
             if isinstance(objectType, multipartjson.BlobRef):
                 objectType = objectType.resolve()
-            type = item.get('type')
-            if type == 'uri':                
+            itemtype = item.get('type')
+            if itemtype == 'uri':                
                 objectType = OBJECT_TYPE_RESOURCE
-            elif type == 'bnode':
+            elif itemtype == 'bnode':
                 return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
             if not objectType:
-                if type == 'literal':
+                if itemtype == 'literal':
                     return value, OBJECT_TYPE_LITERAL, context
                 else:
                     #looks like it wasn't an explicit value
@@ -981,12 +983,14 @@ class Parser(object):
             return 'null', JSON_BASE+'null', context
         elif isinstance(item, bool):
             return (item and 'true' or 'false'), XSD+'boolean', context
-        elif isinstance(item, int):
+        elif isinstance(item, (int, long)):
             return unicode(item), XSD+'integer', context
         elif isinstance(item, float):
             return unicode(item), XSD+'double', context
-        else:
+        elif isinstance(item, (unicode, str)):
             return item, OBJECT_TYPE_LITERAL, context
+        else:            
+            raise RuntimeError('parse error: unexpected object type: %s (%r)' % (type(item), item)) 
 
     def generateListResources(self, m, lists):
         '''
