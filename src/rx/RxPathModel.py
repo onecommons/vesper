@@ -597,7 +597,6 @@ class FileModel(MemModel):
         self.defaultStatements = defaultStatements
         ntpath, stmts, format = loadRDFFile(source, defaultStatements,
                                         context, incrementHook=incrementHook)
-        
         if self.canWriteFormat(format):
             self.path = source
             self.format = format
@@ -655,20 +654,22 @@ class IncrementalNTriplesFileModelBase(FileModel):
         if changelist is None:
             changelist = self.changelist = []
         return changelist
-
-    def addStatement(self, statement ):
+        
+    def addStatement(self, statement):
         '''add the specified statement to the model''' 
         added = super(IncrementalNTriplesFileModelBase, self).addStatement(statement)
         changelist = self._getChangeList()
-        if added and changelist is not None:
+        #added is None if updateAdvisory == False
+        if (added is None or added) and changelist is not None:
             changelist.append( (statement,) )
         return added
 
     def removeStatement(self, statement ):
         '''add the specified statement to the model'''               
         removed = super(IncrementalNTriplesFileModelBase, self).removeStatement(statement)
+        #removed is None if updateAdvisory == False
         changelist = self._getChangeList()
-        if removed and changelist is not None:
+        if (removed is None or removed) and changelist is not None:
             changelist.append( (Removed, statement) )
         return removed
 

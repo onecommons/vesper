@@ -1302,7 +1302,8 @@ class SimpleQueryEngine(object):
                 #sjson parser will never generate a proplist resource for these
                 #(instead it'll create a nested list resource)
                 return (False, listval)
-            rows = self.findPropList(context, subject, pred)
+            #XXX handle scope here?
+            rows = sjson.findPropList(context.initialModel, subject, pred)
             ordered = []
             rows = list(rows)
             if rows:

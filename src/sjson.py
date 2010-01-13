@@ -279,6 +279,19 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, valueName='value'):
     else:
         return data
 
+def findPropList(model, subject, predicate, objectValue=None, objectType=None, scope=None):
+    #by default search for special proplist bnode pattern
+    #other models/mappings may need to implement a different way to figure this out
+    listid = model.bnodePrefix+'j:proplist:'+subject+';'+predicate
+    rows = model.filter({
+        0 : listid,
+        2 : objectValue,
+        3 : objectType,
+        4 : scope
+    })
+    #print 'findprop', listid, list(rows)
+    return rows
+
 def loads(data):
     '''
     Load a json-like string with either the json or yaml library, 
@@ -374,6 +387,7 @@ class Serializer(object):
         
         if self.explicitRefObjects or not match or context is not None:
             #XXX use valueName
+            assert isinstance(uri, (str, unicode))
             return encodeStmtObject(uri, OBJECT_TYPE_RESOURCE, scope=context)
         else:
             assert self.refTemplate
@@ -426,6 +440,8 @@ class Serializer(object):
         '''
         if includeObject:
             if obj is not None:
+                assert isinstance(obj, (str,unicode,dict,list,int,long,bool)
+                                             ), '%r is not a json type' % obj
                 return obj
             if model:
                 #look up and serialize the resource
