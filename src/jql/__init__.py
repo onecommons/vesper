@@ -76,7 +76,7 @@ def runQuery(query, model):
     (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=False):
+def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=False, captureErrors=False):
     '''
     Returns a dict with the following keys:
         
@@ -114,12 +114,17 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
             #   #need a context.datamap
             #   sjson.addHeader(context.datamap, response)
             response['results'] = results
-        except QueryException, qe:            
-            errors.append('error: %s' % qe.message)
+        except QueryException, qe:
+            if captureErrors:
+                errors.append('error: %s' % qe.message)
+            else:
+                raise
         except Exception, ex:
-            import traceback
-            errors.append("unexpected exception: %s" % traceback.format_exc())
-        
+            if captureErrors:
+                import traceback
+                errors.append("unexpected exception: %s" % traceback.format_exc())
+            else:
+                raise
     response['errors'] = errors
     if explain:
         response['explain'] = explain.getvalue()        
