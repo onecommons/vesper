@@ -18,12 +18,12 @@ except NameError:
 try:
     from functools import partial
 except ImportError:
-    def partial(func, *args, **keywords):
+    def partial(fn_, *args, **keywords):
             def newfunc(*fargs, **fkeywords):
                 newkeywords = keywords.copy()
                 newkeywords.update(fkeywords)
-                return func(*(args + fargs), **newkeywords)
-            newfunc.func = func
+                return fn_(*(args + fargs), **newkeywords)
+            newfunc.func = fn_
             newfunc.args = args
             newfunc.keywords = keywords
             return newfunc
