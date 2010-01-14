@@ -933,7 +933,7 @@ class SimpleQueryEngine(object):
     queryFunctions.addFunc('recurse', recurse, Tupleset, needsContext=True)
     queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
     queryFunctions.addFunc('if', ifFunc, ObjectType, lazy=True)
-    queryFunctions.addFunc('isref', lambda a: a and True or False, BooleanType)
+    queryFunctions.addFunc('isref', lambda a: isinstance(a, RxPath.ResourceUri), BooleanType)
     for name, func in [('count', lambda a: len(a)), 
                         ('sum', lambda a: sum(a)),
                        ('avg', lambda a: sum(a)/len(a)), 
@@ -1302,7 +1302,8 @@ class SimpleQueryEngine(object):
                 #sjson parser will never generate a proplist resource for these
                 #(instead it'll create a nested list resource)
                 return (False, listval)
-            rows = self.findPropList(context, subject, pred)
+            #XXX handle scope here?
+            rows = sjson.findPropList(context.initialModel, subject, pred)
             ordered = []
             rows = list(rows)
             if rows:
@@ -1446,7 +1447,6 @@ class SimpleQueryEngine(object):
 
     def _findSimplePredicates(self, op, context):
         simpleops = (jqlAST.Eq,) #only Eq supported for now
-        #XXX support isref() by mapping to objecttype
         complexargs = []
         simplefilter = {}
         for pred in op.args:
@@ -1544,9 +1544,11 @@ class SimpleQueryEngine(object):
     def buildObject(self, context, v, handleNil):
         if handleNil and v == RDF_MS_BASE+'nil': 
             #special case to force empty list
-            return []
+            return []        
         refFunc = self.queryFunctions.getOp('isref')
-        isref = refFunc.execFunc(context, v)    
+        isrefQ = refFunc.execFunc(context, v)    
+        isref = isinstance(v, RxPath.ResourceUri)
+        assert isrefQ == isref, "q %s r %s" % (isrefQ,isref)
         bnodeFunc = self.queryFunctions.getOp('isbnode') 
         isbnode = bnodeFunc.execFunc(context, v)           
         if ( (isref and context.depth > 0) or isbnode):

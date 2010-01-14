@@ -115,7 +115,12 @@ class Model(Tupleset):
                 kw[labels[key] ] = value
         kw['hints'] = hints
         for stmt in self.getStatements(**kw):
-            yield (stmt[0], stmt[1], sjson.toJsonValue(stmt[2], stmt[3]), stmt[3], stmt[4], stmt.listpos)
+            objectType = stmt[3]
+            if objectType == OBJECT_TYPE_RESOURCE:
+                value = ResourceUri.new(stmt[2])
+            else:
+                value = sjson.toJsonValue(stmt[2], objectType)
+            yield (stmt[0], stmt[1], value, stmt[3], stmt[4], stmt.listpos)
 
     def update(self, rows):
         for row in rows:
@@ -286,6 +291,7 @@ class MemModel(Model):
         '''add the specified statement to the model'''            
         if not isinstance(stmt, BaseStatement):
             stmt = Statement(*stmt)
+        assert isinstance(stmt.object, (str, unicode)), 'bad object %r, objectType %s' % (stmt.object, stmt.objectType)
         if stmt in self.by_c.get(stmt[4], {}).get(stmt[0], []):
             return False#statement already in
         self.by_s.setdefault(stmt[0], []).append(stmt)
@@ -591,7 +597,6 @@ class FileModel(MemModel):
         self.defaultStatements = defaultStatements
         ntpath, stmts, format = loadRDFFile(source, defaultStatements,
                                         context, incrementHook=incrementHook)
-        
         if self.canWriteFormat(format):
             self.path = source
             self.format = format
@@ -649,20 +654,22 @@ class IncrementalNTriplesFileModelBase(FileModel):
         if changelist is None:
             changelist = self.changelist = []
         return changelist
-
-    def addStatement(self, statement ):
+        
+    def addStatement(self, statement):
         '''add the specified statement to the model''' 
         added = super(IncrementalNTriplesFileModelBase, self).addStatement(statement)
         changelist = self._getChangeList()
-        if added and changelist is not None:
+        #added is None if updateAdvisory == False
+        if (added is None or added) and changelist is not None:
             changelist.append( (statement,) )
         return added
 
     def removeStatement(self, statement ):
         '''add the specified statement to the model'''               
         removed = super(IncrementalNTriplesFileModelBase, self).removeStatement(statement)
+        #removed is None if updateAdvisory == False
         changelist = self._getChangeList()
-        if removed and changelist is not None:
+        if (removed is None or removed) and changelist is not None:
             changelist.append( (Removed, statement) )
         return removed
 

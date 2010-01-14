@@ -83,7 +83,7 @@ def _servefile(kw, retval, uri):
     server = kw.__server__
     for prefix in server.static_path:            
         filepath = os.path.join(prefix.strip(), path)        
-        print 'filepath', filepath
+        #print 'filepath', filepath
         #check to make sure the path url wasn't trying to sneak outside the path (e.g. by using "..")
         if server.SECURE_FILE_ACCESS:
             if not os.path.abspath(filepath).startswith(os.path.abspath(prefix)):

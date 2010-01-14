@@ -149,7 +149,8 @@ def test():
     "float" : 1.0,
       "integer" : 2,
       "null" : null,
-      "list" : [ 1.0, 2, null, 0, -1]
+      "list" : [ 1.0, 2, null, 0, -1],
+      "created": 1262662188016
     }
     '''
     assert_json_and_back_match(src)
@@ -205,9 +206,10 @@ def test():
             shouldBeALiteral='@hello')
     )
     #expect different output because we don't use the namemaps when serializing
-    intermediateJson = [{"id": 1, "shouldBeARef": "@hello", 
-            "value": {"id": 2, 
-                "innerobj": {"id": 3, 
+    #and because ids are coerced to strings
+    intermediateJson = [{"id": "1", "shouldBeARef": "@hello", 
+            "value": {"id": "2", 
+                "innerobj": {"id": "3", 
                             "shouldBeALiteral": {"type": "literal", "value": "@hello2"}
                             }, 
                 "shouldBeALiteral": {"type": "literal", "value": "@hello"}

@@ -19,7 +19,7 @@ def _toStatements(contents):
         if isinstance(contents[0], (tuple, RxPath.BaseStatement)):
             return contents, None #looks like a list of statements
     #assume sjson:
-    return sjson.tostatements(contents), contents
+    return sjson.tostatements(contents, setBNodeOnObj=True), contents
 
 class DomStore(transactions.TransactionParticipant):
     '''
@@ -145,15 +145,6 @@ class BasicStore(DomStore):
             #from what's stored (this requires a context-aware store)
             model = RxPath.MultiModel(model, appmodel)
         
-        #turn on update logging if a log file is specified, which can be used to 
-        #re-create the change history of the store
-        if self.transactionLog:
-            if model.updateAdvisory:
-                logClass = RxPath.IncrementalNTriplesFileModelBase
-            else:
-                logClass = RxPath.IncrementalNTriplesFileModel
-            model = RxPath.MirrorModel(model, logClass(self.transactionLog, []))
-
         if self.saveHistory:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
             self.model = self.graphManager = RxPathGraph.MergeableGraphManager(model, 
@@ -164,6 +155,17 @@ class BasicStore(DomStore):
         else:
             self.model = self._addModelTxnParticipants(model)[0]
             self.graphManager = None
+
+        #turn on update logging if a log file is specified, which can be used to 
+        #re-create the change history of the store
+        if self.transactionLog:
+            #XXX doesn't log history model if store is split
+            #XXX doesn't log models that are TransactionParticipants themselves
+            #XXX doesn't log models that don't support updateAdvisory 
+            if isinstance(self.model, ModelWrapper):
+                self.model.adapter.logPath = self.transactionLog
+            else:                
+                self.log.warning("transactionLog is configured but not compatible with model")
         
         if self.changesetHook:
             assert self.saveHistory, "replication requires saveHistory to be on"
@@ -345,7 +347,7 @@ class BasicStore(DomStore):
             self.addTrigger(stmts, jsonrep)
         
         self.model.addStatements(stmts)
-        return stmts
+        return jsonrep or stmts
         
     def remove(self, removes):
         '''
@@ -361,8 +363,19 @@ class BasicStore(DomStore):
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)
-            
-        self.model.removeStatements(stmts)
+        
+        if self.model.canHandleStatementWithOrder:
+            self.model.removeStatements(stmts)
+        else:
+            import sjson
+            for stmt in stmts:
+                #check if the statement is part of a json list, remove that list item too
+                rows = list(sjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
+                for row in rows:
+                    self.model.removeStatement(RxPath.Statement(*row[:5]))
+                self.model.removeStatement(stmt)
+        
+        return jsonrep or stmts
 
     def update(self, updates):
         '''
@@ -457,9 +470,9 @@ class BasicStore(DomStore):
 
         return addStmts, removals
 
-    def query(self, query, bindvars=None, explain=None, debug=False, forUpdate=False, **kw):
+    def query(self, query, bindvars=None, explain=None, debug=False, forUpdate=False, captureErrors=False):
         import jql
-        return jql.getResults(query, self.model,bindvars,explain,debug,forUpdate)
+        return jql.getResults(query, self.model,bindvars,explain,debug,forUpdate,captureErrors)
 
     def merge(self,changeset): 
         assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
@@ -505,7 +518,9 @@ class BasicStore(DomStore):
 class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
     '''
     Adapts models which doesn't support transactions or only support simple (one-phase) transactions.
-    '''    
+    '''
+    logPath = None
+    
     def __init__(self, model):
         self.model = model
         self.committed = False
@@ -526,6 +541,8 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
     def commitTransaction(self, txnService):
         #already commited, nothing to do
         assert self.committed
+        if self.logPath:
+            self.logChanges(txnService)
     
     def abortTransaction(self, txnService):
         if not self.committed and not self.model.autocommit:            
@@ -544,6 +561,26 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
                     self.model.commit()
                 except:
                     pass
+
+    def logChanges(self, txnService):
+        import time
+        outputfile = file(self.logPath, "a+")
+        changelist = self.undo
+        def unmapQueue():
+            for stmt in changelist:
+                if stmt[0] is RxPath.Removed:
+                    yield RxPath.Removed, stmt[1]
+                else:
+                    yield stmt[0]
+                    
+        comment = txnService.getInfo().get('source','')
+        if isinstance(comment, (list, tuple)):                
+            comment = comment and comment[0] or ''
+            
+        outputfile.write("#begin " + comment + "\n")            
+        RxPath.writeTriples( unmapQueue(), outputfile)            
+        outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
+        outputfile.close()
 
     def finishTransaction(self, txnService, committed):
         super(TwoPhaseTxnModelAdapter,self).finishTransaction(txnService, committed)

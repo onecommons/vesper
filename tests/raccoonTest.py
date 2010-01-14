@@ -165,6 +165,25 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(root2.domStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
+    def testRemoves(self):
+        store = raccoon.createStore({
+        "id": "hello", 
+        "tags": [
+          { "id": "tag1" }, 
+          { "id": "tag2"}
+        ]})
+        #print 'store', store.query('{*}')        
+        #utils.debugp( 'testremove', store.model.by_s)                
+        #print 'hello', store.model.by_s.get('hello')
+        store.remove({"id":"hello","tags":"@tag2"})
+        #utils.debugp('hello', store.model.by_s.get('hello'))
+        import sjson
+        self.assertEquals(sjson.tojson(store.model.getStatements())['data'],
+            [{"id": "hello", 
+               "tags": ["@tag1"]
+            }])            
+        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
+        
     def testMerge(self):
         store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')        

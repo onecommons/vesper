@@ -351,6 +351,7 @@ t.model = modelFromJson([
   TYPE : "Tag"
 },
 {'id' : 'commons',
+  "label" : "commons",
    "subsumedby" : "projects"
 },
 {'id':'rhizome',
@@ -474,14 +475,14 @@ t('''
 where (?tag in ('foo', 'commons'))
 }
 ''',
-[{'id': 'commons', 'subsumedby': 'projects'}])
+[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}])
 
 t('''
 { *
 where (id = ?tag and ?tag in ('foo', 'commons'))
 }
 ''',
-[{'id': 'commons', 'subsumedby': 'projects'}])
+[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}])
 
 t('''
 { id
@@ -562,11 +563,11 @@ t('''{ content,
  where ( subject = ?tag) }
 ''',
 [
-{'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+{'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}],
   'content': 'some text about the commons',
   },
 
- {'blah': [{'id': 'commons', 'subsumedby': 'projects'}],
+ {'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}],
   'content': 'some more text about the commons',
   },  
   ]
@@ -655,6 +656,10 @@ t('''{*}''')
 t.group = 'depth'
 t('''{*
 DEPTH 1
+}''')
+
+t('''{*
+DEPTH 10
 }''')
 
 t.model = modelFromJson([
