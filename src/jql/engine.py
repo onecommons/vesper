@@ -220,7 +220,7 @@ import jqlAST
 
 from rx import RxPath
 from rx.RxPath import RDF_MS_BASE
-from rx.utils import flattenSeq, flatten
+from rx.utils import flattenSeq, flatten, debugp
 import operator, copy, sys, pprint, itertools
 from jql import *
 import sjson
@@ -1018,6 +1018,7 @@ class SimpleQueryEngine(object):
         #currrentRow is [key, values]
         currentRow = context.currentRow
         currentTupleset = context.currentTupleset
+        #print 'currentRow', debugp(currentRow), 'currentTp', debugp(currentTupleset.columns)
         columns = currentTupleset.columns[1].type.columns
         currentProjects = context.currentProjects
         
@@ -1360,10 +1361,10 @@ class SimpleQueryEngine(object):
     def _evalJoin(self, op, context):
         #XXX context.currentTupleset isn't set when returned
         args = sorted(op.args, key=lambda arg: 
-                #put outer joins last
-                (arg.join == 'l', arg.op.cost(self, context)) )
+                #put non-inner joins last
+                (arg.join != 'i', arg.op.cost(self, context)) )
         
-        if not args or args[0].join == 'l':
+        if not args or args[0].join != 'i':
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
             #tmpop = jqlAST.JoinConditionOp(
             #    jqlAST.Filter(jqlAST.Not(

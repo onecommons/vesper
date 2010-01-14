@@ -338,24 +338,28 @@ t.model = modelFromJson([
  RDF_SCHEMA_BASE+'range' : 'Tag'
 },
 { "id" : "actions",
-  TYPE : "Tag"
+  "type" : "Tag"
 },
 { "id" : "todo",
-  "subsumedby" : "actions"
+  "subsumedby" : "actions",
+    "type" : "Tag"
 },
 { "id" : "toread",
    "label" : "to read",
-   "subsumedby" : "actions"
+   "subsumedby" : "actions",
+    "type" : "Tag"
 },
 { "id" : "projects",
-  TYPE : "Tag"
+  "type" : "Tag"
 },
 {'id' : 'commons',
   "label" : "commons",
-   "subsumedby" : "projects"
+   "subsumedby" : "projects",
+    "type" : "Tag"
 },
 {'id':'rhizome',
- "subsumedby" : "projects"
+ "subsumedby" : "projects",
+  "type" : "Tag"
 },
 {
 'subject': 'commons',
@@ -475,14 +479,14 @@ t('''
 where (?tag in ('foo', 'commons'))
 }
 ''',
-[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}])
+[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}])
 
 t('''
 { *
 where (id = ?tag and ?tag in ('foo', 'commons'))
 }
 ''',
-[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}])
+[{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}])
 
 t('''
 { id
@@ -563,11 +567,11 @@ t('''{ content,
  where ( subject = ?tag) }
 ''',
 [
-{'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}],
+{'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}],
   'content': 'some text about the commons',
   },
 
- {'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects'}],
+ {'blah': [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}],
   'content': 'some more text about the commons',
   },  
   ]
@@ -651,6 +655,54 @@ t('''
 )
 
 t('''{*}''')
+
+t.group = 'not'
+
+t('''
+{ *
+where (type = 'Tag' and not subsumedby)
+}
+''',
+[{'id': 'actions', 'type': 'Tag'}, {'id': 'projects', 'type': 'Tag'}])
+
+t('''
+{ *
+where (not subsumedby and type = 'Tag')
+}
+''',
+[{'id': 'actions', 'type': 'Tag'}, {'id': 'projects', 'type': 'Tag'}])
+
+t('''
+{ *
+where (not subsumedby)
+}
+''',
+[{'content': 'some text about the commons', 'subject': 'commons'},
+ {'content': 'some more text about the commons', 'subject': 'commons'},
+ {'content': 'some text about rhizome', 'subject': 'rhizome'},
+ {'id': 'actions', 'type': 'Tag'},
+ {u'http://www.w3.org/2000/01/rdf-schema#domain': 'Tag',
+  u'http://www.w3.org/2000/01/rdf-schema#range': 'Tag',
+  u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf': u'http://www.w3.org/2000/01/rdf-schema#subClassOf',
+  'id': 'subsumedby'},
+ {u'http://www.w3.org/2000/01/rdf-schema#subClassOf': u'http://www.w3.org/2000/01/rdf-schema#Class',
+  'id': 'Tag'},
+ {'id': 'projects', 'type': 'Tag'}]
+)
+
+t('''
+{ *
+where (type = 'Tag' and not not subsumedby)
+}
+''',
+[{'id': 'toread', 'label': 'to read', 'subsumedby': 'actions', 'type': 'Tag'},
+ {'id': 'todo', 'subsumedby': 'actions', 'type': 'Tag'},
+ {'id': 'commons',
+  'label': 'commons',
+  'subsumedby': 'projects',
+  'type': 'Tag'},
+ {'id': 'rhizome', 'subsumedby': 'projects', 'type': 'Tag'}]
+)
 
 #XXX test circularity
 t.group = 'depth'

@@ -383,6 +383,9 @@ class _ParseState(object):
                             #we want this to only include rows when the property value evaluates to true
                         #    assert len(child.fields) == 1 and not child.varref
                         #    projectop.appendArg(self.getFuncOp('bool', Project(PROPERTY) ))
+                    elif child.parent is root and isinstance(root, Not):
+                        joinType = JoinConditionOp.ANTI
+                        skipRoot = True
                 elif isinstance(child, Label):
                     labels.setdefault(child.name,[]).append(child)
 
