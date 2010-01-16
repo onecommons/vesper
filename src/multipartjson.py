@@ -37,6 +37,8 @@ class Blob(object):
                     break
             if done:
                 break
+        if isinstance(self.data, unicode):
+            self.data = self.data.encode('utf8')
         
         stream.write("= %s %s\n%s%s\n" 
             % (self.id, endmarker, self.data, endmarker) )

@@ -1710,6 +1710,8 @@ class SimpleQueryEngine(object):
             return context.bindvars[op.name]
         except KeyError:
             raise QueryException('bindvar "%s" not found' % op.name)
+        #else:
+        #    del context.bindvarUnused[op.name]
 
     def costBindVar(self, op, context):
         return 0.0

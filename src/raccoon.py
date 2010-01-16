@@ -261,7 +261,8 @@ class RequestProcessor(utils.object_with_threadlocals):
         if self.template_path:
             from mako.lookup import TemplateLookup
             self.template_loader = TemplateLookup(directories=self.template_path, 
-                module_directory='mako_modules', output_encoding='utf-8', encoding_errors='replace')
+                default_filters=['decode.utf8'], module_directory='mako_modules',
+                output_encoding='utf-8', encoding_errors='replace')
         self.requestDispatcher = Requestor(self)
         #self.resolver = SiteUriResolver(self)
         self.loadModel()

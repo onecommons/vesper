@@ -540,7 +540,7 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream = urllib2.urlopen(uri)
     contents = stream.read()
     stream.close()
-    return parseRDFFromString(contents, modelbaseuri, type, scope, options, getType)
+    return parseRDFFromString(contents.decode('utf8'), modelbaseuri, type, scope, options, getType)
      
 def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass=None):
     from rx import RxPath, RxPathSchema
