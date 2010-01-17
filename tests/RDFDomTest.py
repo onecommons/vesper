@@ -10,34 +10,15 @@ import cStringIO
 from pprint import *
 
 from rx.RxPath import *
-
-testHistory = 'split' #'single', 'split' or '' (for no graph manager)
-
 from rx import RxPathGraph
-graphManagerClass = RxPathGraph.MergeableGraphManager
-graphManagerClass = RxPathGraph.NamedGraphManager
 
-def RDFDoc(model, nsMap, testHistory=testHistory):    
-    modelUri =generateBnode()
-    if testHistory:
-        if testHistory == 'single':
-            revmodel = None
-        else:
-            assert testHistory == 'split'
-            revmodel = TransactionMemModel()
-        graphManager = graphManagerClass(model, revmodel, modelUri)
-    else:
-        graphManager = None
-    return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
-                                    graphManager=graphManager)
 
 import time
 from rx.RxPathUtils import _parseTriples as parseTriples
 from rx.utils import pprintdiff
     
 class RDFDomTestCase(unittest.TestCase):
-    ''' tests rdfdom, rxpath, rxslt, and xupdate on a rdfdom
-        tests models with:
+    ''' tests models with:
             bNodes
             literals: empty (done for xupdate), xml, text with invalid xml characters, binary
             advanced rdf: rdf:list, containers, datatypes, xml:lang
@@ -47,6 +28,10 @@ class RDFDomTestCase(unittest.TestCase):
             RDF Schema support
         diffing and merging models
     '''
+
+    testHistory = ''#split' #'single', 'split' or '' (for no graph manager)
+    graphManagerClass = RxPathGraph.MergeableGraphManager
+    graphManagerClass = RxPathGraph.NamedGraphManager
 
     model1 = r'''#test
 <http://4suite.org/rdf/banonymous/5c79e155-5688-4059-9627-7fee524b7bdf> <http://rx4rdf.sf.net/ns/archive#created-on> "1057790527.921" .
@@ -111,6 +96,20 @@ class RDFDomTestCase(unittest.TestCase):
             raise "unrecognized driver: " + DRIVER
         #from rx import RxPath
         #RxPath.useQueryEngine = True
+
+    def RDFDoc(self, model, nsMap):    
+        modelUri =generateBnode()
+        if self.testHistory:
+            if self.testHistory == 'single':
+                revmodel = None
+            else:
+                assert self.testHistory == 'split'
+                revmodel = TransactionMemModel()
+            graphManager = self.graphManagerClass(model, revmodel, modelUri)
+        else:
+            graphManager = None
+        return createDOM(model, nsMap, modelUri, schemaClass=RDFSSchema, 
+                                        graphManager=graphManager)
 
     def loadFtModel(self, source, type='nt'):
         if type == 'rdf':
@@ -202,7 +201,7 @@ class RDFDomTestCase(unittest.TestCase):
                u'http://www.w3.org/2002/07/owl#':u'owl',
                u'http://purl.org/dc/elements/1.1/#':u'dc',
                }
-        return RDFDoc(model, self.nsMap)
+        return self.RDFDoc(model, self.nsMap)
        
     def tearDown(self):
         if DRIVER == 'Tyrant':
@@ -291,8 +290,11 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
 '''
         rdfDom = self.getModel(cStringIO.StringIO(model) )
         #we're testing the model directly so set this True:
-        rdfDom.schema.findCompatibleStatements = True
-        model = rdfDom.model.models[0].managedModel
+        rdfDom.schema.findCompatibleStatements = True        
+        if isinstance(rdfDom.model.models[0], RxPathGraph.NamedGraphManager):
+            model = rdfDom.model.models[0].managedModel
+        else:
+            model = rdfDom.model.models[0]
         #print 'all',  model.getStatements()
         def getcount(obj):
             stmts = rdfDom.model.getStatements(
@@ -534,6 +536,22 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
         statements, nodesToRemove = self._mergeAndUpdate(updateDom ,
             ['http://4suite.org/rdf/anonymous/xde614713-e364-4c6c-b37b-62571407221b_2'])
         self.failUnless( not statements and not nodesToRemove )
+
+class GraphRDFDomTestCase(RDFDomTestCase):
+    testHistory = 'single'#, 'split' or '' (for no graph manager)
+    graphManagerClass = RxPathGraph.NamedGraphManager
+
+class MergeableGraphRDFDomTestCase(RDFDomTestCase):
+    testHistory = 'single'#, 'split' or '' (for no graph manager)
+    graphManagerClass = RxPathGraph.MergeableGraphManager
+
+class SplitGraphRDFDomTestCase(RDFDomTestCase):
+    testHistory = 'split' #'single', 'split' or '' (for no graph manager)
+    graphManagerClass = RxPathGraph.NamedGraphManager
+
+class MergeableSplitGraphRDFDomTestCase(RDFDomTestCase):
+    testHistory = 'split' #'single', 'split' or '' (for no graph manager)
+    graphManagerClass = RxPathGraph.MergeableGraphManager
                         
 DRIVER = 'Mem'
 

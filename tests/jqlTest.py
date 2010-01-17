@@ -38,18 +38,38 @@ t.model = modelFromJson([
 
 t.group = 'smoke'
 
-t('''
-[*]
-''',
-[['bar'], ['bar'], ['1', '2'], ['1', '3']]
-)
-
 t('{*}',
 [{'foo': 'bar', 'id': '3'},
  {'foo': 'bar', 'id': '2'},
  {'child': '2', 'id': '_:2', 'parent': '1'},
  {'child': '3', 'id': '_:1', 'parent': '1'} 
 ])
+
+t('''
+[*]
+''',
+[['bar'], ['bar'], ['1', '2'], ['1', '3']]
+)
+
+t("{id}", [{'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}])
+
+t("{}", [{}]) 
+
+t("(foo)",['bar', 'bar']) 
+
+t("(id)",['3', '2', '_:2', '_:1'])
+
+t("('constant')", ['constant'])
+
+#XXX AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+skip('''
+{ "staticprop" : ["foo"] }
+''',[{ "staticprop" : ["foo"] }])
+
+t('''
+{ "staticprop" : "foo" }
+''', 
+[{'staticprop': 'foo'}])
 
 t('''{ * where ( foo > 'bar') }''', [])
 
@@ -221,11 +241,22 @@ t('''
 [{'blah': 'bar', 'id': '3'}, {'blah': 'bar', 'id': '2'}]
 )
 
+t(r'''
+("unicode\x0alinefeed")
+''', ["unicode\nlinefeed"])
+
+t(r'''
+("unicode\u000alinefeed")
+''', ["unicode\nlinefeed"])
+
 syntaxtests = [
 #test qnames:
-'''{ rdfs:comment:* where(rdfs:label='foo')}''',
+'''{ rdfs:comment:* where(rdfs:label='foo')}''', #propname : *
 '''
 [rdfs:comment where(rdfs:label='foo')]
+''',
+'''
+(rdfs:comment where(rdfs:label='foo'))
 '''
 ]
 

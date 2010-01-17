@@ -89,7 +89,7 @@ class TransactionFileModelTestCase(FileModelTestCase):
 
 class IncrementalFileModelTestCase(FileModelTestCase):
 
-    EXT = 'nt' #XXX investigate why EXT = 'json' fails
+    EXT = 'nt' #XXX EXT = 'json' fails because model uses the default writeTriples
     
     def getModel(self):
         #print 'opening', self.tmpfilename

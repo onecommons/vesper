@@ -124,13 +124,13 @@ def t_FLOAT(t):
     return t
 
 def t_STRING(t):
-    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:\\x[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:\\x[0-9a-fA-F]+)|(?:\\.))*')'''
-    t.value = t.value[1:-1]
+    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*')'''
+    t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
     return t
 
 def t_PROPSTRING(t):
-    r'''(?:<(?:[^<>\n\r\\]|(?:<>)|(?:\\x[0-9a-fA-F]+)|(?:\\.))*>)'''
-    t.value = t.value[1:-1]
+    r'''(?:<(?:[^<>\n\r\\]|(?:<>)|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*>)'''
+    t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
     return t
 
 def t_LABEL(t):

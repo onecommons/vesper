@@ -1001,12 +1001,16 @@ class SimpleQueryEngine(object):
 
     def evalSelect(self, op, context):
         context.engine = self
-        if op.where:
-            context.currentTupleset = op.where.evaluate(self, context)
-        if op.groupby:
-            context.currentTupleset = op.groupby.evaluate(self, context)
-        if op.orderby:            
-            context.currentTupleset = op.orderby.evaluate(self, context)
+        if op.isIndependent(): #constant expression
+            context.currentTupleset = MutableTupleset([ColumnInfo('', object)], ([1],))
+        else: 
+            if op.where:
+                context.currentTupleset = op.where.evaluate(self, context)
+            if op.groupby:
+                context.currentTupleset = op.groupby.evaluate(self, context)
+            if op.orderby:            
+                context.currentTupleset = op.orderby.evaluate(self, context)
+
         if op.depth is not None:
             context.depth = op.depth
                                                 
