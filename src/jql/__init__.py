@@ -23,7 +23,7 @@ Find all JSON objects. This is equivalent to the "SELECT * FROM table" SQL excep
 
  >>> datastore.query('''
  ... { foo }
- ... ''', pretty=1)
+ ... ''')
  {'errors': [], 'results': [{'foo': 'bar'}]}
 
 This is equivalent to the SQL statement "SELECT foo FROM table".
@@ -33,7 +33,7 @@ This is because the above query is shorthand for this query:
  >>> datastore.query('''
  ... { "foo" : foo,
  ... }
- ... ''', pretty=1)
+ ... ''')
  {'errors': [], 'results': [{'foo': 'bar'}]}
 
 Including the `foo` properties names in the where clause only selects where the property exists. 

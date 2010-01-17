@@ -40,7 +40,7 @@ class Blob(object):
         if isinstance(self.data, unicode):
             self.data = self.data.encode('utf8')
         
-        stream.write("= %s %s\n%s%s\n" 
+        stream.write("= %s %s\n%s\n%s\n" 
             % (self.id, endmarker, self.data, endmarker) )
     
     def __repr__(self):
@@ -59,14 +59,15 @@ class BlobRef(object):
     def __repr__(self):
         return "BlobRef(%r)" % (self.id)
 
-pattern = re.compile(r'= (\w+) (\S+)\n(.*?)\2\n', re.S)
+pattern = re.compile(r'= (\w+) (\S+)\n(.*?)\n\2\n', re.S)
 header = '=multipart-json\n'
 
 def load_one(data):
     '''
 >>> test = """= an_id closingstring
 ... blah 
-...   blah closingstring
+...   blah 
+... closingstring
 ... { "something else with a closingstring"}
 ... """
 >>> blob, end = load_one(test)
@@ -99,7 +100,7 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
 ... ====
 ... ["a", "json", "array"]
 ... """, returnblobs=True)
-([{'hello': 'world'}, ['a', 'json', 'array']], {'id2': 'adsfas===dfasdf\\n', 'id1': 'adsfasdfasdf\\n'})
+([{'hello': 'world'}, ['a', 'json', 'array']], {'id2': 'adsfas===dfasdf', 'id1': 'adsfasdfasdf'})
     '''
     blobs = {}
     pairs_hook = False
@@ -203,7 +204,7 @@ def _dump(objs, stream, includeHeader=True):
 ... "a json string"
 ... ], stream)
 >>> stream.getvalue()
-'=multipart-json\\n{"1": 2}= id1 !!!\\nsome ==== data \\n!!!\\n= id2 ===\\nsome more data \\n===\\n"a json string"'
+'=multipart-json\\n{"1": 2}= id1 !!!\\nsome ==== data \\n\\n!!!\\n= id2 ===\\nsome more data \\n\\n===\\n"a json string"'
     '''
     if includeHeader:
         stream.write(header)
@@ -224,7 +225,7 @@ def dump(objs, stream, blobmax=1024, blobmin=30, includeHeader=True,
 ... "a long json string"
 ... ], stream, 9, 9)
 >>> stream.getvalue()
-'=multipart-json\\n{"1": 2, "short": "12345", "longkey1234567890": {"multipartjsonref":"1"}, "long": {"multipartjsonref":"2"}}\\n= 1 ===\\nabcdefghij===\\n= 2 ===\\n1234567890===\\n["short", "long: 1234567890"]\\n{"multipartjsonref":"3"}\\n= 3 ===\\na long json string===\\n'
+'=multipart-json\\n{"1": 2, "short": "12345", "longkey1234567890": {"multipartjsonref":"1"}, "long": {"multipartjsonref":"2"}}\\n= 1 ===\\nabcdefghij\\n===\\n= 2 ===\\n1234567890\\n===\\n["short", "long: 1234567890"]\\n{"multipartjsonref":"3"}\\n= 3 ===\\na long json string\\n===\\n'
     '''
     if includeHeader:
         stream.write(header)
