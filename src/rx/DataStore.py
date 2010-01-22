@@ -1,5 +1,5 @@
 """
-    DOMStore classes used by Raccoon.
+    DataStore classes used by Raccoon.
 
     Copyright (c) 2004-5 by Adam Souzis <asouzis@users.sf.net>
     All rights reserved, see COPYING for details.
@@ -21,14 +21,11 @@ def _toStatements(contents):
     #assume sjson:
     return sjson.tostatements(contents, setBNodeOnObj=True), contents
 
-class DomStore(transactions.TransactionParticipant):
+class DataStore(transactions.TransactionParticipant): # XXX this base class can go away
     '''
-    Abstract interface for DomStores
+    Abstract interface for DataStores
     '''
-    log = logging.getLogger("domstore")
-
-    #impl. must expose the DOM as a read-only attribute named "dom"
-    dom = None
+    log = logging.getLogger("datastore")
 
     addTrigger = None
     removeTrigger = None
@@ -37,14 +34,8 @@ class DomStore(transactions.TransactionParticipant):
     def __init__(requestProcessor, **kw):
         pass
     
-    def loadDom(self, location, defaultDOM):
-        ''' 
-        Load the DOM located at location (a filepath).
-        If location does not exist create a new DOM that is a copy of 
-        defaultDOM, a file-like of appropriate type
-        (e.g. an XML or RDF NTriples file).
-        '''
-        self.log = logging.getLogger("domstore." + requestProcessor.appName)
+    def load(self):
+        self.log = logging.getLogger("datastore." + requestProcessor.appName)
                         
     def commitTransaction(self, txnService):
         pass
@@ -54,7 +45,7 @@ class DomStore(transactions.TransactionParticipant):
 
     def getStateKey(self):
         '''
-        Returns the a hashable object that uniquely identifies the current state of DOM.
+        Returns the a hashable object that uniquely identifies the current state of this datastore.
         Used for caching.
         If this is not implemented, it should raise KeyError (the default implementation).
         '''
@@ -79,7 +70,7 @@ class DomStore(transactions.TransactionParticipant):
             source = os.path.join( requestProcessor.baseDir, source)
         return source
             
-class BasicStore(DomStore):
+class BasicStore(DataStore):
 
     def __init__(self, requestProcessor, modelFactory=None,
                  schemaFactory=RxPath.defaultSchemaClass,                 
@@ -92,7 +83,7 @@ class BasicStore(DomStore):
                  versionModelFactory=None,
                  storageTemplateOptions=None,
                  modelOptions=None,
-                 DOM_CHANGESET_HOOK=None,
+                 CHANGESET_HOOK=None,
                  branchId = '0A', **kw):
         '''
         modelFactory is a RxPath.Model class or factory function that takes
@@ -112,16 +103,16 @@ class BasicStore(DomStore):
         self.saveHistory = saveHistory
         self.storageTemplateOptions = storageTemplateOptions
         self.branchId = branchId
-        self.changesetHook = DOM_CHANGESET_HOOK
+        self.changesetHook = CHANGESET_HOOK
         self._txnparticipants = []
         self.modelOptions = modelOptions or {}
 
-    def loadDom(self):        
+    def load(self):
         requestProcessor = self.requestProcessor
-        self.log = logging.getLogger("domstore." + requestProcessor.appName)
+        self.log = logging.getLogger("datastore." + requestProcessor.appName)
 
         #normalizeSource = getattr(self.modelFactory, 'normalizeSource',
-        #                                        DomStore._normalizeSource)
+        #                                        DataStore._normalizeSource)
         #source is the data source for the store, usually a file path
         #source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
         source = self.STORAGE_PATH
@@ -219,7 +210,7 @@ class BasicStore(DomStore):
             
             if versionStoreSource:
                 normalizeSource = getattr(self.versionModelFactory, 
-                        'normalizeSource', DomStore._normalizeSource)
+                        'normalizeSource', DataStore._normalizeSource)
                 versionStoreSource = normalizeSource(self, requestProcessor,
                                                      versionStoreSource)
             revisionModel = versionModelFactory(source=versionStoreSource,

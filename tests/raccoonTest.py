@@ -105,7 +105,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testUpdatesApp(self):
         root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
         #set timestamp to 0 so tests are reproducible:
-        root.domStore.model.createTxnTimestamp = lambda *args: 0
+        root.dataStore.model.createTxnTimestamp = lambda *args: 0
         
         #set a notifyChangeset hook to test if its called properly
         self.notifyChangeset = None
@@ -116,17 +116,17 @@ class RaccoonTestCase(unittest.TestCase):
                                                     if k != 'statements']
             diff = utils.pprintdiff(x(changeset), x(expectedChangeSet))                    
             self.assertEquals(changeset, expectedChangeSet, diff)
-        root.domStore.model.notifyChangeset = testNotifyChangeset
+        root.dataStore.model.notifyChangeset = testNotifyChangeset
         
         self.failUnless(root.loadModelHookCalled)
-        self.failUnless(not root.domStore.model._currentTxn)        
-        self.assertEquals(root.domStore.model.currentVersion, '0')
+        self.failUnless(not root.dataStore.model._currentTxn)        
+        self.assertEquals(root.dataStore.model.currentVersion, '0')
         
         #the "foo" request handler defined in testUpdatesApp.py adds content to the store:
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"        
         self.assertEquals(response, result)        
-        self.assertEquals(root.domStore.model.currentVersion, '0A00001')
+        self.assertEquals(root.dataStore.model.currentVersion, '0A00001')
         
         self.assertEquals(root.updateResults['_added']['data'], 
             [{'comment': u'page content.', 'id': 'a_resource', 'label': 'foo'}])
@@ -141,7 +141,7 @@ class RaccoonTestCase(unittest.TestCase):
         root.updateResults = {}
         result = root.runActions('http-request', dict(_name='jj'))                
         self.assertEquals('<html><body>not found!</body></html>', result)
-        self.assertEquals(root.domStore.model.currentVersion, '0A00001')
+        self.assertEquals(root.dataStore.model.currentVersion, '0A00001')
         
         self.failUnless('_addedStatements' not in root.updateResults, root.updateResults)
         self.failUnless('_added' not in root.updateResults)
@@ -150,19 +150,19 @@ class RaccoonTestCase(unittest.TestCase):
         
         try:
             #merging own changeset should throw an error:
-            root.domStore.merge(self.notifyChangeset)
+            root.dataStore.merge(self.notifyChangeset)
         except RuntimeError, e:
             self.assertEquals(str(e), 'merge received changeset from itself: 0A')
         else:
             self.fail('should have raised an error')
 
         root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
-        self.failUnless( root2.domStore.merge(self.notifyChangeset) )
+        self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
         
         #XXX merging same changeset again should be an no-op
-        #self.failUnless( root2.domStore.merge(self.notifyChangeset) )
+        #self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
         
-        self.assertEquals(root2.domStore.query("{*}").results, 
+        self.assertEquals(root2.dataStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
     def testRemoves(self):
@@ -223,7 +223,7 @@ class RaccoonTestCase(unittest.TestCase):
         #self.assertEquals(store1.model.currentVersion, '0A00001,0B00002')
 
     def testMergeInTransaction(self):
-        #same as testMerge but in a transaction (mostly to test domstore
+        #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
         store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
         root1 = store1.requestProcessor
@@ -296,7 +296,7 @@ class RaccoonTestCase(unittest.TestCase):
         '''
         Test updates with multiple transaction participants
         '''
-        from rx import DomStore
+        from rx import DataStore
         store = raccoon.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')        
         root = store.requestProcessor        
         if saveHistory == 'split':
@@ -309,7 +309,7 @@ class RaccoonTestCase(unittest.TestCase):
         def voteForCommit(txnService):
             testState.testParticipantCommitCalled = True
             try:
-                #there are 3 participants: this, domstore, and the model
+                #there are 3 participants: this, datastore, and the model
                 #the one participant is the model
                 self.assertEquals(len(store._txnparticipants), 
                             1 + graphParticipants, store._txnparticipants)
@@ -334,7 +334,7 @@ class RaccoonTestCase(unittest.TestCase):
                 if before:
                     #this commit is called before so the store shouldn't have been committed yet
                     self.failUnless(isinstance(store._txnparticipants[-1], 
-                                                DomStore.TwoPhaseTxnModelAdapter))
+                                                DataStore.TwoPhaseTxnModelAdapter))
                     self.failUnless( not store._txnparticipants[-1].committed )
                 else:
                     self.failUnless(store._txnparticipants[-1].committed )
@@ -345,7 +345,7 @@ class RaccoonTestCase(unittest.TestCase):
         
         def testFail():
             if before:
-                #join before domStore
+                #join before dataStore
                 #this way participant's vote will fail before the model committed            
                 testState.participant.join(root.txnSvc)
             #generate adds and removes
@@ -353,7 +353,7 @@ class RaccoonTestCase(unittest.TestCase):
             { 'id' : '2', 'prop' : '@test'}
             ])                        
             if not before:
-                #join after domStore
+                #join after dataStore
                 #this way participant's vote will fail after the model committed
                 testState.participant.join(root.txnSvc)            
         
@@ -366,7 +366,7 @@ class RaccoonTestCase(unittest.TestCase):
         if saveHistory: 
             self.assertEqual(store.model.currentVersion, '0A00001')
         else:
-            self.failUnless(isinstance(root.domStore.model, DomStore.ModelWrapper))
+            self.failUnless(isinstance(root.dataStore.model, DataStore.ModelWrapper))
         
     def test2PhaseTxn(self):
         '''

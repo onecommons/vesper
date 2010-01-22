@@ -16,7 +16,7 @@ def load_data(data):
 
 @Route("api/{action}")
 def api_handler(kw, retval):
-    dom_store = kw['__server__'].domStore
+    data_store = kw['__server__'].dataStore
     params = kw['_params']
     action = kw['urlvars']['action']
     
@@ -28,7 +28,7 @@ def api_handler(kw, retval):
     out = {'action':action}
     try:
         if action == 'query':
-            r = dom_store.query(params['data'])
+            r = data_store.query(params['data'])
             # print r
             out.update(r)
         elif action == 'update':
@@ -36,7 +36,7 @@ def api_handler(kw, retval):
             
             query = "{*, where(%s)}" % params['where']
             # print "querying:", query
-            target = dom_store.query(query)['results']
+            target = data_store.query(query)['results']
             
             assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]
@@ -50,12 +50,12 @@ def api_handler(kw, retval):
             # print "updated target:"
             # print target
             
-            changed = dom_store.update(target) # returns statements modified; not so useful
+            changed = data_store.update(target) # returns statements modified; not so useful
             out['count'] = len(changed)
             
         elif action == 'add':
             data = load_data(params['data'])
-            stmts = dom_store.add(data)
+            stmts = data_store.add(data)
             out['count'] = len(stmts)
         elif action == 'delete':
             print "XXX delete action not supported!"

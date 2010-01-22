@@ -54,8 +54,8 @@ class ChangesetListener(object):
             else:
                 
                 try:
-                    assert not self.replicator.server.domStore.model._currentTxn
-                    self.replicator.server.domStore.merge(obj)
+                    assert not self.replicator.server.dataStore.model._currentTxn
+                    self.replicator.server.dataStore.merge(obj)
                     self.replicator.msg_recv += 1
                     if not self.autoAck:
                         self.replicator.conn.ack({'message-id':message_id})

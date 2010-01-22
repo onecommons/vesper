@@ -9,7 +9,7 @@ if __name__ == '__main__':
     import sys,raccoon
     sys.exit(raccoon.main())
     
-from rx import utils, glock, RxPath, MRUCache, DomStore, transactions, store
+from rx import utils, glock, RxPath, MRUCache, DataStore, transactions, store
 import os, time, sys, base64, mimetypes, types, traceback
 import urllib, re
 
@@ -339,15 +339,16 @@ class RequestProcessor(utils.object_with_threadlocals):
                 self.LockFile = glock.LockFile
         else:
             self.LockFile = glock.NullLockFile #the default
-
+        
         self.txnSvc = transactions.RaccoonTransactionService(self)
-        domStoreFactory = kw.get('domStoreFactory', DomStore.BasicStore)
-        self.domStore = domStoreFactory(self, **kw)
-        self.domStore.addTrigger = self.txnSvc.addHook
-        self.domStore.removeTrigger = self.txnSvc.removeHook
+        
+        dataStoreFactory = kw.get('domStoreFactory', kw.get('dataStoreFactory', DataStore.BasicStore))
+        self.dataStore = dataStoreFactory(self, **kw)
+        self.dataStore.addTrigger = self.txnSvc.addHook
+        self.dataStore.removeTrigger = self.txnSvc.removeHook
         if 'before-new' in self.actions:
             #newResourceHook is optional since it's expensive
-            self.domStore.newResourceTrigger = self.txnSvc.newResourceHook
+            self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
 
         self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
         initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
@@ -396,7 +397,7 @@ class RequestProcessor(utils.object_with_threadlocals):
             self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
                                                  digestKey=True)
 
-            self.domStore.loadDom()
+            self.dataStore.load()
         finally:
             lock.release()
         self.runActions('load-model')
@@ -1077,7 +1078,7 @@ def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
         storageTemplateOptions = dict(generateBnode=idGenerator),
         **kw    
     ).run(False)
-    return root.domStore
+    return root.dataStore
 
 _current_config = AppConfig()
 _current_configpath = [None]

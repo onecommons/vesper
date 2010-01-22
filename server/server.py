@@ -70,11 +70,11 @@ def index(kw, retval):
         # data['hist'] = len(_UPDATES) + len(_QUERIES)
         return str(template.render(**data))
     else: # POST
-        dom_store = kw['__server__'].domStore
+        data_store = kw['__server__'].dataStore
         postdata = kw['_params']['data']
         store_query(postdata)
 
-        r = dom_store.query(postdata, forUpdate=True)
+        r = data_store.query(postdata, forUpdate=True)
         out = json.dumps(r,sort_keys=True, indent=4)
         return out
     
@@ -98,12 +98,12 @@ def update(kw, retval):
         template = template_loader.get_template('query.html')
         return str(template.render(**data))
     else: #POST
-        dom_store = kw['__server__'].domStore
+        data_store = kw['__server__'].dataStore
         postdata = kw['_params']['data']
         store_query(postdata, update=True)
 
         data = load_data(postdata)
-        tmp = dom_store.update(data)
+        tmp = data_store.update(data)
         from pprint import pformat
         return pformat(tmp)
 
@@ -125,7 +125,7 @@ def stats(kw, retval):
 
 @Route("api/{action}")
 def api_handler(kw, retval):
-    dom_store = kw['__server__'].domStore
+    data_store = kw['__server__'].dataStore
     params = kw['_params']
     action = kw['urlvars']['action']
 
@@ -141,7 +141,7 @@ def api_handler(kw, retval):
             if 'where' not in params:
                 raise Exception("500 missing required parameter")
             
-            r = dom_store.query(params['where'], forUpdate=True)
+            r = data_store.query(params['where'], forUpdate=True)
             out.update(r)
         elif action == 'update':
             
@@ -151,7 +151,7 @@ def api_handler(kw, retval):
             query = "{ *, where(%s)}" % params['where']
             # print "querying:", query
             
-            target = dom_store.query(query, forUpdate=True)['results']
+            target = data_store.query(query, forUpdate=True)['results']
             # print target
             
             assert len(target) >= 1, "Update 'where' clause did not match any objects; try an add"
@@ -166,12 +166,12 @@ def api_handler(kw, retval):
             # print "storing updated target:"
             # print target
 
-            changed = dom_store.update(target) # returns statements modified; not so useful
+            changed = data_store.update(target) # returns statements modified; not so useful
             out['count'] = len(changed)
 
         elif action == 'add':
             data = load_data(params['data'])
-            stmts = dom_store.add(data)
+            stmts = data_store.add(data)
             out['count'] = len(stmts)
         elif action == 'delete':
             print "XXX delete action not supported!"
@@ -232,7 +232,7 @@ if CONF.get('REPLICATION_CHANNEL'):
     import rx.replication
     CONF['saveHistory'] = True
     rep = rx.replication.get_replicator(CONF['branchId'], CONF['REPLICATION_CHANNEL'], hosts=CONF['REPLICATION_HOSTS'])
-    CONF['DOM_CHANGESET_HOOK'] = rep.replication_hook
+    CONF['CHANGESET_HOOK'] = rep.replication_hook
     
     @Action
     def startReplication(kw, retVal):

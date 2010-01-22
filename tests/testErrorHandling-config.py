@@ -12,26 +12,26 @@ badCommitCalled = False
 def testInTransactionAction(kw, retval):
     if kw._name != 'errorInCommit':
         return retval
-    kw.__server__.domStore.add({id:"test", "test" : 'hello!'})
+    kw.__server__.dataStore.add({id:"test", "test" : 'hello!'})
     def badCommit(*args, **kw):
         global badCommitCalled
         badCommitCalled = True 
         raise RuntimeError("this error inside commit")
         
     global originalCommit    
-    originalCommit = kw.__server__.domStore.model.commit
-    from rx import DomStore
-    if isinstance(kw.__server__.domStore.model, DomStore.ModelWrapper): 
-        kw.__server__.domStore.model.model.commit = badCommit
+    originalCommit = kw.__server__.dataStore.model.commit
+    from rx import DataStore
+    if isinstance(kw.__server__.dataStore.model, DataStore.ModelWrapper): 
+        kw.__server__.dataStore.model.model.commit = badCommit
     else:
-        kw.__server__.domStore.model.commit = badCommit 
+        kw.__server__.dataStore.model.commit = badCommit 
     return 'success'
 
 @Action    
 def errorhandler(kw, retval):
-    #print 'in error handler', kw['_errorInfo']['errorCode'], 'badCommit', badCommitCalled, kw.__server__.domStore.model
+    #print 'in error handler', kw['_errorInfo']['errorCode'], 'badCommit', badCommitCalled, kw.__server__.dataStore.model
     if originalCommit:
-        kw.__server__.domStore.model.commit = originalCommit        
+        kw.__server__.dataStore.model.commit = originalCommit        
 
     if kw['_errorInfo']['errorCode'] == 404:
         kw['_responseHeaders']['_status'] = 404

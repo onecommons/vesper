@@ -7,13 +7,13 @@ def updateAction(kw, retval):
        'label' : 'foo',
       'comment' : 'page content.'
     }]
-    kw['__server__'].domStore.update(sjson)
+    kw['__server__'].dataStore.update(sjson)
     return retval
 
 @Action
 def queryAction(kw, retval):
     query = "{comment:* where(label='%s')}" % kw['_name'] #XXX qnames are broken         
-    r = kw['__server__'].domStore.query(query)
+    r = kw['__server__'].dataStore.query(query)
     result = r['results']
     #print result
         

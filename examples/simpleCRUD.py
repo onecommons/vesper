@@ -74,11 +74,11 @@ def index(kw, retval):
         data['hist'] = len(_UPDATES) + len(_QUERIES)
         return str(template.substitute(**data))
     else: # POST
-        dom_store = kw['__server__'].domStore
+        data_store = kw['__server__'].dataStore
         postdata = kw['_params']['data']
         store_query(postdata)
 
-        r = dom_store.query(postdata)
+        r = data_store.query(postdata)
         out = json.dumps(r,sort_keys=True, indent=4)
         return out
     
@@ -102,12 +102,12 @@ def update(kw, retval):
         data['hist'] = len(_UPDATES) + len(_QUERIES)
         return str(template.substitute(**data))
     else: #POST
-        dom_store = kw['__server__'].domStore
+        data_store = kw['__server__'].dataStore
         postdata = kw['_params']['data']
         store_query(postdata, update=True)
         
         data = json.loads(postdata)
-        tmp = dom_store.update(data)
+        tmp = data_store.update(data)
         from pprint import pformat
         return pformat(tmp)
 
@@ -127,7 +127,7 @@ def hist(kw, retval):
 
 @Route("api/{action}")
 def api_handler(kw, retval):
-    dom_store = kw['__server__'].domStore
+    data_store = kw['__server__'].dataStore
     params = kw['_params']
     action = kw['urlvars']['action']
     
@@ -139,7 +139,7 @@ def api_handler(kw, retval):
     out = {}
     try:
         if action == 'query':
-            r = dom_store.query(params['data'])
+            r = data_store.query(params['data'])
             r = list(r) # XXX
             out['data'] = r
         elif action == 'update':            
@@ -147,7 +147,7 @@ def api_handler(kw, retval):
             
             query = "{*, where(%s)}" % root['where']
             # print "querying:", query
-            target = list(dom_store.query(query))
+            target = list(data_store.query(query))
             
             assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]
@@ -162,11 +162,11 @@ def api_handler(kw, retval):
             # print "updated target:"
             # print target
             
-            changed = dom_store.update(target) # returns statements modified; not so useful
+            changed = data_store.update(target) # returns statements modified; not so useful
             
         elif action == 'add':
             data = json.loads(params['data'])
-            out['added'] = dom_store.add(data)
+            out['added'] = data_store.add(data)
         elif action == 'delete':
             print "XXX delete action not supported!"
             pass

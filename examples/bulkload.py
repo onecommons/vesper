@@ -23,19 +23,19 @@ QUERY = "{*}"
 
 @raccoon.Action
 def testaction(kw, retval):
-    dom_store = kw['__server__'].domStore
+    datastore = kw['__server__'].dataStore
     
     starttime = datetime.now()
     try:
         if _LOAD:
             f = open(_LOAD, 'r')
             data = json.load(f)
-            dom_store.add(data) # update is very slow for this use case
+            datastore.add(data) # update is very slow for this use case
             print "data loaded from", _LOAD
         else:
             print "opening", _DUMP
             f = open(_DUMP, 'w')
-            data = dom_store.query(QUERY)
+            data = datastore.query(QUERY)
             if 'errors' in data:
                 print " ERROR "
                 for x in data['errors']:

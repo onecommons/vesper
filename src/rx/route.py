@@ -107,6 +107,6 @@ def servetemplate(kw, retval):
                         request=kw, 
                         config=kw.__server__.config,
                         server=kw.__server__, 
-                        db=kw.__server__.domStore)
+                        db=kw.__server__.dataStore)
     else:
         return retval

@@ -5,7 +5,7 @@
 """
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
-  'sjsonTest', 'jqlTest', 'modelTest']
+  'sjsonTest', 'jqlTest', 'modelTest', 'FileModelTest', 'BdbModelTest', 'docTest']
 
 import unittest
 _runner = unittest.TextTestRunner()

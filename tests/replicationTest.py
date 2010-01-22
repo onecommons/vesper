@@ -62,7 +62,7 @@ def startRhizomeInstance(nodeId, port, queueHost, queuePort, channel):
         autoAck=True
     
     rep = rx.replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
-    conf['DOM_CHANGESET_HOOK'] = rep.replication_hook
+    conf['CHANGESET_HOOK'] = rep.replication_hook
     
     @raccoon.Action
     def startReplication(kw, retVal):

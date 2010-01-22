@@ -290,7 +290,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
         
     def newResourceHook(self, uris):
         '''
-        This is intended to be set as the DOMStore's newResourceTrigger
+        This is intended to be set as the DataStore's newResourceTrigger
         '''
         if self.isActive() and self.state.safeToJoin:
             self.state.newResources.extend(uri)
@@ -298,7 +298,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
 
     def addHook(self, stmts, jsonrep=None):
         '''
-        This is intended to be set as the DOMStore's addTrigger
+        This is intended to be set as the DataStore's addTrigger
         '''
         state = self.state
         if self.isActive() and state.safeToJoin:            
@@ -308,13 +308,13 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                     jsorep = sjson.tojson(stmts)
                 kw = {'_added' : jsorep }
                 #new resource detection is optional since it can be expensive
-                if self.server.domStore.newResourceTrigger:
+                if self.server.dataStore.newResourceTrigger:
                     kw['_newResources'] = state.newResources
                 self._runActions('before-add', kw)
 
     def removeHook(self, stmts, jsonrep=None):
         '''
-        This is intended to be set as the DOMStore's removeTrigger
+        This is intended to be set as the DataStore's removeTrigger
         '''
         state = self.state
         if self.isActive() and state.safeToJoin:
@@ -324,7 +324,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                     jsorep = sjson.tojson(stmts)
                 kw = {'_removed' : jsorep }
                 #new resource detection is optional since it can be expensive
-                if self.server.domStore.newResourceTrigger:
+                if self.server.dataStore.newResourceTrigger:
                     kw['_newResources'] = state.newResources                                             
                 self._runActions('before-remove', kw)
     
@@ -341,7 +341,7 @@ class RaccoonTransactionService(TransactionService,utils.object_with_threadlocal
                 '_removed' : sjson.tojson(state.removals)
                          }
                 #new resource detection is optional since it can be expensive
-                if self.server.domStore.newResourceTrigger:
+                if self.server.dataStore.newResourceTrigger:
                     morekw['_newResources'] = state.newResources            
 
             kw.update(morekw)

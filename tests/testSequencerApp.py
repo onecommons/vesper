@@ -47,7 +47,7 @@ class Router(object):
 def fromdatastore(kw, retval):
     import jql
     query = "{comment:* where(label='%s')}" % kw['_name'] #XXX qnames are broken 
-    result = list(jql.runQuery(query, kw['__server__'].domStore.model))
+    result = list(jql.runQuery(query, kw['__server__'].dataStore.model))
     #print result
         
     template = '<html><body>%s</body></html>'
