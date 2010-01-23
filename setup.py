@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 import sys
 
 install_requires = ['ply']
-
+#XXX add: optional mako, pyyaml, routes 
 PACKAGE_NAME = 'rhizome2'
 pyver = sys.version_info[:2]
 if pyver < (2,4):

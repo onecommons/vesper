@@ -2,19 +2,10 @@
     An implementation of RxPath.
     Loads and saves the DOM to a RDF model.
 
-    See RxPathDOM.py for more notes and todos.
-
     Copyright (c) 2003 by Adam Souzis <asouzis@users.sf.net>
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 '''
-from __future__ import generators
-
-
-#from Ft.Lib.boolean import false as XFalse, true as XTrue, bool as Xbool
-#from Ft.Xml.XPath.Conversions import StringValue, NumberValue
-#from Ft.Xml import XPath, InputSource, SplitQName, EMPTY_NAMESPACE
-from rx.FtStub import * 
 
 from rx import utils
 from rx.RxPathUtils import *
@@ -25,15 +16,6 @@ import os.path, sys, traceback
 
 from rx import logging #for python 2.2 compatibility
 log = logging.getLogger("RxPath")
-
-useQueryEngine = 1
-
-def createDOM(model, nsRevMap = None, modelUri=None,
-        schemaClass = defaultSchemaClass, graphManager=None):
-    from rx import RxPathDom
-    return RxPathDom.Document(model, nsRevMap,modelUri,schemaClass,
-                              graphManager=graphManager)
-
 
 ##########################################################################
 ## public utility functions

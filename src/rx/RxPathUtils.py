@@ -15,17 +15,37 @@ except ImportError:
 
 from rx import utils
 from rx.python_shim import *
+import bisect
+from xml.dom import HierarchyRequestErr
 
-#try:
-#    from Ft.Rdf import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL    
-#    #note: because we change these values here other modules need to import this module
-#    #before importing any Ft.Rdf modules
-#    import Ft.Rdf
-#    Ft.Rdf.BNODE_BASE = 'bnode:'
-#    Ft.Rdf.BNODE_BASE_LEN = len('bnode:')
-#    from Ft.Rdf import BNODE_BASE, BNODE_BASE_LEN
-#except ImportError:
-#4Suite RDF not installed    
+EMPTY_NAMESPACE = None
+EMPTY_PREFIX = None
+XMLNS_NAMESPACE = u"http://www.w3.org/2000/xmlns/"
+XML_NAMESPACE = u"http://www.w3.org/XML/1998/namespace"
+XHTML_NAMESPACE = u"http://www.w3.org/1999/xhtml"
+
+def SplitQName(qname):
+    l = qname.split(':',1)
+    if len(l) < 2:
+        return None, l[0]
+    return tuple(l)
+
+def GenerateUuid():
+    import random
+    return random.getrandbits(16*8) #>= 2.4
+
+def UuidAsString(uuid):
+    """
+    Formats a long int representing a UUID as a UUID string:
+    32 hex digits in hyphenated groups of 8-4-4-4-12.
+    """   
+    s = '%032x' % uuid
+    return '%s-%s-%s-%s-%s' % (s[0:8],s[8:12],s[12:16],s[16:20],s[20:])
+
+def CompareUuids(u1, u2):
+    """Compares, as with cmp(), two UUID strings case-insensitively"""
+    return cmp(u1.upper(), u2.upper())
+
 OBJECT_TYPE_RESOURCE = "R"
 OBJECT_TYPE_LITERAL = "L"
 
@@ -213,7 +233,20 @@ def _parseSPARQLResults(json, defaultScope=None):
 
 def _parseRDFJSON(jsonstring, defaultScope=None):
     '''
-    Parses JSON that followes the format described in _encodeRDFAsJson
+    Parses JSON that follows this format:
+
+    { 'quads':'1' , 'contexturi' :  
+        { 
+          'resourceuri' : { 'pred' : [
+          #from http://www.w3.org/TR/2006/NOTE-rdf-sparql-json-res-20061004/
+        {"type":"literal", ["xml:lang":" L ",] "value":" S"},
+        {"type":"typed-literal", "datatype":" D ", "value":" S "},
+        {"type":"uri|bnode", "value":"U"", "hint":"compound"} ] },
+            'containerresuri' : { '#member' : [] },
+            'listresourceuri' : { '#first' : [], '#rest' : ['rdf:nil'] }
+        }
+     }          
+    
     Returns a list of RDF Statements
     '''
     stmts = []
@@ -298,58 +331,6 @@ def encodeStmtObject(object, type, iscompound=False, scope=None, valueName='valu
     if scope is not None:
         jsonobj['context'] = scope
     return jsonobj
-
-def _encodeRDFAsJson(nodes):    
-    '''
-Encode a nodeset of RxPath resource nodes as JSON, using this format:
-{ 'quads':'1' , 'contexturi' :  
-    { 
-      'resourceuri' : { 'pred' : [
-      #from http://www.w3.org/TR/2006/NOTE-rdf-sparql-json-res-20061004/
-    {"type":"literal", ["xml:lang":" L ",] "value":" S"},
-    {"type":"typed-literal", "datatype":" D ", "value":" S "},
-    {"type":"uri|bnode", "value":"U"", "hint":"compound"} ] },
-        'containerresuri' : { '#member' : [] },
-        'listresourceuri' : { '#first' : [], '#rest' : ['rdf:nil'] }
-    }
- }          
-    '''    
-    out = '{'
-    lastres = None
-    compoundResources = [] #we want closure on these resources
-    for res in nodes:
-        assert hasattr(res,'uri'), '_encodeRDFAsJson only can encode resource nodes'
-        if lastres:
-            out +=','
-        lastres = res
-        if res.uri.startswith(BNODE_BASE):
-            uri = '_:' + res.uri[BNODE_BASE_LEN:]
-        else:
-            uri = res.uri
-        out += '"' + uri + '": {'
-        lastpred = None
-        #assume ordered predicated
-        for pred in res.childNodes:
-            if lastpred == pred.stmt.predicate:                
-                isCompound = False #todo: pred.childNodes[0].isCompound()
-                out += ", " + json.dumps(_encodeStmtObject(pred.stmt, isCompound))
-                if isCompound:
-                    compoundResources.append(pred.childNodes[0])
-            else:
-                if lastpred:
-                    out += '], '
-                lastpred = pred.stmt.predicate
-                out +=  '"' + lastpred + '" : ['
-                isCompound = False #todo: pred.childNodes[0].isCompound()
-                out += json.dumps(_encodeStmtObject(pred.stmt, isCompound))
-        if lastpred:
-            out += ']\n'
-        out += '}\n'
-    #for node in compoundResources:
-    #    '"' + node.uri + ': {'
-    #    add "rdf:rest" and add listIds 
-    out += '}'
-    return out
 
 def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                        options=None, getType=False):
@@ -541,13 +522,6 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     contents = stream.read()
     stream.close()
     return parseRDFFromString(contents.decode('utf8'), modelbaseuri, type, scope, options, getType)
-     
-def RxPathDOMFromStatements(statements, uri2prefixMap=None, uri=None,schemaClass=None):
-    from rx import RxPath, RxPathSchema
-    model = RxPath.MemModel(statements)    
-    #default to no inferencing:
-    return RxPath.createDOM(model, uri2prefixMap or {}, modelUri=uri,
-                        schemaClass = schemaClass or RxPathSchema.BaseSchema) 
 
 def serializeRDF(statements, type, uri2prefixMap=None, options=None):
     stringIO = StringIO.StringIO()
@@ -557,7 +531,7 @@ def serializeRDF(statements, type, uri2prefixMap=None, options=None):
 def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     '''    
     type can be one of the following:
-        "rdfxml", "ntriples", "ntjson", "json", "yaml", "mjson", or "sjson"
+        "rdfxml", "ntriples", "ntjson", "yaml", "mjson", or "sjson"
     '''
     from rx import RxPath
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
@@ -627,13 +601,6 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         defaultoptions = dict(default_style="'")
         if options: defaultoptions.update(options)
         return yaml.safe_dump( sjson.tojson(statements, preserveTypeInfo=True), stream, **defaultoptions)
-    elif type == 'json':
-        rdfDom = RxPathDOMFromStatements(statements, uri2prefixMap)
-        subjects = [s.subject for s in statements]
-        nodes = [node for node in rdfDom.childNodes
-                     if node.uri in subjects and not node.isCompound()]
-        out = _encodeRDFAsJson(nodes)
-        stream.write(out)
 
 def canWriteFormat(format):
     if format in ('ntriples', 'ntjson', 'json', 'sjson', 'mjson'):
@@ -875,6 +842,161 @@ def writeTriples(stmts, stream, enc='utf8', writejson=False):
                 stream.write(' "' + escaped + '"^^' + stmt[objectType].encode(enc))
                 stream.write(" .\n")
 
+def peekpair(seq):
+    '''
+    yield next, peek
+    '''
+    iter_ = iter(seq)
+    curr = iter_.next()
+    while 1:
+      try:
+          next = iter_.next()
+          yield curr, next
+      except StopIteration: 
+          yield curr, None
+          return
+      curr = next
+
+class OrderedModel(object):
+
+    def __init__(self, stmts):
+        children = []
+        subjectDict = {}
+        lists = {}
+        listStmts = {}
+
+        for stmt in stmts:
+            if (stmt.predicate in (RDF_MS_BASE+'first', RDF_MS_BASE+'rest')
+                or (stmt.object == RDF_MS_BASE+'List' and stmt.predicate ==
+                RDF_MS_BASE+'type')): #its a list
+
+                if stmt.subject not in lists:
+                    lists[stmt.subject] = 1
+                if stmt.predicate == RDF_MS_BASE+'rest':
+                    lists[stmt.object] = 0 #the object is not at the head of the list
+
+                listStmts.setdefault(stmt.subject, []).append(stmt)
+            else:
+                if stmt.subject in subjectDict:
+                    subjectDict[stmt.subject].append(stmt)
+                else:
+                    subjectDict[stmt.subject] = [stmt]
+                    if children and children[-1] > stmt.subject:                        
+                        bisect.insort(children, uri)
+                    else:
+                        children.append(stmt.subject)
+
+        for uri, head in lists.items():
+            if head:
+                bisect.insort(children, uri)
+                subjectDict.setdefault(uri, []).extend( listStmts[uri] )
+
+        self.resources, self.subjectDict, self.listDict = children, subjectDict, listStmts
+
+    def groupbyProp(self):
+        for res in self.resources:
+            stmts = self.getProperties(res)
+            values = []
+            for stmt, next in peekpair(stmts):
+                values.append( (stmt.object, stmt.objectType) )
+                if not next or next.predicate != stmt.predicate:
+                    yield res, stmt.predicate, values
+                    values = []        
+
+    def _addListItem(self, children, listID):
+        stmts = self.listStmts[listID] #model.getStatements(listID)
+
+        nextList = None
+        for stmt in stmts:                      
+            if stmt.predicate == RDF_MS_BASE+'first':
+                #change the subject to the head of the list
+                stmt = Statement(self.uri, *stmt[1:]) 
+                children.append(stmt) #(stmt, listID) )
+            elif stmt.predicate == RDF_MS_BASE+'rest':
+                if stmt.object != RDF_MS_BASE+'nil':
+                    nextList = stmt.object
+                if nextList == listID:
+                    raise  HierarchyRequestErr('model error -- circular list resource: %s' % str(listID))
+            elif stmt.predicate != RDF_MS_BASE+'type':  #rdf:type statement ok, assumes its rdf:List
+                raise  HierarchyRequestErr('model error -- unexpected triple for inner list resource')
+        return nextList
+
+    def getProperties(self, uri):
+        '''        
+        Statements are sorted by (predicate uri, object value) unless they are RDF list or containers.
+        If the RDF list or container has non-membership statements (usually just rdf:type) those will appear first.
+        '''
+        stmts = self.subjectDict[uri]
+        stmts.sort()
+
+        children = []
+        containerItems = {}
+
+        listItem = nextList = None        
+        for stmt in stmts:
+            assert stmt.subject == uri, uri + '!=' + stmt.subject
+            if stmt.predicate == RDF_MS_BASE+'first':
+                listItem = stmt
+            elif stmt.predicate == RDF_MS_BASE+'rest':
+                if stmt.object != RDF_MS_BASE+'nil':
+                    nextList = stmt.object                    
+            elif stmt.predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
+                ordinal = int(stmt.predicate[len(RDF_MS_BASE+'_'):])
+                containerItems[ordinal] = stmt            
+            elif not (stmt.predicate == RDF_MS_BASE+u'type' and 
+                       stmt.object == RDF_SCHEMA_BASE+u'Resource'):
+                #don't include the redundent rdf:type rdfs:Resource statement
+                children.append(stmt)# (stmt, None) )
+
+        if listItem:
+            children.append(listItem)#(listItem, uri))
+        while nextList:
+            nextList = _addListItem(children, nextList)
+
+        #add any container items in order, setting rdf:member instead of rdf:_n
+        ordinals = containerItems.keys()
+        ordinals.sort()        
+        for ordinal in ordinals:
+            stmt = containerItems[ordinal]
+            realPredicate = stmt.predicate
+            stmt = Statement(stmt[0], RDF_SCHEMA_BASE+u'member', *stmt[2:])
+            children.append(stmt) #(stmt, realPredicate) )
+
+        return children
+
+    # def getModelStatements(self, stmt, listID, prevListID, next):
+    #     '''
+    #     Returns a list of statements this Predicate Element represents
+    #     as they appear in model. This will be different from the stmt
+    #     property in the case of RDF lists and container predicates.
+    #     Usually one statement but may be up to three if the Predicate
+    #     node is a list item.
+    #     '''
+    #     if listID:
+    #         stmt = Statement(*stmt)
+    #         if stmt.predicate == RDF_SCHEMA_BASE+'member':
+    #             #replace predicate with listID
+    #             stmt = RxPath.Statement(stmt[0], listID, *stmt[2:])
+    #             return (stmt,)
+    #         else:
+    #             #replace subject with listID
+    #             stmt = RxPath.Statement(listID, *stmt[1:])                
+    #             listStmts = [ stmt ]
+    #             if prevListID:
+    #                 listStmts.append( RxPath.Statement(
+    #                 prevListID, RDF_MS_BASE+'rest', listID,
+    #                 objectType=OBJECT_TYPE_RESOURCE, scope=stmt.scope))
+    #             if not next:
+    #                 listStmts.append( RxPath.Statement( listID,
+    #                     RDF_MS_BASE+'rest', RDF_MS_BASE+'nil',
+    #                     objectType=OBJECT_TYPE_RESOURCE, scope=stmt.scope))
+    #             return tuple(listStmts)
+    #     else:
+    #         return (stmt, )
+    # 
+    # def getStatementsFromResource(children):
+    #     return reduce(lambda l, p: l.extend(p.getModelStatements()) or l, children, [])
+
 class Res(dict):
     ''' Simplifies building RDF statements with a dict-like object
     representing a resource with a dict of property/values
@@ -1038,347 +1160,6 @@ class Res(dict):
             return triples
         else:
             return triples, reslist
-
-def addStatements(rdfDom, stmts):
-    '''
-    Update the DOM (and so the underlying model) with the given list of statements.
-    If the statements include RDF list or container statements, it must include all items of the list
-    '''
-    #we have this complete list requirement because otherwise we'd have to figure out
-    #the head list resource and update its children and possible also do this for every nested list 
-    #resource not included in the statements (if the model exposed them)
-    listLinks = {}
-    listItems = {}
-    tails = []
-    containerItems = {}
-    newNodes = []
-    for stmt in stmts:
-        #print 'stmt', stmt
-        if stmt.predicate == RDF_MS_BASE+'first':
-            listItems[stmt.subject] = stmt
-            #we handle these below
-        elif stmt.predicate == RDF_MS_BASE+'rest':                
-            if stmt.object == RDF_MS_BASE+'nil':
-                tails.append(stmt.subject)
-            else:
-                listLinks[stmt.object] = stmt.subject
-        elif stmt.predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
-            containerItems[(stmt.subject, int(stmt.predicate[len(RDF_MS_BASE)+1:]) )] = stmt
-        else:
-            subject = rdfDom.findSubject(stmt.subject)
-            if not subject:
-                subject = rdfDom.addResource(stmt.subject)
-                assert rdfDom.findSubject(stmt.subject)
-            newNode = subject.addStatement(stmt)
-            if newNode:
-                newNodes.append(newNode)
-
-    #for each list encountered
-    for tail in tails:            
-        orderedItems = [ listItems[tail] ]            
-        #build the list from last to first
-        head = tail
-        while listLinks.has_key(head):
-            head = listLinks[head]
-            orderedItems.append(listItems[head])            
-        orderedItems.reverse()
-        for stmt in orderedItems:
-            listid = stmt.subject
-            stmt = Statement(head, *stmt[1:]) #set the subject to be the head of the list
-            subject = rdfDom.findSubject(stmt.subject) or rdfDom.addResource(stmt.subject)
-            newNode = subject.addStatement(stmt, listid)
-            if newNode:
-                newNodes.append(newNode)
-        
-    #now add any container statements in the correct order
-    containerKeys = containerItems.keys()
-    containerKeys.sort()
-    for key in containerKeys:
-        stmt = containerItems[key]
-        listid = stmt.predicate
-        head = stmt.subject
-        #change the predicate 
-        stmt = Statement(stmt[0], RDF_SCHEMA_BASE+u'member', *stmt[2:]) 
-        subject = rdfDom.findSubject(stmt.subject) or rdfDom.addResource(stmt.subject)
-        newNode = subject.addStatement(stmt, listid)
-        if newNode:
-            newNodes.append(newNodes)
-    return newNodes
-
-        
-
-def diffResources(sourceDom, resourceNodes):
-    ''' Given a list of Subject nodes from another RxPath DOM, compare
-    them with the resources in the source DOM. This assumes that the
-    each Subject node contains all the statements it is the subject
-    of.
-
-    Returns the tuple (Subject or Predicate nodes to add list, Subject
-    or Predicate nodes to remove list, Re-ordered resource dictionary)
-    where Reordered is a dictionary whose keys are RDF list or
-    collection Subject nodes from the source DOM that have been
-    modified or reordered and whose values is the tuple (added node
-    list, removed node list) containing the list item Predicates nodes
-    added or removed.  Note that a compoundresource could be
-    re-ordered but have no added or removed items and so the lists
-    will be empty.
-    
-    This diff routine punts on blank node equivalency; this means bNode
-    labels must match for the statements to match. The exception is
-    RDF lists and containers -- in this case the bNode label or exact
-    ordinal value of the "rdf:_n" property is ignored -- only the
-    order is compared.  '''
-    removals = []
-    additions = []
-    reordered = {}
-    for resourceNode in resourceNodes:
-        currentNode = sourceDom.findSubject(resourceNode.uri)
-        if currentNode: 
-            isCompound = currentNode.isCompound()
-            isNewCompound = resourceNode.isCompound()
-            if isNewCompound != isCompound:
-                #one's a compound resource and the other isn't
-                #(or they're different types of compound resource)
-                if isNewCompound and isCompound and isCompound != \
-                    RDF_MS_BASE + 'List' and isNewCompound != RDF_MS_BASE + 'List':
-                    #we're switching from one type of container (Seq, Alt, Bag) to another
-                    #so we just need to add and remove the type statements -- that will happen below
-                    diffResource = True
-                else:
-                    #remove the previous resource
-                    removals.append(currentNode) 
-                    #and add the resource's current statements
-                    #we add all the its predicates instead just adding the
-                    #resource node because it isn't a new resource
-                    for predicate in resourceNode.childNodes:
-                        additions.append( predicate) 
-                    
-                    diffResource = False
-            else:
-                diffResource = True
-        else:
-            diffResource = False
-            
-        if diffResource:
-            def update(currentChildren, resourceChildren, added, removed):
-                changed = False
-                for tag, alo, ahi, blo, bhi in opcodes:#to turn a into b
-                    if tag in ['replace', 'delete']:
-                        changed = True
-                        for currentPredicate in currentChildren[alo:ahi]:
-                            #if we're a list check that the item hasn't just been reordered, not removed
-                            if not isCompound or \
-                                toListItem(currentPredicate) not in resourceNodeObjects:
-                                    removed.append( currentPredicate)
-                    if tag in ['replace','insert']:
-                        changed = True
-                        for newPredicate in resourceChildren[blo:bhi]:
-                            #if we're a list check that the item hasn't just been reordered, not removed
-                            if not isCompound or \
-                                toListItem(newPredicate) not in currentNodeObjects:                            
-                                    added.append( newPredicate )                    
-                    #the only other valid value for tag is 'equal'
-                return changed
-            
-            if isCompound:
-                #to handle non-membership statements we split the childNode lists
-                #and handle each separately (we can do that the RxPath spec says all non-membership statements will come first)
-                i = 0
-                for p in currentNode.childNodes:
-                    if p.stmt.predicate in [RDF_MS_BASE + 'first', RDF_SCHEMA_BASE + 'member']:
-                        break
-                    i+=1
-                currentChildren = currentNode.childNodes[:i]
-                j = 0
-                for p in resourceNode.childNodes:
-                    if p.stmt.predicate in [RDF_MS_BASE + 'first', RDF_SCHEMA_BASE + 'member']:
-                        break
-                    j+=1                
-                resourceChildren = resourceNode.childNodes[:j]
-                
-                #if it's a list or collection we just care about the order, ignore the predicates
-                import difflib
-                toListItem = lambda x: (x.stmt.objectType, x.stmt.object)
-                currentListNodes = currentNode.childNodes[i:]
-                currentNodeObjects = map(toListItem, currentListNodes)
-                resourceListNodes = resourceNode.childNodes[j:]
-                resourceNodeObjects = map(toListItem, resourceListNodes)
-                opcodes = difflib.SequenceMatcher(None, currentNodeObjects,
-                                           resourceNodeObjects).get_opcodes()
-                if opcodes:                    
-                    currentAdded = []
-                    currentRemoved = []
-                    #if the list has changed
-                    if update(currentListNodes, resourceListNodes, currentAdded, currentRemoved):
-                           reordered[ currentNode ] = ( currentAdded, currentRemoved )
-            else:
-                currentChildren = currentNode.childNodes
-                resourceChildren = resourceNode.childNodes
-                
-            opcodes = utils.diffSortedList(currentChildren,resourceChildren,
-                    lambda a,b: cmp(a.stmt, b.stmt) )
-            update(currentChildren,resourceChildren,additions, removals)
-        else: #new resource (add all the statements)
-            additions.append(resourceNode)
-    return additions, removals, reordered
-
-def mergeDOM(sourceDom, updateDOM, resources, authorize=None):
-    '''
-    Performs a 2-way merge of the updateDOM into the sourceDom.
-    
-    Resources is a list of resource URIs originally contained in
-    update DOM before it was edited. If present, this list is
-    used to create a diff between those resources statements in
-    the source DOM and the statements in the update DOM.
-
-    All other statements in the update DOM are added to the source
-    DOM. (Conflicting bNode labels are not re-labeled as we assume
-    update DOM was orginally derived from the sourceDOM.)
-
-    This doesn't modify the source DOM, instead it returns a pair
-    of lists (Statements to add, nodes to remove) that can be used to
-    update the DOM, e.g.:
-    
-    >>> statements, nodesToRemove = mergeDOM(sourceDom, updateDom ,resources)
-    >>> for node in nodesToRemove:
-    >>>    node.parentNode.removeChild(node)
-    >>> addStatements(sourceDom, statements)    
-    '''
-    #for each of these resources compare its statements in the update dom
-    #with those in the source dom and add or remove the differences    
-    newNodes = []
-    removeResources = []            
-    resourcesToDiff = []
-    for resUri in resources:
-        assert isinstance(resUri, (unicode, str))
-        resNode = updateDOM.findSubject(resUri)
-        if resNode: #do a diff on this resource
-            #print 'diff', resUri
-            resourcesToDiff.append(resNode)
-        else:#a resource no longer in the rxml has all their statements removed
-            removeNode = sourceDom.findSubject(resUri)
-            if removeNode:
-                removeResources.append(removeNode)
-                        
-    for resNode in updateDOM.childNodes:
-        #resources in the dom but not in resources just have their statements added
-        if resNode.uri not in resources:                    
-            if resNode.isCompound():
-                #if the node is a list or container we want to compare with the list in model
-                #because just adding its statements with existing list statements would mess things up
-                #note: thus we must assume the list in the updateDOM is complete
-                #print 'list to diff', resNode
-                resourcesToDiff.append(resNode)
-            else:
-                sourceResNode  = sourceDom.findSubject(resNode.uri)
-                if sourceResNode:
-                    #not a new resource: add each statement that doesn't already exist in the sourceDOM
-                    for p in resNode.childNodes:
-                        if not sourceResNode.findPredicate(p.stmt):
-                            newNodes.append(p)                    
-                else:
-                    #new resource: add the subject node
-                    newNodes.append(resNode)
-        else:
-            assert resNode in resourcesToDiff #resource in the list will have been added above
-                       
-    additions, removals, reordered = diffResources(sourceDom, resourcesToDiff)
-
-    newNodes.extend( additions )
-    removeResources.extend( removals)
-    if authorize:
-        authorize(newNodes, removeResources, reordered)
-
-    newStatements = reduce(lambda l, n: l.extend(n.getModelStatements()) or l, newNodes, [])
-    
-    #for modified lists we just remove the all container and collection resource
-    #and add all its statements    
-    for compoundResource in reordered.keys():
-        removeResources.append(compoundResource)
-        newCompoundResource = updateDOM.findSubject( compoundResource.uri)
-        assert newCompoundResource
-        newStatements = reduce(lambda l, p: l.extend(p.getModelStatements()) or l,
-                        newCompoundResource.childNodes, newStatements)
-    return newStatements, removeResources
-
-def addDOM(sourceDom, updateDOM, authorize=None):
-    ''' Add the all statements in the update RxPath DOM to the source
-    RxPathDOM. If the updateDOM contains RDF lists or containers that
-    already exist in sourceDOM they are replaced instead of added
-    (because just adding the statements could form malformed lists or
-    containers). bNode labels are renamed if they are used in the
-    existing model. If you don't want to relabel conflicting bNodes
-    use mergeDOM with an empty resource list.
-
-    This doesn't modify the source DOM, instead it returns a pair
-    of lists (Statements to add, nodes to remove) that can be used to
-    update the DOM in the same manner as mergeDOM.
-    '''
-    stmts = updateDOM.model.getStatements()    
-    bNodes = {}
-    replacingListResources = []
-    for stmt in stmts:                
-        def updateStatement(attrName):
-            '''if the bNode label is used in the sourceDom choose a new bNode label'''
-            uri = getattr(stmt, attrName)
-            if uri.startswith(BNODE_BASE):
-                if bNodes.has_key(uri):
-                    newbNode = bNodes[uri]
-                    if newbNode:
-                        setattr(stmt, attrName, newbNode)
-                else: #encountered for the first time
-                    if sourceDom.findSubject(uri):
-                        #generate a new bNode label
-                           
-                        #todo: this check doesn't handle detect inner list bnodes
-                        #most of the time this is ok because the whole list will get removed below
-                        #but if the bNode is used by a inner list we're not removing this will lead to a bug
-                        
-                        #label used in the model, so we need to rename this bNode
-                        newbNode = generateBnode()
-                        bNodes[uri] = newbNode
-                        setattr(stmt, attrName, newbNode)
-                    else:
-                        bNodes[uri] = None
-            else:                
-                if not bNodes.has_key(uri):                    
-                    resNode = updateDOM.findSubject(uri)
-                    if resNode and resNode.isCompound() and sourceDom.findSubject(uri):
-                        #if the list or container resource appears in the source DOM we need to compare it
-                        #because just adding its statements with existing list statements would mess things up
-                        #note: thus we must assume the list in the updateDom is complete                         
-                        replacingListResources.append(resNode)
-                    bNodes[uri] = None
-        updateStatement('subject')        
-        if stmt.objectType == OBJECT_TYPE_RESOURCE:
-            updateStatement('object')
-    #todo: the updateDOM will still have the old bnode labels, which may mess up authorization
-            
-    additions, removals, reordered = diffResources(sourceDom,replacingListResources)
-    assert [getattr(x, 'stmt') for x in additions] or not len(additions) #should be all predicate nodes
-
-    #now filter out any statements that already exist in the source dom:
-    #(note: won't match statements with bNodes since they have been renamed
-    alreadyExists = []
-    newStmts = []
-    for stmt in stmts:
-        resNode = sourceDom.findSubject(stmt.subject)
-        if resNode and resNode.findPredicate(stmt):
-            alreadyExists.append(stmt)
-        else:
-            newStmts.append(stmt)
-    
-    if authorize:
-        #get all the predicates in the updatedom except the ones in replacingListResources        
-        newResources = [x for x in updateDOM.childNodes if x not in replacingListResources]
-        newPredicates = reduce(lambda l, s: l.extend(
-            [p for p in s.childNodes if p.stmt not in alreadyExists]) or l,
-                                       newResources, additions)
-        authorize(newPredicates, removals, reordered)
-        
-    #return statements to add, list resource nodes to remove
-    #note: additions should contained by stmts, so we don't need to return them
-    return newStmts, reordered.keys() 
 
 def stmt2json(stmt):
     '''

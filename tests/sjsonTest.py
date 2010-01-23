@@ -235,6 +235,7 @@ def test():
      'prop4' : { 'type' : 'literal', 'value' : 'hello', 'context' : 'context3'}
     }]
     assert_json_and_back_match(src)
+    
     print 'tests pass'
 
 
