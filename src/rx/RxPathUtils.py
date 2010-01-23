@@ -858,12 +858,15 @@ def peekpair(seq):
       curr = next
 
 class OrderedModel(object):
+    '''
+    Sort statements and normalize RDF lists and containers
+    '''
 
     def __init__(self, stmts):
         children = []
         subjectDict = {}
         lists = {}
-        listStmts = {}
+        listNodes = {}
 
         for stmt in stmts:
             if (stmt.predicate in (RDF_MS_BASE+'first', RDF_MS_BASE+'rest')
@@ -875,23 +878,25 @@ class OrderedModel(object):
                 if stmt.predicate == RDF_MS_BASE+'rest':
                     lists[stmt.object] = 0 #the object is not at the head of the list
 
-                listStmts.setdefault(stmt.subject, []).append(stmt)
+                listNodes.setdefault(stmt.subject, []).append(stmt)
             else:
                 if stmt.subject in subjectDict:
                     subjectDict[stmt.subject].append(stmt)
                 else:
                     subjectDict[stmt.subject] = [stmt]
                     if children and children[-1] > stmt.subject:                        
-                        bisect.insort(children, uri)
+                        bisect.insort(children, stmt.subject)
                     else:
                         children.append(stmt.subject)
 
-        for uri, head in lists.items():
-            if head:
-                bisect.insort(children, uri)
-                subjectDict.setdefault(uri, []).extend( listStmts[uri] )
+        for uri, head in lists.items():            
+            if head: 
+                #don't include non-head list-nodes as resources
+                #but add the statements from the tail nodes
+                bisect.insort(children, uri)                
+                subjectDict.setdefault(uri, []).extend( listNodes[uri] )
 
-        self.resources, self.subjectDict, self.listDict = children, subjectDict, listStmts
+        self.resources, self.subjectDict, self.listNodes = children, subjectDict, listNodes
 
     def groupbyProp(self):
         for res in self.resources:
@@ -903,14 +908,14 @@ class OrderedModel(object):
                     yield res, stmt.predicate, values
                     values = []        
 
-    def _addListItem(self, children, listID):
-        stmts = self.listStmts[listID] #model.getStatements(listID)
+    def _addListItem(self, children, listID, head):
+        stmts = self.listNodes[listID] #model.getStatements(listID)
 
         nextList = None
         for stmt in stmts:                      
             if stmt.predicate == RDF_MS_BASE+'first':
                 #change the subject to the head of the list
-                stmt = Statement(self.uri, *stmt[1:]) 
+                stmt = Statement(head, *stmt[1:]) 
                 children.append(stmt) #(stmt, listID) )
             elif stmt.predicate == RDF_MS_BASE+'rest':
                 if stmt.object != RDF_MS_BASE+'nil':
@@ -921,7 +926,7 @@ class OrderedModel(object):
                 raise  HierarchyRequestErr('model error -- unexpected triple for inner list resource')
         return nextList
 
-    def getProperties(self, uri):
+    def getProperties(self, uri, useRdfsMember=True):
         '''        
         Statements are sorted by (predicate uri, object value) unless they are RDF list or containers.
         If the RDF list or container has non-membership statements (usually just rdf:type) those will appear first.
@@ -949,17 +954,18 @@ class OrderedModel(object):
                 children.append(stmt)# (stmt, None) )
 
         if listItem:
-            children.append(listItem)#(listItem, uri))
-        while nextList:
-            nextList = _addListItem(children, nextList)
+            children.append(listItem)#(listItem, None))
+            while nextList:
+                nextList = _addListItem(children, nextList, listItem.subject)
 
         #add any container items in order, setting rdf:member instead of rdf:_n
         ordinals = containerItems.keys()
         ordinals.sort()        
         for ordinal in ordinals:
             stmt = containerItems[ordinal]
-            realPredicate = stmt.predicate
-            stmt = Statement(stmt[0], RDF_SCHEMA_BASE+u'member', *stmt[2:])
+            if useRdfsMember:
+                #realPredicate = stmt.predicate
+                stmt = Statement(stmt[0], RDF_SCHEMA_BASE+u'member', *stmt[2:])
             children.append(stmt) #(stmt, realPredicate) )
 
         return children

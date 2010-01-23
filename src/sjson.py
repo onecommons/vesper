@@ -464,7 +464,8 @@ class Serializer(object):
         for resourceUri in root.resources:
             islist = False
             for resourceStmt in root.subjectDict[resourceUri]:
-                if resourceStmt.predicate == RDF_MS_BASE+'type' and resourceStmt.object == JSON_BASE+'propseqtype':
+                if (resourceStmt.predicate == RDF_MS_BASE+'type' and 
+                    resourceStmt.object in (PROPSEQTYPE, STANDALONESEQTYPE)):
                     #resource has rdf:type propseqtype
                     listresources.append(resourceUri)
                     islist = True
@@ -777,7 +778,7 @@ class Parser(object):
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
                 RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
             m.addStatement( Statement(seq, RDF_MS_BASE+'type',
-                PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) ) #XXX STANDALONESEQTYPE
+                STANDALONESEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
 
             for i, item in enumerate(val):
                 item, objecttype, itemscope = self.deduceObjectType(item, parseContext)

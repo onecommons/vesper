@@ -8,7 +8,7 @@
 from rx import RxPath, transactions
 import StringIO, os, os.path
 import logging
-from rx.utils import debugp
+from rx.utils import debugp, flatten
 from rx import RxPathGraph
 from rx.RxPathUtils import OrderedModel
 import sjson
@@ -341,7 +341,7 @@ class BasicStore(DataStore):
         self.model.addStatements(stmts)
         return jsonrep or stmts
 
-    def _removeLists(self, stmts):
+    def _removePropLists(self, stmts):
         if not self.model.canHandleStatementWithOrder:
             for stmt in stmts:
                 #check if the statement is part of a json list, remove that list item too
@@ -363,7 +363,7 @@ class BasicStore(DataStore):
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)        
-        self._removeLists(stmts)
+        self._removePropLists(stmts)
         self.model.removeStatements(stmts)
         
         return jsonrep or stmts
@@ -413,35 +413,47 @@ class BasicStore(DataStore):
             return self.requestProcessor.executeTransaction(func)
         
         newStatements = []
-        newSjsonListResources = []
+        newListResources = set()
+        removedResources = set(removedResources or [])
         removals = []
         #update:
-        #for each (subject, property pair), get current statement        
-        # and remove current ones (including any associated lists)
-        #unless subject is a list; then just add those statements
-        #XXX handle scope!
+        #XXX handle scope: if a non-empty scope is specified, only compare
         updateStmts, ujsonrep = _toStatements(update)
         root = OrderedModel(updateStmts)
-        for (resource, prop, values) in root.groupbyProp():
-            #note: for list resources, rdf:type will come first
-            if (prop == RxPath.RDF_MS_BASE+'type' 
-                and (sjson.JSON_BASE+'propseqtype', RxPath.OBJECT_TYPE_RESOURCE) in values):
-                newSjsonListResources.append(resource)
+        skipResource = None
+        for (resource, prop, values) in root.groupbyProp():            
+            #note: for list resources, rdf:type will be sorted first 
+            #but don't assume they are present
+            if skipResource == resource:
+                continue
+            if (prop == RxPath.RDF_MS_BASE+'type' and 
+                (sjson.PROPSEQTYPE, RxPath.OBJECT_TYPE_RESOURCE) in values):
+                skipResource = resource
+                newListResources.add(resource)
+                continue
+            if prop in (RxPath.RDF_SCHEMA_BASE+u'member', 
+                                RxPath.RDF_SCHEMA_BASE+u'first'):
+                #if list just replace the entire list
+                removedResources.add(resource)
+                skipResource = resource
+                newListResources.add(resource)
                 continue
             currentStmts = self.model.getStatements(resource, prop)
             if currentStmts:
-                self._removeLists(currentStmts)                
+                #the new proplist probably have different ids even for values that
+                #don't need to be added so remove all current proplists                
+                self._removePropLists(currentStmts)                
                 for currentStmt in currentStmts:
                     if (currentStmt.object, currentStmt.objectType) not in values:
                         removals.append(currentStmt)
                     else:
                         values.remove((currentStmt.object, currentStmt.objectType))
-            for value, valueType in values:
+            for value, valueType in values:                
                 newStatements.append( RxPath.Statement(resource,prop, value, valueType) )
-        for listRes in newSjsonListResources:
+        
+        for listRes in newListResources:            
             newStatements.extend( root.subjectDict[listRes] )
                 
-        removedResources = set(removedResources or [])
         replaceStmts, replaceJson = _toStatements(replace)
         if replaceJson:
             for o in replaceJson:
@@ -462,12 +474,22 @@ class BasicStore(DataStore):
                     removals.append(stmt)
                 else:
                     replaceStmts.remove(stmt)
-            self._removeLists(currentStmts)
+            #the new proplist probably have different ids even for values that
+            #don't need to be added so remove all current proplists
+            self._removePropLists(currentStmts)
         newStatements.extend(replaceStmts)
         
         #remove: remove all statements and associated lists        
         for r in removedResources:
             currentStmts = self.model.getStatements(r)
+            for s in currentStmts:
+                #it's a list, we need to follow all the nodes and remove them too
+                if s.predicate == RxPath.RDF_SCHEMA_BASE+u'next':                    
+                    while s:                        
+                        listNodeStmts = self.model.getStatements(c.object)
+                        removals.extend(listNodeStmts)
+                        s = flatten([ls for ls in listNodeStmts 
+                                    if ls.predicate == RxPath.RDF_SCHEMA_BASE+u'next'])                    
             removals.extend(currentStmts)
 
         self.remove(removals)        

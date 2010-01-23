@@ -342,7 +342,7 @@ class RequestProcessor(utils.object_with_threadlocals):
         
         self.txnSvc = transactions.RaccoonTransactionService(self)
         
-        dataStoreFactory = kw.get('domStoreFactory', kw.get('dataStoreFactory', DataStore.BasicStore))
+        dataStoreFactory = kw.get('dataStoreFactory', kw.get('domStoreFactory', DataStore.BasicStore))
         self.dataStore = dataStoreFactory(self, **kw)
         self.dataStore.addTrigger = self.txnSvc.addHook
         self.dataStore.removeTrigger = self.txnSvc.removeHook
