@@ -62,6 +62,8 @@ def flatten(seq, to=list, depth=0xFFFF, flattenTypes=None, keepSeq=False):
 [1]
 >>> flatten(1, keepSeq=1)
 [1]
+>>> type(flatten([]))
+<type 'NoneType'>
 '''    
     if not keepSeq and not isinstance(seq, flattenTypes or _flattenTypes):
         return seq
