@@ -202,7 +202,6 @@ class Result(object):
 def assignVars(self, kw, varlist, default):
     '''
     Helper function for assigning variables from the config file.
-    Also used by rhizome.py.
     '''
     import copy
     for name in varlist:
@@ -221,12 +220,122 @@ def assignVars(self, kw, varlist, default):
 ############################################################
 ##Raccoon main class
 ############################################################
-class RequestProcessor(utils.object_with_threadlocals):                
+class TransactionProcessor(utils.object_with_threadlocals):
+    
+    def __init__(self, model_uri=None, appVars=None):
+        """
+        appVars - dictionary of config settings, overriding the config
+        """
+        self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
+        
+        self.BASE_MODEL_URI = model_uri
+        
+        self.requestContext = [{}] #stack of dicts
+        
+        self.lock = None
+        self.log = log
+        self.actions = {}
+        
+        kw = globals().copy() #copy this module's namespace
+        if appVars:
+            kw.update(appVars)
+        self.loadDataStore(kw)
+        
+    def loadDataStore(self, kw):
+        self.txnSvc = transactions.RaccoonTransactionService(self)
+        
+        dataStoreFactory = kw.get('domStoreFactory', kw.get('dataStoreFactory', DataStore.BasicStore))
+        self.dataStore = dataStoreFactory(self, **kw)
+        self.dataStore.addTrigger = self.txnSvc.addHook
+        self.dataStore.removeTrigger = self.txnSvc.removeHook
+        
+        self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
+                                         self.BASE_MODEL_URI)
+        
+    def getLock(self):
+        '''
+        Acquires and returns the lock associated with this RequestProcessor.
+        Call release() on the returned lock object to release it.
+        '''
+        assert self.lock
+        return glock.LockGetter(self.lock)
+    
+    def loadModel(self):
+        if not self.lock:
+            lockName = 'r' + str(hash(self.MODEL_RESOURCE_URI)) + '.lock'
+            self.lock = self.LockFile(lockName)
+
+        lock = self.getLock()
+        try:
+            self.dataStore.load()
+        finally:
+            lock.release()
+        
+    def executeTransaction(self, func, kw=None, retVal=None):
+        kw = kw or {}
+        self.txnSvc.begin()
+        self.txnSvc.state.kw = kw
+        self.txnSvc.state.retVal = retVal
+        try:
+            retVal = func()
+        except:
+            if not self.txnSvc.state.aborted:
+                self.txnSvc.abort()
+            raise
+        else:
+            if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
+                self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                self.txnSvc.state.retVal = retVal
+                if self.txnSvc.isDirty():
+                    if kw.get('__readOnly'):
+                        self.log.warning(
+                        'a read-only transaction was modified and aborted')
+                        self.txnSvc.abort()
+                    elif not self.txnSvc.state.cantCommit:
+                        self.txnSvc.commit()
+                else:
+                    #nothings changed, don't bother committing
+                    #but need to clean up the transaction
+                    self.txnSvc._cleanup(False)
+                       
+        return retVal
+
+    # add a convenience contextmanager on newer versions of python
+    if sys.version_info[:2] > (2,4):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def inTransaction(self, kw=None):
+            kw = kw or {}
+            self.txnSvc.begin()
+            self.txnSvc.state.kw = kw
+
+            try:
+                yield self
+            except:
+                if not self.txnSvc.state.aborted:
+                    self.txnSvc.abort()
+                raise
+            else:
+                if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
+                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                    if self.txnSvc.isDirty():
+                        if kw.get('__readOnly'):
+                            self.log.warning(
+                            'a read-only transaction was modified and aborted')
+                            self.txnSvc.abort()
+                        elif not self.txnSvc.state.cantCommit:
+                            self.txnSvc.commit()
+                    else:
+                        #nothings changed, don't bother committing
+                        #but need to clean up the transaction
+                        self.txnSvc._cleanup(False)
+
+
+class RequestProcessor(TransactionProcessor):
     DEFAULT_CONFIG_PATH = ''#'raccoon-default-config.py'
-    lock = None
 
     requestsRecord = None
-    log = log
 
     defaultGlobalVars = ['_name', '_noErrorHandling',
             '__current-transaction', '__readOnly'
@@ -241,23 +350,26 @@ class RequestProcessor(utils.object_with_threadlocals):
                  appBase='/', model_uri=None, appName='',
                  #dictionary of config settings, overrides the config
                  appVars=None):
-
-        self.initThreadLocals(requestContext=None, inErrorHandler=0,
-                               previousResolvers=None)
-
-        #variables you want made available to anyone during this request
+                 
+        # XXX copy and paste from
+        self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
+        self.BASE_MODEL_URI = model_uri
         self.requestContext = [{}] #stack of dicts
+        self.lock = None
+        self.log = log
+        #######################
+        
+        #variables you want made available to anyone during this request
         configpath = a or self.DEFAULT_CONFIG_PATH
         self.source = m
         self.PATH = p or os.environ.get('RACCOONPATH',os.getcwd())
-        self.BASE_MODEL_URI = model_uri
         #use first directory on the PATH as the base for relative paths
         #unless this was specifically set it will be the current dir
         self.baseDir = self.PATH.split(os.pathsep)[0]
         self.appBase = appBase or '/'
         self.appName = appName
         self.cmd_usage = DEFAULT_cmd_usage
-        self.loadConfig(configpath, argsForConfig, appVars)        
+        self.loadConfig(configpath, argsForConfig, appVars)
         if self.template_path:
             from mako.lookup import TemplateLookup
             self.template_loader = TemplateLookup(directories=self.template_path, 
@@ -340,16 +452,12 @@ class RequestProcessor(utils.object_with_threadlocals):
         else:
             self.LockFile = glock.NullLockFile #the default
         
-        self.txnSvc = transactions.RaccoonTransactionService(self)
+        self.loadDataStore(kw)
         
-        dataStoreFactory = kw.get('domStoreFactory', kw.get('dataStoreFactory', DataStore.BasicStore))
-        self.dataStore = dataStoreFactory(self, **kw)
-        self.dataStore.addTrigger = self.txnSvc.addHook
-        self.dataStore.removeTrigger = self.txnSvc.removeHook
-        if 'before-new' in self.actions:
+        if 'before-new' in self.actions:            
             #newResourceHook is optional since it's expensive
             self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
-
+        
         self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
         initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
         self.globalRequestVars.extend( self.defaultGlobalVars )
@@ -379,27 +487,10 @@ class RequestProcessor(utils.object_with_threadlocals):
         if kw.get('configHook'):
             kw['configHook'](kw)
 
-    def getLock(self):
-        '''
-        Acquires and returns the lock associated with this RequestProcessor.
-        Call release() on the returned lock object to release it.
-        '''
-        assert self.lock
-        return glock.LockGetter(self.lock)
-
     def loadModel(self):
-        if not self.lock:
-            lockName = 'r' + str(hash(self.MODEL_RESOURCE_URI)) + '.lock'
-            self.lock = self.LockFile(lockName)
-
-        lock = self.getLock()
-        try:
-            self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
-                                                 digestKey=True)
-
-            self.dataStore.load()
-        finally:
-            lock.release()
+        self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
+                                             digestKey=True)
+        super(RequestProcessor, self).loadModel()
         self.runActions('load-model')
 
 ###########################################
@@ -451,65 +542,6 @@ class RequestProcessor(utils.object_with_threadlocals):
     def _doActionsTxn(self, sequence, kw, retVal):
         func = lambda: self._doActionsBare(sequence, kw, retVal)
         return self.executeTransaction(func, kw, retVal)
-        
-    def executeTransaction(self, func, kw=None, retVal=None):
-        kw = kw or {}
-        self.txnSvc.begin()
-        self.txnSvc.state.kw = kw
-        self.txnSvc.state.retVal = retVal
-        try:
-            retVal = func()
-        except:
-            if not self.txnSvc.state.aborted:
-                self.txnSvc.abort()
-            raise
-        else:
-            if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                self.txnSvc.state.retVal = retVal
-                if self.txnSvc.isDirty():
-                    if kw.get('__readOnly'):
-                        self.log.warning(
-                        'a read-only transaction was modified and aborted')
-                        self.txnSvc.abort()
-                    elif not self.txnSvc.state.cantCommit:
-                        self.txnSvc.commit()
-                else:
-                    #nothings changed, don't bother committing
-                    #but need to clean up the transaction
-                    self.txnSvc._cleanup(False)
-                       
-        return retVal
-
-    if sys.version_info[:2] > (2,4):
-        from contextlib import contextmanager
-
-        @contextmanager
-        def inTransaction(self, kw=None):
-            kw = kw or {}
-            self.txnSvc.begin()
-            self.txnSvc.state.kw = kw
-
-            try:
-                yield self
-            except:
-                if not self.txnSvc.state.aborted:
-                    self.txnSvc.abort()
-                raise
-            else:
-                if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                    if self.txnSvc.isDirty():
-                        if kw.get('__readOnly'):
-                            self.log.warning(
-                            'a read-only transaction was modified and aborted')
-                            self.txnSvc.abort()
-                        elif not self.txnSvc.state.cantCommit:
-                            self.txnSvc.commit()
-                    else:
-                        #nothings changed, don't bother committing
-                        #but need to clean up the transaction
-                        self.txnSvc._cleanup(False)
 
     def doActions(self, sequence, kw=None, retVal=None,
                   errorSequence=None, newTransaction=False):
