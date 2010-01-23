@@ -10,9 +10,10 @@ import StringIO, os, os.path
 import logging
 from rx.utils import debugp
 from rx import RxPathGraph
-
+from rx.RxPathUtils import OrderedModel
+import sjson
+    
 def _toStatements(contents):
-    import sjson
     if not contents:
         return [], None
     if isinstance(contents, (list, tuple)):
@@ -348,6 +349,14 @@ class BasicStore(DomStore):
         
         self.model.addStatements(stmts)
         return jsonrep or stmts
+
+    def _removeLists(self, stmts):
+        if not self.model.canHandleStatementWithOrder:
+            for stmt in stmts:
+                #check if the statement is part of a json list, remove that list item too
+                rows = list(sjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
+                for row in rows:
+                    self.model.removeStatement(RxPath.Statement(*row[:5]))
         
     def remove(self, removes):
         '''
@@ -362,20 +371,12 @@ class BasicStore(DomStore):
         stmts, jsonrep = _toStatements(removes)
 
         if self.removeTrigger and stmts:
-            self.removeTrigger(stmts, jsonrep)
-        
-        if self.model.canHandleStatementWithOrder:
-            self.model.removeStatements(stmts)
-        else:
-            import sjson
-            for stmt in stmts:
-                #check if the statement is part of a json list, remove that list item too
-                rows = list(sjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
-                for row in rows:
-                    self.model.removeStatement(RxPath.Statement(*row[:5]))
-                self.model.removeStatement(stmt)
+            self.removeTrigger(stmts, jsonrep)        
+        self._removeLists(stmts)
+        self.model.removeStatements(stmts)
         
         return jsonrep or stmts
+
 
     def update(self, updates):
         '''
@@ -420,50 +421,63 @@ class BasicStore(DomStore):
             func = lambda: self.updateAll(update, replace, removedResources)
             return self.requestProcessor.executeTransaction(func)
         
-        removedResources = set(removedResources or [])
-
+        newStatements = []
+        newSjsonListResources = []
+        removals = []
+        #update:
+        #for each (subject, property pair), get current statement        
+        # and remove current ones (including any associated lists)
+        #unless subject is a list; then just add those statements
+        #XXX handle scope!
         updateStmts, ujsonrep = _toStatements(update)
+        root = OrderedModel(updateStmts)
+        for (resource, prop, values) in root.groupbyProp():
+            #note: for list resources, rdf:type will come first
+            if (prop == RxPath.RDF_MS_BASE+'type' 
+                and (sjson.JSON_BASE+'propseqtype', RxPath.OBJECT_TYPE_RESOURCE) in values):
+                newSjsonListResources.append(resource)
+                continue
+            currentStmts = self.model.getStatements(resource, prop)
+            if currentStmts:
+                self._removeLists(currentStmts)                
+                for currentStmt in currentStmts:
+                    if (currentStmt.object, currentStmt.objectType) not in values:
+                        removals.append(currentStmt)
+                    else:
+                        values.remove((currentStmt.object, currentStmt.objectType))
+            for value, valueType in values:
+                newStatements.append( RxPath.Statement(resource,prop, value, valueType) )
+        for listRes in newSjsonListResources:
+            newStatements.extend( root.subjectDict[listRes] )
+                
+        removedResources = set(removedResources or [])
         replaceStmts, replaceJson = _toStatements(replace)
         if replaceJson:
             for o in replaceJson:
                 #the object is empty so make it for removal
                 #we need to do this here because empty objects won't show up in
                 #replaceStmts
-                if len(o) == 1:
+                if len(o) == 1 and 'id' in o: #XXX what about namemapped sjson?
                     removeid = o['id']
-                    removedresources.add(removeid)
+                    removedResources.add(removeid)
+
+        #replace:
+        #get all statements with the subject and remove them (along with associated lists)
+        root = OrderedModel(replaceStmts)
+        for resource in root.resources:
+            currentStmts = self.model.getStatements(resource)
+            for stmt in currentStmts:
+                if stmt not in replaceStmts:
+                    removals.append(stmt)
+                else:
+                    replaceStmts.remove(stmt)
+            self._removeLists(currentStmts)
+        newStatements.extend(replaceStmts)
         
-        updateDom = RxPath.RxPathDOMFromStatements(updateStmts + replaceStmts)
-        srcstmts = []
-        resources = set()
-        replaceResources = set(s[0] for s in replaceStmts)
-
-        for subjectNode in updateDom.childNodes:
-            subject = subjectNode.uri
-            resources.add(subject)
-            if subject in replaceResources:
-                srcstmts.extend( self.model.getStatements(subject) )
-            else:                
-                subjectStmts = subjectNode.getModelStatements()
-                predicates = set(stmt.predicate for stmt in subjectStmts)
-                for prop in predicates:                                        
-                    propstmts = self.model.getStatements(subject, prop)
-                    srcstmts.extend( propstmts )
-
-        srcDom = RxPath.RxPathDOMFromStatements(srcstmts)
-        newStatements, removedNodes = RxPath.mergeDOM(srcDom, updateDom, resources)
-        
-        removals = []
-        if removedResources:            
-            for subject in removedResources:
-                removals.extend( self.model.getStatements(subject) )
-
-        for node in removedNodes:
-            stmts = node.getModelStatements()
-            #for s in stmts:
-            #    if s.object is bnode:
-            #        bnode
-            removals.extend( stmts )
+        #remove: remove all statements and associated lists        
+        for r in removedResources:
+            currentStmts = self.model.getStatements(r)
+            removals.extend(currentStmts)
 
         self.remove(removals)        
         addStmts = self.add(newStatements)

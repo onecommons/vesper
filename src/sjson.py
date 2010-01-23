@@ -152,7 +152,7 @@ The other direction is needs to be specified in the datatype.
 from rx.python_shim import *
 from rx import RxPath
 from rx.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
-from rx.RxPathUtils import encodeStmtObject
+from rx.RxPathUtils import encodeStmtObject, OrderedModel, peekpair
 import re, multipartjson
 
 try:
@@ -339,16 +339,10 @@ class Serializer(object):
             regexes = (None, None, None)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = regexes
 
-    def _value(self, node, context=None):
+    def _value(self, stmt, context=None):
         #XXX use valueName
-        from rx import RxPathDom
-        if isinstance(node.parentNode, RxPathDom.BasePredicate):
-            stmt = node.parentNode.stmt
-            objectType = stmt.objectType            
-            v = toJsonValue(node.data, objectType, self.preserveRdfTypeInfo)
-        else:
-            v = node.data
-            objectType = OBJECT_TYPE_LITERAL
+        objectType = stmt.objectType            
+        v = toJsonValue(stmt.object, objectType, self.preserveRdfTypeInfo)
 
         if isinstance(v, (str, unicode)):                
             if context is not None or (self.outputRefPattern 
@@ -394,45 +388,44 @@ class Serializer(object):
             return match.expand(self.refTemplate)
             #return self.QName(uri) 
     
-    def _setPropSeq(self, propseq):
+    def _setPropSeq(self, orderedmodel, propseq):
         childlist = []
         propbag = None
-        for p in propseq.childNodes:
-            prop = p.stmt.predicate
-            obj = p.childNodes[0]
+        for stmt in orderedmodel.getProperties(propseq):
+            prop = stmt.predicate
+            obj = stmt.object
             #print '!!propseq member', p.stmt
             if prop == PROPBAG:
-                propbag = obj.uri
+                propbag = obj
             elif prop == RxPath.RDF_SCHEMA_BASE+u'member':
-                childlist.append( obj )
+                childlist.append( stmt )
         return propbag, childlist
 
     def _finishPropList(self, prop, childlist, idrefs, resScope, nestedLists):
-        from rx import RxPathDom
-        for i, node in enumerate(childlist):
-            if not isinstance(node, RxPathDom.Node):
+        for i, stmt in enumerate(childlist):
+            if not isinstance(stmt, Statement):
                 #this list was already processed
-                assert all(not isinstance(node, RxPathDom.Node) for node in childlist)
+                assert all(not isinstance(stmt, Statement) for stmt in childlist)
                 return
-            scope = node.parentNode.stmt.scope
+            scope = stmt.scope
             if scope == resScope:
                 scope = None #only include scope if its different
-            if isinstance(node, RxPathDom.Text):
-                childlist[i]  = self._value(node, scope)
-            elif node.uri == RDF_MS_BASE + 'nil' and scope is None:
+            if stmt.objectType != OBJECT_TYPE_RESOURCE:
+                childlist[i]  = self._value(stmt, scope)
+            elif stmt.object == RDF_MS_BASE + 'nil' and scope is None:
                 childlist[i] = []
             else: #otherwise it's a resource
-                childlist[i] = self.serializeRef(prop, node.uri, scope)
+                childlist[i] = self.serializeRef(prop, stmt.object, scope)
                 if scope is None:
                     #only add ref if we don't have to serialize the pScope
-                    idrefs.setdefault(node.uri, []).append(
+                    idrefs.setdefault(stmt.object, []).append(
                                     (childlist, resScope, i))
-                if node.uri in nestedLists:
+                if stmt.object in nestedLists:
                     #if nested list handle it now
-                    (seqprop, nestedlist) = nestedLists[node.uri]
+                    (seqprop, nestedlist) = nestedLists[stmt.object]
                     assert not seqprop
                     self._finishPropList(prop, nestedlist, idrefs, resScope, nestedLists)
-        assert all(not isinstance(node, RxPathDom.Node) for node in childlist)
+        assert all(not isinstance(node, Statement) for node in childlist)
 
     def createObjectRef(self, id, obj, includeObject, model):
         '''
@@ -454,64 +447,30 @@ class Serializer(object):
                     return objs[0]                    
         return id
 
-    def to_sjson(self, root=None, model=None, scope=''):
+    def to_sjson(self, stmts=None, model=None, scope=''):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
 
         #XXX add exclude_blankids option?
         defaultScope = scope
-        
-        #use RxPathDom, expensive but arranges as sorted tree, normalizes RDF collections et al.
-        #and is schema aware
-        from rx import RxPathDom
-        if not isinstance(root, RxPathDom.Node):
-            #assume doc is iterator of statements or quad tuples
-            #note: order is not preserved
-            if root is not None:
-                rootModel = RxPath.MemModel(root)
-            else:
-                rootModel = model
-            root = RxPath.createDOM(rootModel, schemaClass=RxPath.BaseSchema)
-
+        if stmts is None:
+            stmts = model.getStatments()
+                    
         #step 1: build a list of subjectnodes
-        if isinstance(root, (RxPathDom.Document, RxPathDom.DocumentFragment)):
-            if isinstance(root, RxPathDom.Document):
-                listnodes = []
-                nodes = []
-                for n in root.childNodes:
-                    if not n.childNodes:
-                        #filter out resources with no properties
-                        continue
-                    if n.matchName(JSON_BASE,'propseqtype'):
-                        #resource has rdf:type propseqtype
-                        listnodes.append(n)
-                    else:
-                        nodes.append(n)
-            else:
-                nodes = [n for n in root.childNodes]
-            #from pprint import pprint
-            #pprint(nodes)
-        elif isinstance(root, RxPathDom.Resource):
-            nodes = [root]
-        elif isinstance(root, RxPathDom.BasePredicate):
-            #XXX
-            obj = p.childNodes[0]
-            key = self.QName(root.parentNode.uri)
-            propmap = { self.PROPERTYMAP : self.QName(root.stmt.predicate) }
-            if isinstance(obj, RxPathDom.Text):
-                v = self._value(obj)
-                nodes = []
-            else:
-                v = {}
-                nodes = [obj]
-            propmap[key] = v
-            results = [propmap]
-        elif isinstance(root, RxPathDom.Text):
-            #return string value
-            return self._value(root);
-        else:
-            raise TypeError('Unexpected root node')
+        listresources = []
+        nodes = []
+        root = OrderedModel(stmts)
+        for resourceUri in root.resources:
+            islist = False
+            for resourceStmt in root.subjectDict[resourceUri]:
+                if resourceStmt.predicate == RDF_MS_BASE+'type' and resourceStmt.object == JSON_BASE+'propseqtype':
+                    #resource has rdf:type propseqtype
+                    listresources.append(resourceUri)
+                    islist = True
+                    break
+            if not islist:
+                nodes.append(resourceUri)
 
         #step 2: map them to object or lists, building id => [ objrefs ] dict
         #along the way        
@@ -519,31 +478,32 @@ class Serializer(object):
         lists = {}
         idrefs = {}
 
-        for listnode in listnodes:            
-            seqprop, childlist = self._setPropSeq(listnode)
-            lists[listnode.uri] = (seqprop, childlist)
+        for listnode in listresources:            
+            seqprop, childlist = self._setPropSeq(root, listnode)
+            lists[listnode] = (seqprop, childlist)
 
-        for res in nodes:            
-            if not res.childNodes:
+        for res in nodes: 
+            childNodes = root.getProperties(res)           
+            if not childNodes:
                 #no properties
                 continue            
-            currentobj = { self.ID : res.uri }
+            currentobj = { self.ID : res }
             currentlist = []
             #print 'adding to results', res.uri
-            results[res.uri] = currentobj
+            results[res] = currentobj
             #print 'res', res, res.childNodes
             
             #deal with sequences first
             resScopes = {}
-            for p in res.childNodes:
-                if p.stmt.predicate == PROPSEQ:
+            for stmt in childNodes:
+                if stmt.predicate == PROPSEQ:
                     #this will replace sequences
-                    seqprop, childlist = lists[p.stmt.object]
+                    seqprop, childlist = lists[stmt.object]
                     key = self.QName(seqprop)
                     currentobj[ key ] = childlist
                     #print 'adding propseq', p.stmt.object
                 else:
-                    pscope = p.stmt.scope
+                    pscope = stmt.scope
                     resScopes[pscope] = resScopes.setdefault(pscope, 0) + 1
             
             mostcommon = 0
@@ -557,8 +517,8 @@ class Serializer(object):
                 #add context prop if different from default context
                 currentobj['context'] = resScope
                                         
-            for p in res.childNodes:
-                prop = p.stmt.predicate
+            for stmt, next in peekpair(childNodes):
+                prop = stmt.predicate
                 if prop == PROPSEQ:
                     continue
                 
@@ -571,7 +531,7 @@ class Serializer(object):
                     self._finishPropList(key, currentobj[key], idrefs, resScope, lists)
                     continue 
 
-                nextMatches = p.nextSibling and p.nextSibling.stmt.predicate == prop
+                nextMatches = next and next.predicate == prop
                 #XXX Test empty and singleton rdf lists and containers
                 if nextMatches or currentlist:
                     parent = currentlist
@@ -580,23 +540,22 @@ class Serializer(object):
                 else:
                     parent = currentobj
                 
-                if p.stmt.scope != resScope:
-                    pScope = p.stmt.scope
+                if stmt.scope != resScope:
+                    pScope = stmt.scope
                 else:
                     pScope = None
                 
-                obj = p.childNodes[0]
-                if isinstance(obj, RxPathDom.Text):
-                    parent[ key ] = self._value(obj, pScope)
-                elif obj.uri == RDF_MS_BASE + 'nil' and pScope is None:
+                if stmt.objectType != OBJECT_TYPE_RESOURCE:
+                    parent[ key ] = self._value(stmt, pScope)
+                elif stmt.object == RDF_MS_BASE + 'nil' and pScope is None:
                     parent[ key ] = []
                 else: #otherwise it's a resource
                     #print 'prop key', key, prop, type(parent)
-                    parent[ key ] = self.serializeRef(key, obj.uri, pScope)
-                    if obj.uri != res.uri and pScope is None:
+                    parent[ key ] = self.serializeRef(key, stmt.object, pScope)
+                    if stmt.object != res and pScope is None:
                         #add ref if object isn't same as subject
                         #and we don't have to serialize the pScope
-                        idrefs.setdefault(obj.uri, []).append( (parent, resScope, key) )
+                        idrefs.setdefault(stmt.object, []).append( (parent, resScope, key) )
 
                 if currentlist and not nextMatches:
                     #done with this list
