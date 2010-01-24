@@ -265,17 +265,18 @@ True
 
 _defaultBNodeGenerator = 'uuid'
 
-def toJsonValue(data, objectType, preserveRdfTypeInfo=False, valueName='value'):
+def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, valueName='value'):
     if len(objectType) > 1:
-        valueparse = _xsdmap.get(objectType)
-        if valueparse:
-            return valueparse(data)
-        elif preserveRdfTypeInfo:
-            return encodeStmtObject(data, objectType, valueName=valueName)
-        else:
-            valueparse = _xsdExtendedMap.get(objectType)
+        encode = scope is not None
+        if not encode:
+            valueparse = _xsdmap.get(objectType)
             if valueparse:
                 return valueparse(data)
+            if not preserveRdfTypeInfo:
+                valueparse = _xsdExtendedMap.get(objectType)
+                if valueparse:
+                    return valueparse(data)
+        return encodeStmtObject(data, objectType, scope=scope, valueName=valueName)
     else:
         return data
 
@@ -342,15 +343,15 @@ class Serializer(object):
     def _value(self, stmt, context=None):
         #XXX use valueName
         objectType = stmt.objectType            
-        v = toJsonValue(stmt.object, objectType, self.preserveRdfTypeInfo)
+        v = toJsonValue(stmt.object, objectType, self.preserveRdfTypeInfo, context)
 
         if isinstance(v, (str, unicode)):                
             if context is not None or (self.outputRefPattern 
                             and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
                 return encodeStmtObject(v, objectType, scope=context)
-        elif context is not None:            
-            v['context'] = context
+        else:
+            assert context is None or isinstance(v, dict), 'context should have been handled by toJsonValue'
 
         return v
                 
@@ -456,7 +457,6 @@ class Serializer(object):
         defaultScope = scope
         if stmts is None:
             stmts = model.getStatments()
-                    
         #step 1: build a list of subjectnodes
         listresources = []
         nodes = []
@@ -749,24 +749,29 @@ class Parser(object):
             elif not isinstance(objId, (unicode, str)):
                 objId = str(objId) #OBJECT_TYPE_RESOURCEs need to be strings
             return objId, newParseContext
-
+            
+        
         if isinstance(json, (str,unicode)):
-            todo = json = loads(json) 
+            json = loads(json) 
         
         if isinstance(json, dict):
             if 'sjson' in json:
-                todo = json.get('data', [])
+                start = json.get('data', [])
                 parseContext = ParseContext.initParseContext(json, parseContext)
             else:
-                todo = [json]
+                start = [json]
         else:
-            todo = list(json)
-            if todo and 'sjson' in todo[0]:
-                header = todo.pop(0)
-                parseContext = ParseContext.initParseContext(header, parseContext)
-            
-        todo = [ (x, getorsetid(x), '') for x in todo]
-                
+            start = list(json)
+        
+        todo = []
+        for x in start:
+            if 'sjson' in x:
+                #not an object, just reset parseContext (for next call to getorsetid())
+                parseContext = ParseContext.initParseContext(x, parseContext)
+            else:
+                todo.append( (x, getorsetid(x), '') )
+        #print 'parse json', todo
+                       
         def _createNestedList(val):
             assert isinstance(val, list)
             if not val:
@@ -807,6 +812,7 @@ class Parser(object):
                 parentid = id
 
             scope = parseContext.context
+            #print scope
             
             for prop, val in obj.items():
                 if parseContext.isReservedPropertyName(prop):
@@ -831,32 +837,32 @@ class Parser(object):
                     #to handle dups, build itemdict
                     itemdict = {}
                     for i, item in enumerate(val):               
-                        item, objecttype, scope = self.deduceObjectType(item, parseContext)
+                        item, objecttype, itemscope = self.deduceObjectType(item, parseContext)
                         if isinstance(item, dict):
                             itemid, itemParseContext = getorsetid(item)
-                            pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))                            
+                            pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE, itemscope))                            
                             if pos:
                                 pos.append(i)
                             else:
-                                itemdict[(itemid, OBJECT_TYPE_RESOURCE)] = [i]                                                                
+                                itemdict[(itemid, OBJECT_TYPE_RESOURCE, itemscope)] = [i]                                                                
                                 todo.append( (item, (itemid, itemParseContext), parentid) )
                         elif isinstance(item, list):                        
                             nestedlistid = _createNestedList(item)
-                            itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE)] = [i]                                                                                            
+                            itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE,itemscope)] = [i]                                                                                            
                         else:
                             #simple type
-                            pos = itemdict.get( (item, objecttype) )                            
+                            pos = itemdict.get( (item, objecttype, itemscope) )
                             if pos:
                                 pos.append(i)
                             else:
-                                itemdict[(item, objecttype)] = [i]                                                                                            
+                                itemdict[(item, objecttype, itemscope)] = [i]                                                                                            
                     
                     listStmts = []
-                    for (item, objecttype), pos in itemdict.items():
+                    for (item, objecttype, itemscope), pos in itemdict.items():
                         if addOrderInfo:
-                            s = StatementWithOrder(id, prop, item, objecttype, scope, pos)
+                            s = StatementWithOrder(id, prop, item, objecttype, itemscope, pos)
                         else:
-                            s = Statement(id, prop, item, objecttype, scope)
+                            s = Statement(id, prop, item, objecttype, itemscope)
                         listStmts.append(s)
                     
                     m.addStatements(listStmts)

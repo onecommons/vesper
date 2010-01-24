@@ -217,6 +217,10 @@ def test():
             }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
     
+    #############################################
+    ################ scope/context tests
+    #############################################
+    
     src = [{"id": "1",
       "context" : "context1",
       "prop1": 1,
@@ -235,7 +239,90 @@ def test():
      'prop4' : { 'type' : 'literal', 'value' : 'hello', 'context' : 'context3'}
     }]
     assert_json_and_back_match(src)
-    
+
+    src = [{
+      "sjson": "0.9", 
+      "namemap": {
+        "refs": "@(URIREF)"
+      },
+      'context' : 'scope1'
+    },
+    {
+      'id' : 'id1',
+      'prop1': 1,
+      'prop2': "@ref"
+    },
+    {
+      "sjson": "0.9", 
+      'context' : ''
+    },    
+    {
+      'id' : 'id1', #note: same id
+      'prop1': 1,
+      'prop2': "@ref"
+    },    
+    ]
+    assert_json_and_back_match(src, False, 
+    [('id1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'scope1'),
+     ('id1', 'prop2', 'ref', 'R', 'scope1'),
+     ('id1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', ''),
+      ('id1', 'prop2', 'ref', 'R', '')     
+     ],    
+    intermediateJson=[{"id": "id1", "prop1": [1, {"context": "scope1", 
+        "datatype": "http://www.w3.org/2001/XMLSchema#integer", 
+        "type": "typed-literal", 
+        "value": "1"}], 
+      "prop2": [ "@ref", {"context": "scope1", "type": "uri", "value": "ref"}]
+      }]
+    )
+
+    src = [{
+       'id' : 'resource1',
+       "value" : "not in a scope",
+      "type":         
+        {
+          "type": "uri", 
+          "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
+          "value": "post"
+        }
+      , 
+      "content-Type":         
+        {
+          "type": "literal", 
+          "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
+          "value": "text/plain"
+        }      
+     }]
+    #XXX note intermediateJson: not ideal but correct   
+    assert_json_and_back_match(src, intermediateJson=[{
+    "content-Type": "text/plain", 
+    "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
+    "id": "resource1", 
+    "type": "@post", 
+    "value": {"context": "", "type": "literal", "value": "not in a scope"}}]) 
+
+    #test duplicate statements but in different scopes
+    src = [{ 'id' : 'id1', 
+       "value" : "not in a scope",
+      "type": [
+        "@post", 
+        {
+          "type": "uri", 
+          "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
+          "value": "post"
+        }
+      ], 
+      "content-Type": [
+        "text/plain", 
+        {
+          "type": "literal", 
+          "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
+          "value": "text/plain"
+        }
+      ]
+     }]
+    assert_json_and_back_match(src) 
+        
     print 'tests pass'
 
 
