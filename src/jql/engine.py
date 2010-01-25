@@ -1627,9 +1627,12 @@ class SimpleQueryEngine(object):
             isJsonList, val = self.reorderWithListInfo(context, op, val)    
             handleNil = isJsonList or len(val) > 1
             val = [self.buildObject(context, v, handleNil) for v in val]
+            #XXX add serialization option to flatten singleton lists, e.g.:
+            #if context.flatten and isJsonList and not (len(val) == 1 and not isinstance(val[0], list))
+            #(preserves [] and [[]] but not ['a'], instead serialize as 'a')
             if isJsonList:
                 return val
-            elif not val:
+            elif not val:            
                 return None #empty
             elif len(val) == 1:
                 return val[0]

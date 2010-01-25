@@ -835,43 +835,48 @@ class Parser(object):
                                                 OBJECT_TYPE_RESOURCE, scope) )
                         
                     #to handle dups, build itemdict
-                    itemdict = {}
-                    for i, item in enumerate(val):               
+                    itemScopes = {}
+                    for i, item in enumerate(val):
                         item, objecttype, itemscope = self.deduceObjectType(item, parseContext)
+                        itemdict = itemScopes.setdefault(itemscope, {})
                         if isinstance(item, dict):
                             itemid, itemParseContext = getorsetid(item)
-                            pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE, itemscope))                            
+                            pos = itemdict.get((itemid, OBJECT_TYPE_RESOURCE))
                             if pos:
                                 pos.append(i)
                             else:
-                                itemdict[(itemid, OBJECT_TYPE_RESOURCE, itemscope)] = [i]                                                                
+                                itemdict[(itemid, OBJECT_TYPE_RESOURCE)] = [i]                                                                
                                 todo.append( (item, (itemid, itemParseContext), parentid) )
                         elif isinstance(item, list):                        
                             nestedlistid = _createNestedList(item)
-                            itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE,itemscope)] = [i]                                                                                            
+                            itemdict[(nestedlistid, OBJECT_TYPE_RESOURCE)] = [i]                                                                                            
                         else:
                             #simple type
-                            pos = itemdict.get( (item, objecttype, itemscope) )
+                            pos = itemdict.get( (item, objecttype) )
                             if pos:
                                 pos.append(i)
                             else:
-                                itemdict[(item, objecttype, itemscope)] = [i]                                                                                            
+                                itemdict[(item, objecttype)] = [i]                                                                                            
                     
                     listStmts = []
-                    for (item, objecttype, itemscope), pos in itemdict.items():
-                        if addOrderInfo:
-                            s = StatementWithOrder(id, prop, item, objecttype, itemscope, pos)
-                        else:
-                            s = Statement(id, prop, item, objecttype, itemscope)
-                        listStmts.append(s)
+                    for itemscope, itemdict in itemScopes.items():
+                        for (item, objecttype), pos in itemdict.items():
+                            #only preserve position if more than one item per scope or only one scope
+                            if addOrderInfo and (len(itemScopes)==1 or len(itemdict)>1):
+                                s = StatementWithOrder(id, prop, item, objecttype, itemscope, pos)
+                            else:
+                                s = Statement(id, prop, item, objecttype, itemscope)
+                            listStmts.append(s)
                     
                     m.addStatements(listStmts)
                     
                     if addOrderInfo and not m.canHandleStatementWithOrder:    
                         lists = {}
-                        for s in listStmts:                            
+                        for s in listStmts:
+                            if not isinstance(s, StatementWithOrder):
+                                continue
                             value = (s[2], s[3])            
-                            ordered  = lists.setdefault( (s[4], s[0], s[1]), [])                
+                            ordered  = lists.setdefault( (s[4], s[0], s[1]), [])
                             for p in s.listpos:
                                 ordered.append( (p, value) )
                         if lists:
