@@ -5,7 +5,7 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-import raccoon
+import raccoon, web
 from rx import utils, logging, transactions, RxPath
 import unittest, glob, os, os.path, traceback
 
@@ -60,7 +60,7 @@ class RaccoonTestCase(unittest.TestCase):
         result = root.runActions('http-request', dict(_name='foo'))
         self.assertEquals("<html><body>page content.</body></html>", result)
 
-        root = raccoon.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
+        root = web.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
         kw = dict(_name='no such page', _responseHeaders={}, _environ={})
         result = root.handleHTTPRequest(kw)
         self.assertEquals(kw['_responseHeaders']['_status'],"404 Not Found")
@@ -71,7 +71,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(result.read().strip(), "test file")
 
     def _testErrorHandling(self, appVars=None):
-        root = raccoon.HTTPRequestProcessor(a='testErrorHandling-config.py',
+        root = web.HTTPRequestProcessor(a='testErrorHandling-config.py',
             model_uri = 'test:', appVars=appVars)
         #make sure the error handler is run and sets the status code to 404 instead of the default 200
         kw = dict(_name='foo', 

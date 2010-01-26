@@ -5,29 +5,16 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-if __name__ == '__main__':
-    import sys,raccoon
-    sys.exit(raccoon.main())
-    
 from rx import utils, glock, RxPath, MRUCache, DataStore, transactions, store
+from rx.transaction_processor import TransactionProcessor
 import os, time, sys, base64, mimetypes, types, traceback
 import urllib, re
 
-try:
-    import cPickle
-    pickle = cPickle
-except ImportError:
-    import pickle
 try:
     import cStringIO
     StringIO = cStringIO
 except ImportError:
     import StringIO
-
-try:
-    from hashlib import md5 # python 2.5 or greater
-except ImportError:
-    from md5 import new as md5
 
 import logging
 DEFAULT_LOGLEVEL = logging.INFO
@@ -53,10 +40,6 @@ class DoNotHandleException(Exception):
 class ActionWrapperException(utils.NestedException):
     def __init__(self):
         return utils.NestedException.__init__(self,useNested=True)
-
-#from rx.ExtFunctions import *
-#from rx.UriResolvers import *
-#from rx import ContentProcessors
 
 ############################################################
 ##Raccoon defaults
@@ -220,118 +203,6 @@ def assignVars(self, kw, varlist, default):
 ############################################################
 ##Raccoon main class
 ############################################################
-class TransactionProcessor(utils.object_with_threadlocals):
-    
-    def __init__(self, model_uri=None, appVars=None):
-        """
-        appVars - dictionary of config settings, overriding the config
-        """
-        self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
-        
-        self.BASE_MODEL_URI = model_uri
-        
-        self.requestContext = [{}] #stack of dicts
-        
-        self.lock = None
-        self.log = log
-        self.actions = {}
-        
-        kw = globals().copy() #copy this module's namespace
-        if appVars:
-            kw.update(appVars)
-        self.loadDataStore(kw)
-        
-    def loadDataStore(self, kw):
-        self.txnSvc = transactions.RaccoonTransactionService(self)
-        
-        dataStoreFactory = kw.get('dataStoreFactory', kw.get('domStoreFactory', DataStore.BasicStore))
-        self.dataStore = dataStoreFactory(self, **kw)
-        self.dataStore.addTrigger = self.txnSvc.addHook
-        self.dataStore.removeTrigger = self.txnSvc.removeHook
-        
-        self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
-                                         self.BASE_MODEL_URI)
-        
-    def getLock(self):
-        '''
-        Acquires and returns the lock associated with this RequestProcessor.
-        Call release() on the returned lock object to release it.
-        '''
-        assert self.lock
-        return glock.LockGetter(self.lock)
-    
-    def loadModel(self):
-        if not self.lock:
-            lockName = 'r' + str(hash(self.MODEL_RESOURCE_URI)) + '.lock'
-            self.lock = self.LockFile(lockName)
-
-        lock = self.getLock()
-        try:
-            self.dataStore.load()
-        finally:
-            lock.release()
-        
-    def executeTransaction(self, func, kw=None, retVal=None):
-        kw = kw or {}
-        self.txnSvc.begin()
-        self.txnSvc.state.kw = kw
-        self.txnSvc.state.retVal = retVal
-        try:
-            retVal = func()
-        except:
-            if not self.txnSvc.state.aborted:
-                self.txnSvc.abort()
-            raise
-        else:
-            if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                self.txnSvc.state.retVal = retVal
-                if self.txnSvc.isDirty():
-                    if kw.get('__readOnly'):
-                        self.log.warning(
-                        'a read-only transaction was modified and aborted')
-                        self.txnSvc.abort()
-                    elif not self.txnSvc.state.cantCommit:
-                        self.txnSvc.commit()
-                else:
-                    #nothings changed, don't bother committing
-                    #but need to clean up the transaction
-                    self.txnSvc._cleanup(False)
-                       
-        return retVal
-
-    # add a convenience contextmanager on newer versions of python
-    if sys.version_info[:2] > (2,4):
-        from contextlib import contextmanager
-
-        @contextmanager
-        def inTransaction(self, kw=None):
-            kw = kw or {}
-            self.txnSvc.begin()
-            self.txnSvc.state.kw = kw
-
-            try:
-                yield self
-            except:
-                if not self.txnSvc.state.aborted:
-                    self.txnSvc.abort()
-                raise
-            else:
-                if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                    if self.txnSvc.isDirty():
-                        if kw.get('__readOnly'):
-                            self.log.warning(
-                            'a read-only transaction was modified and aborted')
-                            self.txnSvc.abort()
-                        elif not self.txnSvc.state.cantCommit:
-                            self.txnSvc.commit()
-                    else:
-                        #nothings changed, don't bother committing
-                        #but need to clean up the transaction
-                        self.txnSvc._cleanup(False)
-
-
 class RequestProcessor(TransactionProcessor):
     DEFAULT_CONFIG_PATH = ''#'raccoon-default-config.py'
 
@@ -368,7 +239,8 @@ class RequestProcessor(TransactionProcessor):
         self.baseDir = self.PATH.split(os.pathsep)[0]
         self.appBase = appBase or '/'
         self.appName = appName
-        self.cmd_usage = DEFAULT_cmd_usage
+        # self.cmd_usage = DEFAULT_cmd_usage XXXX
+        self.cmd_usage = ""
         self.loadConfig(configpath, argsForConfig, appVars)
         if self.template_path:
             from mako.lookup import TemplateLookup
@@ -480,7 +352,8 @@ class RequestProcessor(TransactionProcessor):
         self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
                                          self.BASE_MODEL_URI)
 
-        self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
+        # XXX
+        # self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
 
         self.nsMap.update(DefaultNsMap)
         
@@ -652,289 +525,6 @@ class RequestProcessor(TransactionProcessor):
         return self.doActions(actions, templatekw,
             errorSequence=errorSequence, newTransaction=newTransaction)
 
-class HTTPRequestProcessor(RequestProcessor):
-    '''
-    Adds functionality for handling an HTTP request.
-    '''
-
-    statusMessages = {
-        200 : "OK",
-        206 : 'Partial Content',
-        301 : "Moved Permanently",
-        302 : "Moved Temporarily",
-        304 : "Not Modified",
-        400 : 'Bad Request',
-        401 : 'Unauthorized',
-        403 : 'Forbidden',
-        404 : 'Not Found',
-        426 : 'Upgrade Required',
-        500 : 'Internal Server Error',
-        501 : 'Not Implemented',
-        503 : 'Service Unavailable',
-    }
-
-    defaultGlobalVars = RequestProcessor.defaultGlobalVars + ['_environ',
-            '_uri',
-            '_baseUri',
-            '_responseCookies',
-            '_requestCookies',
-            '_responseHeaders',
-    ]
-
-    def __init__(self,*args, **kwargs):
-        #add missing mimetypes that IE cares about:
-        mimetypes.types_map['.ico']='image/x-icon'
-        mimetypes.types_map['.htc']='text/x-component'
-
-        super(HTTPRequestProcessor,self).__init__(*args, **kwargs)
-
-    def handleHTTPRequest(self, kw):
-        if self.requestsRecord is not None:
-            self.requestsRecord.append(kw)
-
-        #if the request name has an extension try to set
-        #a default mimetype before executing the request
-        name = kw['_name']
-        i=name.rfind('.')
-        if i!=-1:
-            ext=name[i:]
-            contentType=mimetypes.types_map.get(ext)
-            if contentType:
-                kw['_responseHeaders']['content-type']=contentType
-
-        try:
-            rc = {}
-            #requestContext is used by all Requestor objects
-            #in the current thread
-            #rc['_environ']=kw['_environ']
-            #rc['_responseHeaders'] = kw['_responseHeaders']
-            #rc['_session']=kw['_session']
-            self.requestContext.append(rc)
-
-            self.validateExternalRequest(kw)
-
-            result = self.runActions('http-request', kw)
-            if result is not None:
-                #if mimetype is not set, make another attempt
-                if 'content-type' not in kw['_responseHeaders']:
-                    contentType = self.guessMimeTypeFromContent(result)
-                    if contentType:
-                        kw['_responseHeaders']['content-type']=contentType
-
-                status = kw['_responseHeaders']['_status']
-                if isinstance(status, (float, int)):
-                   msg = self.statusMessages.get(status, '')
-                   status  = '%d %s' % (status, msg)
-                   kw['_responseHeaders']['_status'] = status
-
-                if not status.startswith('200'):
-                    return result #don't set the following headers
-
-                if (self.defaultExpiresIn and
-                    'expires' not in kw['_responseHeaders']):
-                    if self.defaultExpiresIn == -1:
-                        expires = '-1'
-                    else:
-                        expires = time.strftime("%a, %d %b %Y %H:%M:%S GMT",
-                                        time.gmtime(time.time() + self.defaultExpiresIn))
-                    kw['_responseHeaders']['expires'] = expires
-
-                #XXX this etag stuff should be an action
-                if self.useEtags:
-                    resultHash = kw['_responseHeaders'].get('etag')
-                    #if the app already set the etag use that value instead
-                    if resultHash is None and isinstance(result, str):
-                        resultHash = '"' + md5(result).hexdigest() + '"'
-                        kw['_responseHeaders']['etag'] = resultHash
-                    etags = kw['_environ'].get('HTTP_IF_NONE_MATCH')
-                    if etags and resultHash in [x.strip() for x in etags.split(',')]:
-                        kw['_responseHeaders']['_status'] = "304 Not Modified"
-                        return ''
-
-                return result
-        finally:
-            self.requestContext.pop()
-
-        return self.default_not_found(kw)
-
-    def wsgi_app(self, environ, start_response):
-        """
-        Converts an HTTP request into these kws:
-
-        _environ
-        _params
-        _uri
-        _baseUri
-        _name
-        _responseheaders
-        _responsecookies
-        _requestcookies
-        """
-        import Cookie, wsgiref.util
-        _name = environ['PATH_INFO'].strip('/')
-        if not _name:
-            _name = self.defaultPageName
-
-        _responseCookies = Cookie.SimpleCookie()
-        _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
-        kw = utils.attrdict(_environ=utils.attrdict(environ),
-            _uri = wsgiref.util.request_uri(environ),
-            _baseUri = wsgiref.util.application_uri(environ),
-            _responseCookies = _responseCookies,
-            _requestCookies = Cookie.SimpleCookie(environ.get('HTTP_COOKIE', '')),
-            _responseHeaders= _responseHeaders,
-            _name=_name
-        )
-        paramsdict = get_http_params(environ)
-        kw.update(paramsdict)
-        response = self.handleHTTPRequest(kw)
-
-        status = _responseHeaders.pop('_status')
-        headerlist = _responseHeaders.items()
-        if len(_responseCookies):
-            headerlist += [('Set-Cookie', m.OutputString() )
-                            for m in _responseCookies.values()]
-
-        start_response(status, headerlist)
-        if hasattr(response, 'read'): #its a file not a string
-            block_size = 8192
-            if 'wsgi.file_wrapper' in environ:
-                return environ['wsgi.file_wrapper'](response, block_size)
-            else:
-                return iter(lambda: response.read(block_size), '')
-        else:
-            return [response]
-
-    def guessMimeTypeFromContent(self, result):
-        #obviously this could be improved,
-        #e.g. detect encoding in xml header or html meta tag
-        #or handle the BOM mark in front of the <?xml
-        #detect binary vs. text, etc.
-        if isinstance(result, (str, unicode)):
-            test = result[:30].strip().lower()
-        else:
-            test = ''
-        if test.startswith("<html") or result.startswith("<!doctype html"):
-            return "text/html"
-        elif test.startswith("<?xml") or test[2:].startswith("<?xml"):
-            return "text/xml"
-        elif self.DEFAULT_MIME_TYPE:
-            return self.DEFAULT_MIME_TYPE
-        else:
-            return None
-
-    def default_not_found(self, kw):
-        kw['_responseHeaders']["content-type"]="text/html"
-        kw['_responseHeaders']['_status'] = "404 Not Found"
-        return '''<html><head><title>Error 404</title>
-<meta name="robots" content="noindex" />
-</head><body>
-<h2>HTTP Error 404</h2>
-<p><strong>404 Not Found</strong></p>
-<p>The Web server cannot find the file or script you asked for.
-Please check the URL to ensure that the path is correct.</p>
-<p>Please contact the server's administrator if this problem persists.</p>
-</body></html>'''
-
-    def saveRequestHistory(self):
-        if self.requestsRecord:
-            requestRecordFile = file(self.requestRecordPath, 'wb')
-            pickle.dump(self.requestsRecord, requestRecordFile)
-            requestRecordFile.close()
-
-    def playbackRequestHistory(self, debugFileName, out=sys.stdout):
-        requests = pickle.load(file(debugFileName, 'rU'))
-        import repr
-        rpr = repr.Repr()
-        rpr.maxdict = 20
-        rpr.maxlevel = 2
-        for i, request in enumerate(requests):
-            verb = request['_environ']['REQUEST_METHOD']
-            login = request.get('_session',{}).get('login','')
-            print>>out, i, verb, request['_name'], 'login:', login
-            #print form variables
-            print>>out, rpr.repr(dict([(k, v) for k, v in request.items()
-                                if isinstance(v, (unicode, str, list))]))
-
-            self.handleHTTPRequest(request)
-
-    def runWsgiServer(self, port=8000, server=None, middleware=None):
-        if not server:
-            from wsgiref.simple_server import make_server
-            server = make_server
-        if middleware:
-            app = middleware(self.wsgi_app)
-        else:
-            app = self.wsgi_app
-        httpd = server('', port, app)
-        try:
-            httpd.serve_forever()
-        finally:
-            self.runActions('shutdown')
-            self.saveRequestHistory()
-
-class UploadFile(object):
-
-    def __init__(field):
-        self._field = field
-
-    filename = property(lambda self: self._field.filename)
-    file = property(lambda self: self._field.file)
-    contents = property(lambda self: self._field.value)
-
-def get_http_params(environ):        
-    '''build _params (and maybe _postContent)'''
-    import cgi
-
-    _params = {}
-    _postContent = None
-    getparams = utils.defaultattrdict()
-    postparams = utils.defaultattrdict()
-
-    if environ.get('QUERY_STRING'):
-        forms = cgi.FieldStorage(environ=environ, keep_blank_values=1)
-        for key in forms.keys():
-            valueList = forms[key]
-            if isinstance(valueList, list):# Check if it's a list or not
-                getparams[key]= [item.value for item in valueList]
-            else:
-                getparams[key] = valueList.value
-
-    if environ['REQUEST_METHOD'] == 'POST':
-        forms = cgi.FieldStorage(fp=environ.get('wsgi.input'),
-                                environ=environ, keep_blank_values=1)
-        if forms.list is None:
-            assert forms.file is not None
-            _postContent = forms.file.read()
-        else:
-            for key in forms.keys():
-                valueList = forms[key]
-                if isinstance(valueList, list):# Check if it's a list or not
-                    postparams[key]= [item.value for item in valueList]
-                else:
-                    # In case it's a file being uploaded, we save the filename in a map (user might need it)
-                    if not valueList.filename:
-                        postparams[key] = valueList.value
-                    else:
-                        postparams[key] = UploadFile(valueList)
-
-    if getparams and postparams:
-        #merge the dicts together
-        for k,v in getparams.items():
-            if k in postparams:
-                if not isinstance(v, list):
-                    v = [v]
-                pv = postparams[k]
-                if isinstance(pv, list):
-                    v.extend(pv)
-                else:
-                    v.append(pv)
-            postparams[k] = v
-        _params = postparams
-    else:
-        _params = getparams or postparams
-
-    return dict(_params=_params, _postContent=_postContent)
 
 #################################################
 ##command line handling
@@ -970,80 +560,6 @@ def translateCmdArgs(data):
         del data[x[0]]
     return data
 
-DEFAULT_cmd_usage = 'python raccoon.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.nt -a config.py '
-cmd_usage = '''
--h this help message
--l [log.config] specify a config file for logging
--r record requests (ctrl-c to stop recording) 
--d [debug.pkl]: debug mode (replay the requests saved in debug.pkl)
--x exit after executing config specific cmd arguments
--p specify the path (overrides RACCOONPATH env. variable)
--m [store.nt] load the RDF model
-   (default model supports .rdf, .nt, .mk)
--a config.py run the application specified
-'''
-
-def parse_args(argv=sys.argv[1:], out=sys.stdout):
-    "parse cmd args and return vars suitable for passing to run"
-    vars = {}
-    try:
-        eatNext = False
-        mainArgs, rootArgs, configArgs = [], [], []
-        for i in range(len(argv)):
-            if argv[i] == '-a':
-                rootArgs += argv[i:i+2]
-                configArgs += argv[i+2:]
-                break
-            if argv[i] in ['-d', '-r', '-x', '-s', '-l', '-h', '--help'
-                           ] or (eatNext and argv[i][0] != '-'):
-                eatNext = argv[i] in ['-d', '-s', '-l']
-                mainArgs.append( argv[i] )
-            else:
-                rootArgs.append( argv[i] )
-
-        if '-l' in mainArgs:
-            try:
-                logConfig=mainArgs[mainArgs.index("-l")+1]
-                if logConfig[0] == '-':
-                    raise ValueError
-            except (IndexError, ValueError):
-                logConfig = 'log.config'
-            if not os.path.exists(logConfig):
-                raise CmdArgError("%s not found" % logConfig)
-
-            vars['LOG_CONFIG'] = logConfig
-
-        vars.update(argsToKw(rootArgs, DEFAULT_cmd_usage))
-        vars['argsForConfig'] = configArgs
-        #print 'ma', mainArgs
-        if '-h' in mainArgs or '--help' in mainArgs:
-            raise CmdArgError('')
-
-        if '-d' in mainArgs:
-            try:
-                debugFileName=mainArgs[mainArgs.index("-d")+1]
-                if debugFileName[0] == '-':
-                    raise ValueError
-            except (IndexError, ValueError):
-                debugFileName = 'debug-wiki.pkl'
-            vars['DEBUG_FILENAME'] = debugFileName
-
-        else:
-            if '-r' in mainArgs:
-                vars['RECORD_REQUESTS'] = True
-
-            #if -x (execute cmdline and exit) we're done
-            if '-x' in mainArgs:
-                vars['EXEC_CMD_AND_EXIT'] = True
-
-    except (CmdArgError), e:
-        print>>out, e
-        print>>out, 'usage:'
-        print>>out, DEFAULT_cmd_usage +'[config specific options]'
-        print>>out, cmd_usage
-
-    return vars
-
 def initLogConfig(logConfig):
     import logging.config as log_config
     if isinstance(logConfig,(str,unicode)) and logConfig.lstrip()[:1] in ';#[':
@@ -1073,6 +589,7 @@ class AppConfig(utils.attrdict):
             initLogConfig(self['logconfig'])
 
         kw = translateCmdArgs(self)
+        from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(a=kw.get('a'), appName='root', appVars=kw)
         dict.__setattr__(self, '_server', root)
         return self._server
@@ -1143,7 +660,7 @@ def createApp(baseapp=None, static_path=(), template_path=(), actions=None, **co
     global _current_config
     if baseapp:
         if isinstance(baseapp, (str, unicode)):
-            baseapp = importApp(baseapp)    
+            baseapp = importApp(baseapp)
         _current_config = baseapp._app_config
     else:
         _current_config = AppConfig()
@@ -1172,22 +689,3 @@ def createApp(baseapp=None, static_path=(), template_path=(), actions=None, **co
     _current_config.template_path = _normpath(basedir, template_path)
     
     return _current_config
-
-#XXX clean up args and implement this as the doc says
-def main(argv=sys.argv[1:], out=sys.stdout):
-    '''
-    usage app-config.py [options]
-    Any appconfig variables can be passed as an command line option 
-    and will override the config value set in the app.
-    For convenience, short alternative are available:
-
-    -l [log.config] LOG_CONFIG specify a config file for logging
-    -x EXEC_CMD_AND_EXIT exit after executing config specific cmd arguments
-    -m [store.json] SOURCE (connect to/load the store)
-    -r RECORD_REQUESTS record requests (ctrl-c to stop recording) 
-    -d [debug.pkl] DEBUG_FILENAME debug mode (replay the requests saved in debug.pkl)    
-    '''
-    # mimics behavior of old main(), not really used anywhere
-    vars = parse_args(argv, out)
-    createApp(**vars).run(out=out)
-    return 0
