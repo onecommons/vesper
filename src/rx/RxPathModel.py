@@ -302,21 +302,21 @@ class MemModel(Model):
         
     def removeStatement(self, stmt ):
         '''removes the statement'''
-        stmts = self.by_s.get(stmt.subject)
+        stmts = self.by_s.get(stmt[0])
         if not stmts:
             return False
         try:
             stmts.remove(stmt)
         except ValueError:
             return False  
-        self.by_p[stmt.predicate].remove(stmt)
-        self.by_o[stmt.object].remove(stmt)
+        self.by_p[stmt[1]].remove(stmt)
+        self.by_o[stmt[2]].remove(stmt)
         try:
-            self.by_c[stmt.scope][stmt.subject].remove(stmt)
+            self.by_c[stmt[4]][stmt[0]].remove(stmt)
         except (ValueError,KeyError):
             #this can happen since scope isn't part of the stmt's key
             for subjectDict in self.by_c.values():
-                stmts = subjectDict.get(stmt.subject,[])
+                stmts = subjectDict.get(stmt[0],[])
                 try:
                     stmts.remove(stmt)
                 except ValueError:

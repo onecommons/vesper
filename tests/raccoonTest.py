@@ -8,11 +8,19 @@
 import raccoon
 from rx import utils, logging, transactions, RxPath
 import unittest, glob, os, os.path, traceback
-
-expectedChangeSet = {'origin': '0A', 'timestamp': 0, 
- 'baserevision': '0', 'revision': '0A00001',
- 'statements': 
- [('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#hasRevision', u'0A00001', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;0A00001;;', 'R', 'context:txn:test:;0A00001'), ('context:add:context:txn:test:;0A00001;;', u'http://rx4rdf.sf.net/ns/archive#applies-to', '', 'R', 'context:txn:test:;0A00001'), ('context:txn:test:;0A00001', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://rx4rdf.sf.net/ns/archive#TransactionContext', 'R', 'context:txn:test:;0A00001'), ('a_resource', 'comment', 'page content.', 'L', 'context:add:context:txn:test:;0A00001;;'), ('a_resource', 'label', 'foo', 'R', 'context:add:context:txn:test:;0A00001;;')] }
+ 
+def makeChangeset(branchid, rev, baserevision='0', resname='a_resource'):
+    return {'origin': branchid, 'timestamp': 0,
+        'baserevision': baserevision, 'revision': rev,
+        'statements': 
+ [RxPath.Statement(*s) for s in [('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;'+rev), 
+ ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#hasRevision', rev, 'L', 'context:txn:test:;'+rev), 
+ ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;'+rev), 
+ ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;'+rev+';;', 'R', 'context:txn:test:;'+rev), 
+ ('context:add:context:txn:test:;0A00001;;', u'http://rx4rdf.sf.net/ns/archive#applies-to', '', 'R', 'context:txn:test:;'+rev), 
+ ('context:txn:test:;'+rev, u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://rx4rdf.sf.net/ns/archive#TransactionContext', 'R', 'context:txn:test:;'+rev),
+ (resname, 'comment', 'page content.', 'L', 'context:add:context:txn:test:;'+rev+';;'), 
+ (resname, 'label', 'foo', 'L', 'context:add:context:txn:test:;'+rev+';;')]] }
 
 LogLevel = logging.CRITICAL+10
 
@@ -106,6 +114,7 @@ class RaccoonTestCase(unittest.TestCase):
         root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
         #set timestamp to 0 so tests are reproducible:
         root.dataStore.model.createTxnTimestamp = lambda *args: 0
+        expectedChangeSet = makeChangeset('0A', '0A00001')
         
         #set a notifyChangeset hook to test if its called properly
         self.notifyChangeset = None
@@ -149,19 +158,16 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('_removed' not in root.updateResults)
         
         try:
-            #merging own changeset should throw an error:
+            #merging our own changeset in again should throw an error:
             root.dataStore.merge(self.notifyChangeset)
         except RuntimeError, e:
             self.assertEquals(str(e), 'merge received changeset from itself: 0A')
         else:
             self.fail('should have raised an error')
 
-        root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
+        root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'trunkId':'0A', 'branchId':'0B'})
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
-        
-        #XXX merging same changeset again should be an no-op
-        #self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
-        
+                
         self.assertEquals(root2.dataStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
@@ -185,31 +191,77 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
         
     def testMerge(self):
-        store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
-        self.assertEquals(store1.model.currentVersion, '0')        
-        store1.add([{ 'id' : '1',
+        store1 = raccoon.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
+        self.assertEquals(store1.model.currentVersion, '0')
+                
+        store1.add([{ 'id' : '1', 'prop' : 0,
           'base': [ {'foo': 1}, {'foo': 2}]
         }
         ])
-        self.assertEquals(store1.model.currentVersion, '0B00001')
-        
-        store1.update([{ 'id' : '1',
+        self.assertEquals(store1.model.currentVersion, '0A00001')
+                
+        store1.update([{ 'id' : '1', 'prop' : 1,
           'base': [{'foo': 3}, {'foo': 4}]
         }
         ])
-        self.assertEquals(store1.model.currentVersion, '0B00002')
+        self.assertEquals(store1.model.currentVersion, '0A00002')
 
         self.assertEquals(store1.query("{*}", debug=1).results, 
-            [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
+            [{'base': [{'foo': 3}, {'foo': 4}],  'prop' : 1, 'id': '1'}])
         
-        #merge a different branch changeset based on the origin (empty) revision
-        #this causes a simple merge 
-        store1.merge(expectedChangeSet)
-        self.assertEquals(store1.model.currentVersion, '0A00001,0B00003')
+        try:
+            #merging a changeset from a different trunk should throw an error:
+            store1.merge( makeChangeset('0B', '0B00001') )
+        except RuntimeError, e: 
+            self.assertEquals(str(e), 
+            'can not add a changeset that does not share trunk branch: 0A00002, 0B00001')
+            #print 'stmts', store1.model.revisionModel.getStatements()
+        else:
+            self.fail('should have raised an error')
+        self.assertEquals(list(store1.model.getRevisions()), [u'0A00001', u'0A00002'])
+         
+        #merge a different branch changeset whose base revision is the current tip 
+        #is this case, the changeset will be added but no merge changeset is created
+        store1.merge(makeChangeset('0B', '0A00002,0B00001', '0A00002'))
+        
+        self.assertEquals(store1.model.currentVersion, '0A00002,0B00001')
+        self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')
+        
         self.assertEquals(store1.query("{*}").results, 
-            [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}, 
-                {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
+            [{'base': [{'foo': 3}, {'foo': 4}], 'prop' : 1, 'id': '1'},
+            {'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}
+            ])
+        
+        contexts = store1.model.getRevisionContextsForResource('1')
+        self.assertEquals(contexts, ['context:txn:test:;0A00001', 'context:txn:test:;0A00002'])        
+        #diff the latest revision with the first revision for resource "1":
+        self.assertEquals(
+            store1.model.getStatementsForResourceVisibleAtRevision('1', 99)
+            - store1.model.getStatementsForResourceVisibleAtRevision('1', 0),
+            set([('1', 'prop', u'1', 'http://www.w3.org/2001/XMLSchema#integer',
+                    'context:add:context:txn:test:;0A00002;;')])
+        )
 
+        #a_resource was modified in B1, '1' in A1 and B2
+        self.assertEquals(['1', 'a_resource'], store1.model.isModifiedAfter(
+            'context:txn:test:;0A00001', ['a_resource', '1'], False))
+
+        self.assertEquals([], store1.model.isModifiedAfter(
+            store1.model.getCurrentContextUri(), ['a_resource', '1'], False))
+        
+        self.assertEquals([], store1.model.isModifiedAfter(
+            store1.model.getCurrentContextUri(), ['a_resource', '1'], True))
+        
+        from rx.RxPathGraph import MergeableGraphManager
+        self.assertEquals(-1, MergeableGraphManager.comparecontextversion(
+                'context:txn:test:;0A00001,0B00003', 'context:txn:test:;0B00002'))
+
+        #merge a different branch changeset whose base revision is the current tip 
+        #in this case, the changeset will be added but no merge changeset is created
+        self.assertTrue( store1.merge(makeChangeset('0C', '0A00002,0C00001', '0A00002', 'unrelated_resource')) )
+        self.assertEquals(store1.query("{* where (id='unrelated_resource')}").results, 
+            [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
+                
     def testMergeConflict(self):        
         store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
         store1.add([{ 'id' : 'a_resource',
@@ -225,7 +277,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testMergeInTransaction(self):
         #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
-        store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
+        store1 = raccoon.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
@@ -234,7 +286,7 @@ class RaccoonTestCase(unittest.TestCase):
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0B00001')
+        self.assertEquals(store1.model.currentVersion, '0A00001')
 
         root1.txnSvc.begin()
         store1.update([{ 'id' : '1',
@@ -242,19 +294,21 @@ class RaccoonTestCase(unittest.TestCase):
         }
         ])
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0B00002')
+        self.assertEquals(store1.model.currentVersion, '0A00002')
 
         self.assertEquals(store1.query("{*}", debug=1).results, 
             [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
 
         root1.txnSvc.begin()
-        store1.merge(expectedChangeSet)
+        store1.merge(makeChangeset('0B', '0A00002,0B00001', '0A00002'))
         root1.txnSvc.commit()
-        self.assertEquals(store1.model.currentVersion, '0A00001,0B00003')
+        self.assertEquals(store1.model.currentVersion, '0A00002,0B00001')
+        self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')
 
         self.assertEquals(store1.query("{*}").results, 
-            [{'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}, 
-                {'base': [{'foo': 3}, {'foo': 4}], 'id': '1'}])
+            [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'},
+             {'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}
+        ])
 
     class TxnTestState(object):
         def __init__(self, store):
@@ -297,7 +351,7 @@ class RaccoonTestCase(unittest.TestCase):
         Test updates with multiple transaction participants
         '''
         from rx import DataStore
-        store = raccoon.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')        
+        store = raccoon.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')
         root = store.requestProcessor        
         if saveHistory == 'split':
             graphParticipants = 2            
@@ -381,6 +435,34 @@ class RaccoonTestCase(unittest.TestCase):
         self._test2PhaseTxn('split')
         self._test2PhaseTxn('combined')
 
+    def testGraphManagerSerialize(self):
+        import os, rx.RxPath
+        tmppath = os.tempnam(None, 'raccoontest')+'.json'
+        try:
+            add = {"id":"1",
+                    "tags":[
+                        {"id":"bnode:j:e:object:bnode:j:t:object:x28a11e57f6c54979baaeefee93de4f2f1:x28a11e57f6c54979baaeefee93de4f2f2",
+                        "label":"new tag"}
+                        ]
+                  }
+            add = {"id":"1",                    
+                  "tags" : [ '@t' ]
+                  }            
+            store = raccoon.createStore(STORAGE_PATH=tmppath, storageURL='', 
+                modelFactory=rx.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=True)
+            store.add(add)
+            
+            #now reload the file into a new store without saveHistory turned on,
+            #so that the history representation is visible to the app
+            #print file(tmppath).read()            
+            store2 = raccoon.createStore(STORAGE_PATH=tmppath, storageURL='', 
+                modelFactory=rx.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=False)
+            #XXX jql is not including scope in results
+            self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
+        finally:
+            os.unlink(tmppath)
+        
+              
     def testCreateApp(self):
         #this is minimal logconfig that python's logger seems to accept:
         app = raccoon.createApp(static_path=['static'], 

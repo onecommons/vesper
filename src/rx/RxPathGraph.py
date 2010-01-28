@@ -105,7 +105,7 @@ class NamedGraphManager(RxPath.Model):
     #
     #If this functionality was reintroduced then revert old behavior for getStatements and "remove w/ no context" 
     #(which would have to delete matching ADD*contexts and add ORG:contexts)
-    #and re-add support for ORG:context (i.e. in getRevisionStmtsForResource)
+    #and re-add support for ORG:context (i.e. in getStmtsVisibleAtRevisionForResource)
     
     #: set this to false to suppress the graph manager from adding statements to the store (useful for testing)
     createCtxResource = True 
@@ -113,7 +113,8 @@ class NamedGraphManager(RxPath.Model):
     lastLatest = None
     
     initialRevision = 0
-    branchId = None
+    trunkId = None
+    branchId = None    
     notifyChangeset = None
 
     autocommit = property(lambda self: self.managedModel.autocommit,
@@ -195,6 +196,9 @@ class NamedGraphManager(RxPath.Model):
 
             return model.getStatements(subject, predicate, object,
                 objecttype, context, asQuad, **hints)
+
+    def getCurrentContextUri(self):
+        return getTxnContextUri(self.modelUri, self.currentVersion)
          
     @property
     def currentTxn(self):
@@ -403,7 +407,8 @@ class NamedGraphManager(RxPath.Model):
             
     def commit(self, ** kw):
         #assert self._currentTxn
-        if not self._currentTxn:            
+        if not self._currentTxn:
+            log.debug("no txn in commit, not committing")
             return None #no txn in commit, model wasn't modified
 
         ctxStmts = self._finishCtxResource()
@@ -540,16 +545,16 @@ class NamedGraphManager(RxPath.Model):
 
     @staticmethod
     def comparecontextversion(ctxUri1, ctxUri2):    
-        assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
-            ctxUri1 + " doesn't look like a txn context URI")
-        assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
-            ctxUri2 + " doesn't look like a txn context URI")
+        #assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
+        #    ctxUri1 + " doesn't look like a txn context URI")
+        #assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
+        #    ctxUri2 + " doesn't look like a txn context URI")
         assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
         assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
 
         return cmp(ctxUri1 and int(ctxUri1.split(';')[1]) or 0,
                    ctxUri2 and int(ctxUri2.split(';')[1]) or 0)
-
+        
     ###### revision querying methods #############
         
     def isModifiedAfter(self, contextUri, resources, excludeCurrent=True):
@@ -557,7 +562,7 @@ class NamedGraphManager(RxPath.Model):
         Given a list of resources, return a list of the ones that were modified
         after the given context.
         '''    
-        currentContextUri = self.getTxnContext()
+        currentContextUri = self.getCurrentContextUri()        
         contexts = [] 
         for resUri in resources:
             rescontexts = self.getRevisionContextsForResource(resUri)
@@ -567,7 +572,8 @@ class NamedGraphManager(RxPath.Model):
                     #don't include the current context in the comparison
                     cmpcurrent = self.comparecontextversion(currentContextUri, 
                         latestContext)
-                    assert cmpcurrent >= 0, 'context created after current context!?'
+                    assert cmpcurrent >= 0, ('context created after current context!? %s > %s', currentContextUri, 
+                            latestContext)
                     if cmpcurrent == 0:
                         if not rescontexts:
                             continue
@@ -593,17 +599,16 @@ class NamedGraphManager(RxPath.Model):
         contexts.sort(key=self.getTransactionVersion)
         return contexts
 
-    def getRevisionStmtsForResource(self, subjectUri, revision):
+    def getStatementsForResourceVisibleAtRevision(self, subjectUri, revision):
         '''
         Return the statements visible at the given revision 
         for the specified resource.
         
         revision: 0-based revision number
         '''
-        stmts = self.revisionModel.getStatements(subject=resourceuri)
+        stmts = self.revisionModel.getStatements(subject=subjectUri)
         contexts = self.getRevisionContextsForResource(subjectUri, stmts)
         rev2Context = dict([(x[1], x[0]) for x in enumerate(contexts)])
-
         #only include transactional statements
         stmts = [s for s in stmts if (getTransactionContext(s.scope) and
             rev2Context[getTransactionContext(s.scope)] <= revision)]
@@ -680,36 +685,79 @@ def defaultMergeFollow(resource, add):
 
 class MergeableGraphManager(NamedGraphManager):
     '''
-    * ("branchid"."revisionnum",")+ ordered by branchid. branchid and revisionnum are left padded so that lexicographic comparison works.
-    * comparison: 
-    ** < := for shared branches, any revision numbers are less the other. If version string contains the exact same branchid, can do lexicographic comparison
-    *** but lexicographic comparison breaks with c2,d2 and b2,d3: b2,d3 is greater (d3 < d2) but compares smaller since "b" < "c". This can be avoided if the branch ids are numbered sequentially -- then more recently created branches will appear at the end of the revision and the shared branches will be compared first.
-    *** Order is only signficant between revisions on the same branch, e.g. a3 < a4 is significant but a4,b2,c3 < a4,b3,c2 is not. An heuristic for displaying revision order would be to partition by significant order and order the insignificant revisions by the revision creation timestamp.
-    * after merge changeset happens the branch can be dropped from the version string if the branch is retired. This is because there will be no revisions with the retired branchid >= the merge revision.
-    e.g. a1.b2 => merge b + a => a2.b2 => retire b => a3, etc. is ok since a3 will always be > any changeset with b revisions. but once it is dropped we can no longer compare revisions that didn't contain the branch with merge revision (e.g. "b" revision without an "a" branch). However note that if the remaining branch was part of the initial revision of the dropped branch then there won't be any revisions like this (e.g if you always branch off a trunk and only retire the branches).
+    Manage a store so that the store can be replicated and changes to the replicants
+    (branches) can be merged back into the root or with other replicants.
+    
+    MergeableGraphManager associates the state of each branch with a revision string 
+    that can be compared to another branch's revision string to determine if that 
+    branch incorporates all the changes of the first branch (the "precedes(R1,R2)" operator)
+    This string has the format `("branchid"."revisionnum",")+`, ordered by branchid.
+    (For example "A1,B1")
+    
+    If a revision string has a revisionnum greater than revisionnum of the same branchid 
+    on another revision string then the first revision has all changes made on that branch.
+    (the "partialprecede(branchid, R1, R2)" operator)
+    
+    If branchid and revisionnum are sufficiently left padded then if precedes(R1, R2)
+    is true then lexicographically R1 < R2 assuming that (1) R1, R2 at least share a 
+    trunk branchid and (2) branchids are lexicographically greater than the trunk branchid.
+    These assumptions are made by MergeableGraphManager.
+    
+    It follows that if R1 < R2 lexicographically then at least
+    partialprecede(branchid, R1, R2) where branchid is the trunk but not necessarily for any 
+    other branch id. (E.g. "A1B2C3" < "A1C2" even though partialprecede("C", "A1B1C3", A1C2") is not true.
+    This could happen if a branch at "A1B1" pulled in "A1C3" changes resulting in "A1B2C3".) 
+    If the revision strings contains the exact same branchids, then lexicographic comparison
+    is equivalent to `precedes`.
+    
+    When a branch merges with (pull in changes from) another branch updates its revision string with 
+    the max revisionnum for each branchid (and adding new branchid if not present) and also increments
+    its own revisionnum. 
+    
+    If a branch into merged back into the trunk we can drop that branch id 
+    ("retire" it) along as the branch no longer changes because the new trunk revision 
+    will lexicographically compare greater than any prior revision that has that branch id.
+    But if non-trunk branch dropped another non-trunk branch after a merge we 
+    no longer can compare revisions of the retired branch that didn't contain the branch
+    that dropped it. (For example, A1C1 merges A1B1 => A1B1C2. A1B1 < A1B1C2 but we couldn't know that 
+    if B1 was dropped leaving A1C2.)
+    
+    As lexigraphic order is only signficant between the subset of the revisions 
+    strings that share branchids, a heuristic for displaying revision order would be 
+    to partition by significant order and order the insignificant revisions by the 
+    revision creation timestamp.
+        
+    In summary, for revision string R1 and R2, if R1 >= R2 then it can't R1 precede R2.
+    R2 may precede R1 and at least R2 branchprecedes R1 on the trunk branch.
     '''
     
     initialRevision = '0'
     maxPendingQueueSize = 1000
     pendingQueue = {} 
 
-    def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, branchId='0A'):
-        self.branchId = branchId.rjust(2, '0')
+    def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, trunkId='0A', branchId=None):
+        self.trunkId = trunkId.rjust(2, '0')
+        if branchId:        
+            self.branchId = branchId.rjust(2, '0')
+        else:
+            self.branchId = trunkId
         super(MergeableGraphManager, self).__init__(primaryModel, revisionModel, modelUri, lastScope)
 
     @staticmethod
     def getTransactionVersion(contexturi):
-        ctxUri1 = getTransactionContext(contexturi)
+        ctxUri = getTransactionContext(contexturi)
         return ctxUri and ctxUri.split(';')[1] or ''
 
     @staticmethod
     def comparecontextversion(ctxUri1, ctxUri2):    
-        assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
-            ctxUri1 + " doesn't look like a txn context URI")
-        assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
-            ctxUri2 + " doesn't look like a txn context URI")
-        assert not ctxUri2 or len(ctxUri1.split(';')) > 1, ctxUri1 + " doesn't look like a txn context URI"
-        assert not ctxUri2 or len(ctxUri2.split(';')) > 1, ctxUri2 + " doesn't look like a txn context URI"
+        #assert not ctxUri1 or ctxUri1.startswith(TXNCTX),(
+        #    ctxUri1 + " doesn't look like a txn context URI")
+        #assert not ctxUri2 or ctxUri2.startswith(TXNCTX),(
+        #    ctxUri2 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or len(ctxUri1.split(';')) > 1, (
+                ctxUri1 + " doesn't look like a txn context URI")
+        assert not ctxUri2 or len(ctxUri2.split(';')) > 1, (
+                ctxUri2 + " doesn't look like a txn context URI")
 
         return cmp(ctxUri1 and ctxUri1.split(';')[1] or '',
                    ctxUri2 and ctxUri2.split(';')[1] or '')
@@ -742,8 +790,19 @@ class MergeableGraphManager(NamedGraphManager):
             else:
                 return node
         return ','.join([incLocalBranch(node) for node in rev.split(',')])
-
-    def addChangesetStatements(self, changeset):
+        
+    def mergeVersions(self, rev1, rev2):
+        nodes = {}
+        branchLen = len(self.branchId)
+        for branchRev in (rev1+','+rev2).split(','):
+            branchId = branchRev[:branchLen]
+            branchNum = branchRev[branchLen:]
+            num = nodes.get(branchId)
+            if not num or num < branchNum:
+                nodes[branchId] = branchNum
+        return ','.join( sorted([k+v for (k,v) in nodes.items()]) )
+        
+    def _addChangesetStatements(self, changeset, setrevision):
         '''
         Directly adds changeset statements to the revision store
         and adds and removes statements from the primary store.
@@ -760,17 +819,28 @@ class MergeableGraphManager(NamedGraphManager):
                 orgstmt = Statement(scope=originalscope, *s[:4])
                 self._removePrimaryStoreStatement(orgstmt)
             self.revisionModel.addStatement(s)
-                
-        if changeset.baserevision == self.initialRevision and self.currentVersion != self.initialRevision:
-            #XXX txnContext is the remote ctx so it will have a different revision than this 
-            #so CTX:latest's value won't match the revision encoded in the context uri -- not sure if this matters
-            self.currentVersion = ','.join( sorted([self.currentVersion, changeset.revision]) )
+        
+        if self.currentVersion == self.initialRevision:
+            #just take the changesets revision
+            assert changeset.baserevision == self.initialRevision
+            if changeset.origin not in (self.trunkId, self.branchId):
+                #we can't allow this since we need changesets to at least 
+                #share the trunk revision
+                raise RuntimeError('''merging a changeset into an empty store 
+but neither its trunkid %s not its branchid %s 
+match the changeset's branchid: %s''' % (
+                                self.trunkId, self.branchId, changeset.origin))            
         else:
+            branchidlen = len(self.branchId)
+            if (changeset.revision[:branchidlen] != 
+                    self.currentVersion[:branchidlen]):
+                raise RuntimeError('can not add a changeset that does not share trunk branch: %s, %s'
+                                    % (self.currentVersion, changeset.revision))        
+        if setrevision:
             self.currentVersion = changeset.revision        
+            self._markLatest(self.currentVersion)
 
-        self._markLatest(self.currentVersion)
-
-    def createMergeChangeset(self, otherrev, adds=(), removes=()):
+    def _createMergeChangeset(self, otherrev, adds=(), removes=()):
         '''
         Creates an merge changeset 
         '''
@@ -779,6 +849,9 @@ class MergeableGraphManager(NamedGraphManager):
             unicode(otherrev), OBJECT_TYPE_LITERAL, txnContext))        
         if adds: self.addStatements(adds)
         if removes: self.removeStatements(removes)
+        #use self.currentTxn.currentRev for the incremented version
+        self.currentVersion = self.mergeVersions(self.currentTxn.currentRev, otherrev)
+        self._markLatest(self.currentVersion)
         self.commit()
 
     def findMergeClosures(self, resources, followFunc=None):
@@ -887,10 +960,8 @@ class MergeableGraphManager(NamedGraphManager):
 
         if not changeset.baserevision or changeset.baserevision == self.currentVersion:
             #just add changeset, no need for merge changeset
-            self.addChangesetStatements(changeset)            
+            self._addChangesetStatements(changeset, True)
             return True
-        
-        
         
         remoteResources = set(s[0] for s in changeset.statements)                
         remoteResources.update(set(s[2] for s in changeset.statements 
@@ -898,7 +969,6 @@ class MergeableGraphManager(NamedGraphManager):
         
         localResources = self.getChangedResourcesAfterBranchRevision(
                     changeset.baserevision, changeset.origin)     
-                       
         closures = self.findMergeClosures(localResources | remoteResources)
         
         conflicts = []
@@ -912,20 +982,20 @@ class MergeableGraphManager(NamedGraphManager):
                 conflicts.append( (closure, local, remote) )
                         
         if conflicts:
-            assert False, 'merging conflicts not yet implemented! %s current %s' % (
-                                changeset.baserevision, self.currentVersion)
+            assert False, 'merging conflicts not yet implemented! %s current %s %s' % (
+                                changeset.baserevision, self.currentVersion, conflicts)
             self.resolveConflicts(conflicts)
             #stategies: error, create special merge context, discard later, later wins
         else:
             #no conflicts just add changeset
-            self.addChangesetStatements(changeset)
-            self.createMergeChangeset(changeset.revision)
+            self._addChangesetStatements(changeset, False)
+            self._createMergeChangeset(changeset.revision)
         
         return True
 
     def getStatementsAfterBranchRevision(self, baserev, branchid):
         '''
-        return all the changes made after the given branch revision, 
+        Return all the changes made after the given branch revision, 
         but don't include statements that were added and then removed
         or removed and then re-added.
         
@@ -970,16 +1040,30 @@ class MergeableGraphManager(NamedGraphManager):
         return resources
 
     def getRevisions(self, revision=None):
+        '''
+        Return all the revisions strings in the model unless `revision` is 
+        specified, in that case yield that revision if it exists in the model.
+        '''
         for s in self.revisionModel.getStatements(predicate=CTX_NS+'hasRevision', object=revision):
             if s.subject.startswith(TXNCTX) and s.subject.startswith(s.scope):
                 yield s.object
         
     def findBranchRevisions(self, branchid, branchrev, baserev=''):
+        '''
+        Return all the revisions that follow the branch rev (inclusive), 
+        starting with `baserev`.
+        '''
         #can a changeset > rev not include branch? 
-        #yes: e.g. rev = b2c3 and changeset = b3c2 
+        #yes: e.g. node c: has rev = b2c3 and changeset from node b = b3c2 
         #but changeset < rev is not possible assuming node
         #has all branchids where branchid < node's branchid
         #and the local store has all base changesets
+        #Is this a valid assumption?
+        #it is, if 1) we never "retire" branches and 
+        #2) the new branches start with the current state of trunk
+        #3) branchids automically increment from the trunk
+        #4) new branches update the trunk at branch-time so that 
+        #subsequent branches have their initial state
 
         #note: we could optimize the case where if baserev not specified with 
         #a leftsideCache so baserev = leftsideCache[branchRevision]
