@@ -392,7 +392,7 @@ class Serializer(object):
     def _setPropSeq(self, orderedmodel, propseq):
         childlist = []
         propbag = None
-        for stmt in orderedmodel.getProperties(propseq):
+        for stmt in orderedmodel.getProperties(propseq):            
             prop = stmt.predicate
             obj = stmt.object
             #print '!!propseq member', p.stmt
@@ -458,7 +458,7 @@ class Serializer(object):
         if stmts is None:
             stmts = model.getStatments()
         #step 1: build a list of subjectnodes
-        listresources = []
+        listresources = set()
         nodes = []
         root = OrderedModel(stmts)
         for resourceUri in root.resources:
@@ -467,7 +467,7 @@ class Serializer(object):
                 if (resourceStmt.predicate == RDF_MS_BASE+'type' and 
                     resourceStmt.object in (PROPSEQTYPE, STANDALONESEQTYPE)):
                     #resource has rdf:type propseqtype
-                    listresources.append(resourceUri)
+                    listresources.add(resourceUri)
                     islist = True
                     break
             if not islist:
@@ -710,12 +710,12 @@ class Parser(object):
     bnodeprefix = '_:'
     
     def __init__(self,addOrderInfo=True, 
-            generateBnode=_defaultBNodeGenerator, 
+            generateBnode=None, 
             scope = '', 
             setBNodeOnObj=False,
             nameMap=None,
             useDefaultRefPattern=True):
-
+        generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = RxPath.BNODE_BASE
