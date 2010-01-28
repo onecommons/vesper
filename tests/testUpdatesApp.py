@@ -36,6 +36,6 @@ def testLoadModelHook(kw, retVal):
 actions = { 'http-request' : [updateAction, queryAction],
 'after-commit' : [recordUpdates],
 'load-model':[testLoadModelHook]
-        }
+}
 
-saveHistory = 'split'
+createApp(actions=actions, saveHistory='split')

@@ -18,3 +18,5 @@ APPLICATION_MODEL = [{ 'id' : 'a_resource',
                       'label' : 'foo', 
                        'comment' : 'page content.'
                     }]
+
+createApp(actions=actions, APPLICATION_MODEL=APPLICATION_MODEL)

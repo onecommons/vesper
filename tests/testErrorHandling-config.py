@@ -45,3 +45,4 @@ actions = {
         'http-request-error': [ errorhandler ]
         }
 
+createApp(actions=actions)

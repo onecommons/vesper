@@ -266,6 +266,7 @@ class RequestProcessor(TransactionProcessor):
         kw['_cmdline'] = '"' + '" "'.join(argv) + '"'
         self.runActions('run-cmds', kw)
 
+    # XXX this method should use AppConfig/loadApp etc. methods
     def loadConfig(self, path, argsForConfig=None, appVars=None):
         if not path and not appVars:
             #todo: path = self.DEFAULT_CONFIG_PATH (e.g. server-config.py)
@@ -277,8 +278,8 @@ class RequestProcessor(TransactionProcessor):
             import socket
             self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
 
-        kw = globals().copy() #copy this module's namespace
-
+        kw = dict(Action=Action)
+        
         if path:
             def includeConfig(path):
                  kw['__configpath__'].append(os.path.abspath(path))
@@ -287,7 +288,7 @@ class RequestProcessor(TransactionProcessor):
 
             kw['__server__'] = self
             kw['__argv__'] = argsForConfig or []
-            kw['__include__'] = includeConfig
+            kw['__include__'] = includeConfig # XX appears unused?
             kw['__configpath__'] = [os.path.abspath(path)]
             execfile(path, kw)
 
@@ -636,12 +637,12 @@ def _normpath(basedir, path):
     return [os.path.isabs(dir) and dir or os.path.normpath(
                         os.path.join(basedir, dir)) for dir in path]
 
-def importApp(baseapp):
+def _importApp(baseapp):
     '''
     Executes the given config file and returns a Python module-like object that contains the global variables defined by it.
     If `createApp()` was called during execution, it have an attribute called `_app_config` set to the app configuration returned by `createApp()`.
     '''
-    baseglobals = utils.attrdict()
+    baseglobals = utils.attrdict(Action=Action, createApp=createApp)
     #set this global so we can resolve relative paths against the location
     #of the config file they appear in
     _current_configpath.append( os.path.dirname(os.path.abspath(baseapp)) )
@@ -651,25 +652,39 @@ def importApp(baseapp):
     baseglobals._app_config = _current_config
     return baseglobals
 
-def createApp(baseapp=None, static_path=(), template_path=(), actions=None, **config):
+def createApp(fromFile=None, **config):
+    """
+    Return an 'AppConfig' initialized with keyword arguments.  If a path to a 
+    file containing config variables is given, they will be merged with the
+    config args
+    """
+    global _current_config
+    _current_config = AppConfig()
+    _current_config.update(config)
+    if fromFile:
+        execfile(fromFile, _current_config, _current_config)
+    return _current_config
+
+def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
     '''
-    Returns an `AppConfig` based on the given config parameters.
-    If specified, `baseapp` is either a path to config file or an object returned by `importApp`.
-    Otherwise, all other parameters are treated as config variables.
+    Return an 'AppConfig' by loading an existing app (a file with a call to createApp)
+    
+    'baseapp' is a path to the file of the app to load
+    'static_path', 'template_path', and 'actions' are appended to the variables
+    of the same name defined in the base app
+    
+    Any other keyword arguments will override values in the base app
     '''
     global _current_config
-    if baseapp:
-        if isinstance(baseapp, (str, unicode)):
-            baseapp = importApp(baseapp)
-        _current_config = baseapp._app_config
-    else:
-        _current_config = AppConfig()
     
-    _current_config.__toplevel__ = not bool(_current_configpath[-1])
+    assert isinstance(baseapp, (str, unicode))
+    baseapp = _importApp(baseapp)
+    _current_config = baseapp._app_config
+    
     #config variables that shouldn't be simply overwritten should be specified 
     #as an explicit function args
     _current_config.update(config)
-        
+    
     if 'actions' in _current_config:
         if actions:
             _current_config.actions.update(actions)
@@ -688,4 +703,5 @@ def createApp(baseapp=None, static_path=(), template_path=(), actions=None, **co
     template_path = list(template_path) + _current_config.get('template_path',[])
     _current_config.template_path = _normpath(basedir, template_path)
     
+    _current_config.load()
     return _current_config

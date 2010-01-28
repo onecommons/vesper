@@ -1,6 +1,6 @@
 #derived from http://pythonpaste.org/webob/do-it-yourself.html#routing
 
-import re
+import os, re
 var_regex = re.compile(r'''
     \{          # The exact character "{"
     (\w+)       # The variable name (restricted to a-z, 0-9, _)
@@ -80,3 +80,5 @@ APPLICATION_MODEL = [{ 'id' : 'a_resource',
                       'label' : 'foo', 
                        'comment' : 'page content.'
                     }]
+                    
+createApp(routes=routes, actions=actions, APPLICATION_MODEL=APPLICATION_MODEL)

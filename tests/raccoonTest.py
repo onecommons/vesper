@@ -39,9 +39,9 @@ class RaccoonTestCase(unittest.TestCase):
         logging.root.removeHandler( self.logHandler )
     
     def testMinimalApp(self):
-        root = raccoon.RequestProcessor(a='testMinimalApp.py',model_uri = 'test:')
+        app = raccoon.loadApp(baseapp='testMinimalApp.py', model_uri='test:')
+        root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
-        #print 'result', type(result), result
         response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)
         
@@ -56,11 +56,15 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals( '<html><body>not found!</body></html>', result)
 
     def testSequencerApp(self):
-        root = raccoon.RequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
+        app = raccoon.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
         self.assertEquals("<html><body>page content.</body></html>", result)
 
-        root = web.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
+        app = raccoon.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        root = app._server
+        # XXX loadApp doesn't specify whether to create a RequestProcessor or HTTPRequestProcessor
+        # root = web.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
         kw = dict(_name='no such page', _responseHeaders={}, _environ={})
         result = root.handleHTTPRequest(kw)
         self.assertEquals(kw['_responseHeaders']['_status'],"404 Not Found")
@@ -71,8 +75,8 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(result.read().strip(), "test file")
 
     def _testErrorHandling(self, appVars=None):
-        root = web.HTTPRequestProcessor(a='testErrorHandling-config.py',
-            model_uri = 'test:', appVars=appVars)
+        app = raccoon.loadApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
+        root = app._server
         #make sure the error handler is run and sets the status code to 404 instead of the default 200
         kw = dict(_name='foo', 
                     _responseHeaders=dict(_status="200 OK"), _environ={})
@@ -103,10 +107,12 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('CRITICAL' in [r.levelname for r in self.logHandler.records])     
         
     def testUpdatesApp(self):
-        root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        # root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        app = raccoon.loadApp(baseapp='testUpdatesApp.py', model_uri='test:')
+        root = app._server                
         #set timestamp to 0 so tests are reproducible:
         root.dataStore.model.createTxnTimestamp = lambda *args: 0
-        
+
         #set a notifyChangeset hook to test if its called properly
         self.notifyChangeset = None
         def testNotifyChangeset(changeset):
@@ -155,8 +161,9 @@ class RaccoonTestCase(unittest.TestCase):
             self.assertEquals(str(e), 'merge received changeset from itself: 0A')
         else:
             self.fail('should have raised an error')
-
-        root2= raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:', appVars={'branchId':'0B'})
+            
+        app2 = raccoon.loadApp(baseapp='testUpdatesApp.py', model_uri='test:', branchId='0B')
+        root2 = app2._server
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
         
         #XXX merging same changeset again should be an no-op

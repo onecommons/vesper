@@ -222,16 +222,16 @@ parser.add_option("-s", "--storage", dest="storage", help="storage url")
 parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False)
 (options, args) = parser.parse_args()
 
-if len(args) > 0:
-    execfile(args[0], globals(), CONF)
-    
 if options.storage:
     CONF['STORAGE_URL'] = options.storage
     
+f = (args and args[0] or None)
+CONF = raccoon.createApp(fromFile=f, **CONF)
+    
 if CONF.get('REPLICATION_CHANNEL'):
     import rx.replication
-    CONF['saveHistory'] = True
-    rep = rx.replication.get_replicator(CONF['branchId'], CONF['REPLICATION_CHANNEL'], hosts=CONF['REPLICATION_HOSTS'])
+    CONF.saveHistory = True
+    rep = rx.replication.get_replicator(CONF.branchId, CONF.REPLICATION_CHANNEL, hosts=CONF.REPLICATION_HOSTS)
     CONF['CHANGESET_HOOK'] = rep.replication_hook
     
     @Action
@@ -274,6 +274,6 @@ else:
     log.addHandler(stream)
 
 try:
-    app = raccoon.createApp(**CONF).run()
+    CONF.run()
 except KeyboardInterrupt:
     print "exiting!"
