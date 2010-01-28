@@ -2,7 +2,7 @@ import unittest
 import random
 import time
 import multiprocessing
-import json
+from rx.python_shim import json
 from urllib2 import urlopen
 from urllib import urlencode
 
@@ -10,6 +10,8 @@ import morbid
 from twisted.internet import reactor
 
 import raccoon, rx.replication, rx.route
+import logging
+logging.basicConfig()
 
 # uncomment to test against an existing stomp message queue
 USE_EXISTING_MQ = None #"test-queue:61613"
@@ -34,22 +36,23 @@ def invokeAPI(name, data, where=None, port=8000):
 def startMorbidQueue(port):
     print "starting morbid queue on port %d" % port
     options = {
-    	'config':None,
-    	'port':port,
-    	'interface':'',
-    	'auth':'',
-    	'restq':'',
-    	'verbose':True
+        'config':None,
+        'port':port,
+        'interface':'',
+        'auth':'',
+        'restq':'',
+        'verbose':True
     }
     stomp_factory = morbid.get_stomp_factory(cfg=options)
     reactor.listenTCP(options['port'], stomp_factory, interface=options['interface'])
     reactor.run()
 
-def startRhizomeInstance(nodeId, port, queueHost, queuePort, channel):
+def startRhizomeInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
     print "creating rhizome instance:%s (%s:%d)" % (nodeId, queueHost, port)
     conf = {
         'STORAGE_URL':"mem://",
         'saveHistory':True,
+        'trunkId': trunkId,
         'branchId':nodeId,
         'REPLICATION_HOSTS':[(queueHost, queuePort)],
         'REPLICATION_CHANNEL':channel
@@ -94,9 +97,9 @@ class BasicReplicationTest(unittest.TestCase):
         self.rhizomeA_port = random.randrange(5000,9999)
         self.rhizomeB_port = random.randrange(5000,9999)
         
-        self.rhizomeA   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", self.rhizomeA_port, mq_host, mq_port, self.replicationTopic))
+        self.rhizomeA   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", "AA", self.rhizomeA_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeA.start()
-        self.rhizomeB   = multiprocessing.Process(target=startRhizomeInstance, args=("BB", self.rhizomeB_port, mq_host, mq_port, self.replicationTopic))
+        self.rhizomeB   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", "BB", self.rhizomeB_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeB.start()
         time.sleep(1) # XXX
         

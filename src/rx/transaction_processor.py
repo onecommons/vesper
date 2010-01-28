@@ -57,8 +57,8 @@ class TransactionProcessor(utils.object_with_threadlocals):
         self.txnSvc.begin()
         self.txnSvc.state.kw = kw
         self.txnSvc.state.retVal = retVal
-        try:
-            retVal = func()
+        try:            
+            retVal = func()            
         except:
             if not self.txnSvc.state.aborted:
                 self.txnSvc.abort()
@@ -66,7 +66,7 @@ class TransactionProcessor(utils.object_with_threadlocals):
         else:
             if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
                 self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                self.txnSvc.state.retVal = retVal
+                self.txnSvc.state.retVal = retVal                
                 if self.txnSvc.isDirty():
                     if kw.get('__readOnly'):
                         self.log.warning(

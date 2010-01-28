@@ -495,7 +495,8 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 options['generateBnode']='uuid'            
             if 'useDefaultRefPattern' not in options:
                 options['useDefaultRefPattern']=False
-
+            if not contents:
+                return [], type
             stmts = sjson.tostatements(contents, **options), type
             return stmts
         else:
@@ -935,7 +936,7 @@ class OrderedModel(object):
         stmts.sort()
 
         children = []
-        containerItems = {}
+        containerItems = []
 
         listItem = nextList = None        
         for stmt in stmts:
@@ -947,7 +948,7 @@ class OrderedModel(object):
                     nextList = stmt.object                    
             elif stmt.predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
                 ordinal = int(stmt.predicate[len(RDF_MS_BASE+'_'):])
-                containerItems[ordinal] = stmt            
+                containerItems.append((ordinal, stmt))
             elif not (stmt.predicate == RDF_MS_BASE+u'type' and 
                        stmt.object == RDF_SCHEMA_BASE+u'Resource'):
                 #don't include the redundent rdf:type rdfs:Resource statement
@@ -959,10 +960,9 @@ class OrderedModel(object):
                 nextList = _addListItem(children, nextList, listItem.subject)
 
         #add any container items in order, setting rdf:member instead of rdf:_n
-        ordinals = containerItems.keys()
-        ordinals.sort()        
-        for ordinal in ordinals:
-            stmt = containerItems[ordinal]
+        #ordinals = containerItems.keys()
+        containerItems.sort()        
+        for ordinal, stmt in containerItems:            
             if useRdfsMember:
                 #realPredicate = stmt.predicate
                 stmt = Statement(stmt[0], RDF_SCHEMA_BASE+u'member', *stmt[2:])

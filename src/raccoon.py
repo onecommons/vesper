@@ -580,12 +580,12 @@ class AppConfig(utils.attrdict):
     _server = None
     
     def load(self):
-        if 'STORAGE_URL' in self:        
+        if self.get('STORAGE_URL'):        
             (proto, path) = self['STORAGE_URL'].split('://')
 
             self['modelFactory'] = store.get_factory(proto)
             self['STORAGE_PATH'] = path
-
+        #XXX if modelFactory is set should override STORAGE_URL
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
 
@@ -622,6 +622,7 @@ class AppConfig(utils.attrdict):
         return root
 
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
+    #XXX very confusing that storageURL spelling doesn't match STORAGE_URL 
     root = createApp(
         STORAGE_URL = storageURL,
         STORAGE_TEMPLATE = json,
