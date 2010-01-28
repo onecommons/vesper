@@ -276,8 +276,8 @@ class TransactionProcessor(utils.object_with_threadlocals):
         self.txnSvc.begin()
         self.txnSvc.state.kw = kw
         self.txnSvc.state.retVal = retVal
-        try:
-            retVal = func()
+        try:            
+            retVal = func()            
         except:
             if not self.txnSvc.state.aborted:
                 self.txnSvc.abort()
@@ -285,7 +285,7 @@ class TransactionProcessor(utils.object_with_threadlocals):
         else:
             if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
                 self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
-                self.txnSvc.state.retVal = retVal
+                self.txnSvc.state.retVal = retVal                
                 if self.txnSvc.isDirty():
                     if kw.get('__readOnly'):
                         self.log.warning(
@@ -1063,12 +1063,12 @@ class AppConfig(utils.attrdict):
     _server = None
     
     def load(self):
-        if 'STORAGE_URL' in self:        
+        if self.get('STORAGE_URL'):        
             (proto, path) = self['STORAGE_URL'].split('://')
 
             self['modelFactory'] = store.get_factory(proto)
             self['STORAGE_PATH'] = path
-
+        #XXX if modelFactory is set should override STORAGE_URL
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
 
@@ -1104,6 +1104,7 @@ class AppConfig(utils.attrdict):
         return root
 
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
+    #XXX very confusing that storageURL spelling doesn't match STORAGE_URL 
     root = createApp(
         STORAGE_URL = storageURL,
         STORAGE_TEMPLATE = json,
