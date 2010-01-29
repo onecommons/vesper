@@ -182,9 +182,10 @@ class Result(object):
         else:
             return unicode(self.value)
 
-def assignVars(self, kw, varlist, default):
+def assignAttrs(obj, configDict, varlist, default):
     '''
-    Helper function for assigning variables from the config file.
+    Helper function for adding attributes to an object
+    given a dictionary of configuration properties
     '''
     import copy
     for name in varlist:
@@ -193,12 +194,12 @@ def assignVars(self, kw, varlist, default):
         except TypeError:
             #probably ok, can't copy certain non-mutable objects like functions
             defaultValue = default
-        value = kw.get(name, defaultValue)
+        value = configDict.get(name, defaultValue)
         if default is not None and not isinstance(value, type(default)):
             raise RaccoonError('config variable %s (of type %s)'
                                'must be compatible with type %s'
                                % (name, type(value), type(default)))
-        setattr(self, name, value)
+        setattr(obj, name, value)
 
 ############################################################
 ##Raccoon main class
@@ -214,43 +215,26 @@ class RequestProcessor(TransactionProcessor):
             '_prevkw', '__argv__', '_errorInfo'
             ]
 
-    def __init__(self,
-                 #correspond to equivalentl command line args:
-                 a=None, m=None, p=None, argsForConfig=None,
-                 #correspond to equivalently named config settings
-                 appBase='/', model_uri=None, appName='',
-                 #dictionary of config settings, overrides the config
-                 appVars=None):
+    def __init__(self, appVars):
                  
         # XXX copy and paste from
         self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
-        self.BASE_MODEL_URI = model_uri
+        self.BASE_MODEL_URI = appVars.get('model_uri') #XXX clean up model_uri and BASE_MODEL_URI
         self.requestContext = [{}] #stack of dicts
         self.lock = None
         self.log = log
         #######################
-        
-        #variables you want made available to anyone during this request
-        configpath = a or self.DEFAULT_CONFIG_PATH
-        self.source = m
-        self.PATH = p or os.environ.get('RACCOONPATH',os.getcwd())
-        #use first directory on the PATH as the base for relative paths
-        #unless this was specifically set it will be the current dir
-        self.baseDir = self.PATH.split(os.pathsep)[0]
-        self.appBase = appBase or '/'
-        self.appName = appName
-        # self.cmd_usage = DEFAULT_cmd_usage XXXX
-        self.cmd_usage = ""
-        self.loadConfig(configpath, argsForConfig, appVars)
+                
+        self.baseDir = os.getcwd() #XXX make configurable
+        self.loadConfig(appVars)
         if self.template_path:
             from mako.lookup import TemplateLookup
             self.template_loader = TemplateLookup(directories=self.template_path, 
                 default_filters=['decode.utf8'], module_directory='mako_modules',
                 output_encoding='utf-8', encoding_errors='replace')
         self.requestDispatcher = Requestor(self)
-        #self.resolver = SiteUriResolver(self)
         self.loadModel()
-        self.handleCommandLine(argsForConfig or [])
+        self.handleCommandLine(self.argsForConfig)
 
     def handleCommandLine(self, argv):
         '''  the command line is translated into XPath variables
@@ -262,61 +246,38 @@ class RequestProcessor(TransactionProcessor):
 
         * the entire command line is assigned to the variable '_cmdline'
         '''
-        kw = argsToKw(argv, self.cmd_usage)
+        kw = argsToKw(argv)
+        #XXX use self.cmd_usage
         kw['_cmdline'] = '"' + '" "'.join(argv) + '"'
         self.runActions('run-cmds', kw)
 
-    # XXX this method should use AppConfig/loadApp etc. methods
-    def loadConfig(self, path, argsForConfig=None, appVars=None):
-        if not path and not appVars:
-            #todo: path = self.DEFAULT_CONFIG_PATH (e.g. server-config.py)
-            raise CmdArgError('you must specify a config file using -a')
-        if path and not os.path.exists(path):
-            raise CmdArgError('%s not found' % path)
-
+    def loadConfig(self, appVars):
         if not self.BASE_MODEL_URI:
             import socket
             self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
 
-        kw = dict(Action=Action)
-        
-        if path:
-            def includeConfig(path):
-                 kw['__configpath__'].append(os.path.abspath(path))
-                 execfile(path, globals(), kw)
-                 kw['__configpath__'].pop()
+        self.config = utils.defaultattrdict(appVars)
 
-            kw['__server__'] = self
-            kw['__argv__'] = argsForConfig or []
-            kw['__include__'] = includeConfig # XX appears unused?
-            kw['__configpath__'] = [os.path.abspath(path)]
-            execfile(path, kw)
-
-        if appVars:
-            kw.update(appVars)        
-        self.config = utils.defaultattrdict(appVars or {})
-
-        if kw.get('beforeConfigHook'):
-            kw['beforeConfigHook'](kw)
+        if appVars.get('beforeConfigHook'):
+            appVars['beforeConfigHook'](appVars)
 
         def initConstants(varlist, default):
-            return assignVars(self, kw, varlist, default)
+            #add the given list of config properties as attributes
+            #on this RequestProcessor
+            return assignAttrs(self, appVars, varlist, default)
 
         initConstants( [ 'nsMap', 'extFunctions', 'actions',
                          'authorizationDigests',
                          'NOT_CACHEABLE_FUNCTIONS', ], {} )
         initConstants( ['DEFAULT_MIME_TYPE'], '')
-
-        initConstants( ['appBase'], self.appBase)
-        assert self.appBase[0] == '/', "appBase must start with a '/'"
         initConstants( ['BASE_MODEL_URI'], self.BASE_MODEL_URI)
-        initConstants( ['appName'], self.appName)
+        initConstants( ['appName'], 'root')
         #appName is a unique name for this request processor instance
         if not self.appName:
             self.appName = re.sub(r'\W','_', self.BASE_MODEL_URI)
         self.log = logging.getLogger("raccoon." + self.appName)
 
-        useFileLock = kw.get('useFileLock')
+        useFileLock = appVars.get('useFileLock')
         if useFileLock:
             if isinstance(useFileLock, type):
                 self.LockFile = useFileLock
@@ -325,41 +286,32 @@ class RequestProcessor(TransactionProcessor):
         else:
             self.LockFile = glock.NullLockFile #the default
         
-        self.loadDataStore(kw)
-        
-        if 'before-new' in self.actions:            
-            #newResourceHook is optional since it's expensive
-            self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
-        
-        self.defaultRequestTrigger = kw.get('DEFAULT_TRIGGER','http-request')
+        self.loadDataStore(appVars)
+                
+        self.defaultRequestTrigger = appVars.get('DEFAULT_TRIGGER','http-request')
         initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
         self.globalRequestVars.extend( self.defaultGlobalVars )
-        self.defaultPageName = kw.get('defaultPageName', 'index')
+        self.defaultPageName = appVars.get('defaultPageName', 'index')
         #cache settings:
         initConstants( ['LIVE_ENVIRONMENT', 'SECURE_FILE_ACCESS', 'useEtags'], 1)
-        self.defaultExpiresIn = kw.get('defaultExpiresIn', 0)
+        self.defaultExpiresIn = appVars.get('defaultExpiresIn', 0)
         initConstants( ['ACTION_CACHE_SIZE'], 1000)
         #disable by default(default cache size used to be 10000000 (~10mb))
-        initConstants( ['maxCacheableStream','FILE_CACHE_SIZE'], 0)
-
-        self.PATH = kw.get('PATH', self.PATH)
-        
-        self.authorizeMetadata = kw.get('authorizeMetadata',
+        initConstants( ['maxCacheableStream','FILE_CACHE_SIZE'], 0)        
+        self.validateExternalRequest = appVars.get('validateExternalRequest',
                                         lambda *args: True)
-        self.validateExternalRequest = kw.get('validateExternalRequest',
-                                        lambda *args: True)
-        self.getPrincipleFunc = kw.get('getPrincipleFunc', lambda kw: '')
+        self.getPrincipleFunc = appVars.get('getPrincipleFunc', lambda kw: '')
 
-        self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
+        self.MODEL_RESOURCE_URI = appVars.get('MODEL_RESOURCE_URI',
                                          self.BASE_MODEL_URI)
-
-        # XXX
-        # self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
+        
+        self.argsForConfig = appVars.get('argsForConfig', [])
+        #XXX self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
 
         self.nsMap.update(DefaultNsMap)
         
-        if kw.get('configHook'):
-            kw['configHook'](kw)
+        if appVars.get('configHook'):
+            appVars['configHook'](appVars)
 
     def loadModel(self):
         self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
@@ -530,7 +482,7 @@ class RequestProcessor(TransactionProcessor):
 #################################################
 ##command line handling
 #################################################
-def argsToKw(argv, cmd_usage):
+def argsToKw(argv):
     kw = { }
 
     i = iter(argv)
@@ -546,20 +498,8 @@ def argsToKw(argv, cmd_usage):
                 kw[name] = arg
                 arg = i.next()
     except StopIteration: pass
-    #print 'args', kw
+    
     return kw
-
-def translateCmdArgs(data):
-    """
-    translate raccoonrunner vars into shell args suitable for RequestProcessor init
-    """
-    replacements = [("CONFIG_PATH", "a"), ("SOURCE", "m"), ("RACCOON_PATH", "p"),
-                    ("APP_BASE", "appBase"), ("APP_NAME", "appName"), ("MODEL_URI", "model_uri")]
-    for x in replacements:
-      if x[0] in data:
-        data[x[1]] = data[x[0]]
-        del data[x[0]]
-    return data
 
 def initLogConfig(logConfig):
     import logging.config as log_config
@@ -589,9 +529,8 @@ class AppConfig(utils.attrdict):
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
 
-        kw = translateCmdArgs(self)
         from web import HTTPRequestProcessor
-        root = HTTPRequestProcessor(a=kw.get('a'), appName='root', appVars=kw)
+        root = HTTPRequestProcessor(appVars=self)
         dict.__setattr__(self, '_server', root)
         return self._server
         

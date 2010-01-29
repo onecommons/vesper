@@ -55,13 +55,7 @@ class DataStore(transactions.TransactionParticipant): # XXX this base class can 
     def getTransactionContext(self):
         return None
         
-    def _normalizeSource(self, requestProcessor, path):
-        #if source was set on command line, override config source
-        if requestProcessor.source:            
-            source = requestProcessor.source
-        else:
-            source = path
-
+    def _normalizeSource(self, requestProcessor, source):
         if not source:
             self.log.warning('no model path given and STORAGE_PATH'
                              ' is not set -- model is read-only.')            

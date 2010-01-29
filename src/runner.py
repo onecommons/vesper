@@ -1,6 +1,6 @@
 import os, sys
 
-from raccoon import argsToKw, createApp
+from raccoon import argsToKw, loadApp
 
 DEFAULT_cmd_usage = 'python raccoon.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.nt -a config.py '
 cmd_usage = '''
@@ -11,24 +11,25 @@ cmd_usage = '''
 -x exit after executing config specific cmd arguments
 -p specify the path (overrides RACCOONPATH env. variable)
 -m [store.nt] load the RDF model
-   (default model supports .rdf, .nt, .mk)
--a config.py run the application specified
+   (default model supports .json, .mjson, .rdf, .nt)
 '''
 
 def parse_args(argv=sys.argv[1:], out=sys.stdout):
     "parse cmd args and return vars suitable for passing to run"
     vars = {}
+    appPath = None
     try:
         eatNext = False
         mainArgs, rootArgs, configArgs = [], [], []
         for i in range(len(argv)):
             if argv[i] == '-a':
+                appPath = argv[i+1]
                 rootArgs += argv[i:i+2]
                 configArgs += argv[i+2:]
                 break
-            if argv[i] in ['-d', '-r', '-x', '-s', '-l', '-h', '--help'
+            if argv[i] in ['-d', '-r', '-x', '-s', '-l', '-m', '-h', '--help'
                            ] or (eatNext and argv[i][0] != '-'):
-                eatNext = argv[i] in ['-d', '-s', '-l']
+                eatNext = argv[i] in ['-d', '-s', '-l', '-m']
                 mainArgs.append( argv[i] )
             else:
                 rootArgs.append( argv[i] )
@@ -45,7 +46,12 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
 
             vars['LOG_CONFIG'] = logConfig
 
-        vars.update(argsToKw(rootArgs, DEFAULT_cmd_usage))
+        if '-m' in mainArgs:
+            vars['STORAGE_PATH'] = mainArgs[mainArgs.index("-m")+1]
+        
+        #any args left over treat as config variable 
+        vars.update(argsToKw(rootArgs))        
+
         vars['argsForConfig'] = configArgs
         #print 'ma', mainArgs
         if '-h' in mainArgs or '--help' in mainArgs:
@@ -73,8 +79,9 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
         print>>out, 'usage:'
         print>>out, DEFAULT_cmd_usage +'[config specific options]'
         print>>out, cmd_usage
+        return None, None
 
-    return vars
+    return appPath, vars
 
 #XXX clean up args and implement this as the doc says
 def main(argv=sys.argv[1:], out=sys.stdout):
@@ -91,8 +98,10 @@ def main(argv=sys.argv[1:], out=sys.stdout):
     -d [debug.pkl] DEBUG_FILENAME debug mode (replay the requests saved in debug.pkl)    
     '''
     # mimics behavior of old main(), not really used anywhere
-    vars = parse_args(argv, out)
-    createApp(**vars).run(out=out)
+    appPath, vars = parse_args(argv, out)
+    if not appPath:
+        return -1
+    loadApp(appPath, **vars).run(out=out)
     return 0
 
 
