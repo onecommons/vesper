@@ -1,72 +1,42 @@
-#derived from http://pythonpaste.org/webob/do-it-yourself.html#routing
 from raccoon import *
 from rx.utils import defaultattrdict
 import os.path
 from urllib import url2pathname
-import re, logging
+import logging
 log = logging.getLogger("server")
 
-var_regex = re.compile(r'''
-    \{          # The exact character "{"
-    (\w+)       # The variable name (restricted to a-z, 0-9, _)
-    (?::([^}]+))? # The optional :regex part
-    \}          # The exact character "}"
-    ''', re.VERBOSE)
+from routes import Mapper
+route_map = Mapper()
+route_map.minimization = False
 
-def template_to_regex(template):
-    regex = ''
-    last_pos = 0
-    for match in var_regex.finditer(template):
-        regex += re.escape(template[last_pos:match.start()])
-        var_name = match.group(1)
-        expr = match.group(2) or '[^/]+'
-        expr = '(?P<%s>%s)' % (var_name, expr)
-        regex += expr
-        last_pos = match.end()
-    regex += re.escape(template[last_pos:])
-    regex = '^%s$' % regex
-    return regex
+# Routes mapper maintains a route cache that must be regenerated when
+# new routes are added
+_routemap_dirty = True
 
-class Router(object):
-    def __init__(self):
-        self.routes = []
-
-    def add_route(self, template, controller, **vars):
-        if not isinstance(controller, Action):
-            controller = Action(controller)
-        self.routes.append((re.compile(template_to_regex(template)),
-                            controller,
-                            vars))
-        return controller
-
-    def find_route(self, kw):
-        for regex, controller, vars in self.routes:
-            #for n, v in httpmatches:
-            #    if kw['environ'].get(n) != v:
-            #        return None        
-            match = regex.match(kw['_name'])
-            if match:            
-                urlvars = match.groupdict()
-                urlvars.update(vars)
-                kw['urlvars'] = defaultattrdict(urlvars)
-                return controller
-        return None
-        
-    def get_routes(self):
-        return [(r[0].pattern, r[1].action) for r in self.routes]
-    
-routes = Router()
-
-def Route(path, routes = routes, **vars):
-    def _route(f):
-        f = routes.add_route(path, f, **vars)
-        return f
+def Route(path, route_map=route_map, **vars):
+    def _route(func):
+        global _routemap_dirty
+        if not isinstance(func, Action):
+            func = Action(func)
+        route_map.connect(None, path, controller=func)
+        # print "mapping %s -> %s" % (path, str(func))
+        _routemap_dirty = True
     return _route
+
+def gensequence(kw, default=None):
+    "Yields an Action.  This is a generator purely due to requirements in the Action code"
+    global _routemap_dirty    
+    if _routemap_dirty:
+        # print "generating routemap"
+        route_map.create_regs()
+        _routemap_dirty = False
     
-def gensequence(kw, default=None): 
-    route = routes.find_route(kw)
-    if route:
-        yield route
+    request_url = kw['_name']
+    # print "matching on:'%s' default:%s" % (request_url, str(default))
+    r = route_map.match(request_url)
+    if r:
+        kw['urlvars'] = r # XXX should probably strip 'action' & 'controller'
+        yield r['controller']
     elif default:
         yield default
 

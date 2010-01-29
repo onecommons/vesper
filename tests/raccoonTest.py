@@ -81,6 +81,7 @@ class RaccoonTestCase(unittest.TestCase):
             _responseHeaders=dict(_status="200 OK"), _environ={})
         result = root.handleHTTPRequest(kw)
         self.assertEquals(result.read().strip(), "test file")
+        
 
     def _testErrorHandling(self, appVars=None):
         app = raccoon.loadApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
