@@ -17,7 +17,6 @@ class TransactionProcessor(utils.object_with_threadlocals):
         self.log = log
         self.actions = {}
         
-        kw = globals().copy() #copy this module's namespace
         if appVars:
             kw.update(appVars)
         self.loadDataStore(kw)
@@ -29,6 +28,10 @@ class TransactionProcessor(utils.object_with_threadlocals):
         self.dataStore = dataStoreFactory(self, **kw)
         self.dataStore.addTrigger = self.txnSvc.addHook
         self.dataStore.removeTrigger = self.txnSvc.removeHook
+
+        if self.actions.get('before-new'):
+            #newResourceHook is optional since it's expensive
+            self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
         
         self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
                                          self.BASE_MODEL_URI)
