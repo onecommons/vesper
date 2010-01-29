@@ -30,7 +30,7 @@ class utilsTestCase(unittest.TestCase):
             self.failUnless(e.msg == "another msg")
 
     def testThreadlocalAttribute(self):
-        class HasThreadLocals(object_with_threadlocals):
+        class HasThreadLocals(ObjectWithThreadLocals):
             def __init__(self, bar):
                 #set values that will initialize across every thread
                 self.initThreadLocals(tl1 = 1, tl2 = bar)

@@ -103,14 +103,14 @@ def bisect_left(a, x, cmp=cmp, lo=0, hi=None):
 
 import threading
 
-class object_with_threadlocals(object):    
+class ObjectWithThreadLocals(object):
     '''
     Creates an attribute whose value will be local to the current
     thread.
     Deleting an attribute will delete it for all threads.
 
     usage:
-        class HasThreadLocals(object_with_threadlocals):
+        class HasThreadLocals(ObjectWithThreadLocals):
             def __init__(self, bar):
                 #set values that will initialize across every thread
                 self.initThreadLocals(tl1 = 1, tl2 = bar)
@@ -125,7 +125,7 @@ class object_with_threadlocals(object):
             defaultValueAttrName = '__' + propname + '_initValue'
             setattr(self, defaultValueAttrName, initValue)
             prop = getattr(self, propname, None)
-            if not isinstance(prop, object_with_threadlocals._threadlocalattribute):
+            if not isinstance(prop, ObjectWithThreadLocals._threadlocalattribute):
                 self._createThreadLocalProp(propname, defaultValueAttrName)
 
     def _createThreadLocalProp(self, propname, defaultValueAttrName):

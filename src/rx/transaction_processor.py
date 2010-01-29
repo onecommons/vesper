@@ -1,7 +1,7 @@
 from rx import utils, glock, DataStore, transactions
 import sys
 
-class TransactionProcessor(utils.object_with_threadlocals):
+class TransactionProcessor(utils.ObjectWithThreadLocals):
     
     def __init__(self, model_uri=None, appVars=None):
         """

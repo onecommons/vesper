@@ -278,7 +278,7 @@ class RaccoonTransactionState(TransactionState):
         self.retVal = None
         self.lock = None
 
-class RaccoonTransactionService(TransactionService,utils.object_with_threadlocals):
+class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals):
     stateFactory = RaccoonTransactionState
 
     def __init__(self, server):        
