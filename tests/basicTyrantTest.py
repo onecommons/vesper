@@ -10,7 +10,7 @@ import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
 import modelTest
-from rx.store.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
+from vesper.data.store.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
 
 def start_tyrant_server():
     "start a local tyrant server, return a dict needed to stop & clean up"

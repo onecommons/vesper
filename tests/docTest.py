@@ -1,10 +1,11 @@
 import doctest
 import unittest
 import glob
-import jql, jql.engine, sjson, multipartjson
+from vesper import query, sjson, multipartjson
+from vesper.query import engine
 
 suite = unittest.TestSuite()
-for mod in (jql,jql.engine, sjson, multipartjson):
+for mod in (query, engine, sjson, multipartjson):
     suite.addTest(doctest.DocTestSuite(mod))
 
 #for path in glob.glob('../doc/source/*.rst'):

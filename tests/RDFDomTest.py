@@ -9,13 +9,12 @@ import unittest, os, os.path, glob, tempfile
 import cStringIO
 from pprint import *
 
-from rx.RxPath import *
-from rx import RxPathGraph
-
+from vesper.data.RxPath import *
+from vesper.data import RxPathGraph
 
 import time
-from rx.RxPathUtils import _parseTriples as parseTriples
-from rx.utils import pprintdiff
+from vesper.data.RxPathUtils import _parseTriples as parseTriples
+from vesper.utils import pprintdiff
     
 class RDFDomTestCase(unittest.TestCase):
     ''' tests models with:
@@ -165,7 +164,7 @@ class RDFDomTestCase(unittest.TestCase):
             return TransactionMemModel(parseRDFFromString(source.read(),'test:', type))
 
     def loadTyrantModel(self, source, type='nt'):
-        from rx.store.RxPathModelTyrant import TransactionTyrantModel
+        from vesper.data.store.RxPathModelTyrant import TransactionTyrantModel
         
         if type == 'nt':
             type = 'ntriples'
@@ -183,7 +182,7 @@ class RDFDomTestCase(unittest.TestCase):
         return model
 
     def loadBdbModel(self, source, type='nt'):
-        from rx.store.RxPathModelBdb import TransactionBdbModel
+        from vesper.data.store.RxPathModelBdb import TransactionBdbModel
         
         if type == 'nt':
             type = 'ntriples'
@@ -545,7 +544,7 @@ def profilerRun(testname, testfunc):
 
 if __name__ == '__main__':
     import sys
-    from rx import logging
+    import logging
     logging.root.setLevel(logging.DEBUG)
     logging.basicConfig()
 

@@ -1,6 +1,8 @@
-from sjson import *
+import unittest
 from pprint import pprint,pformat
-from rx.utils import pprintdiff
+
+from vesper.sjson import *
+from vesper.utils import pprintdiff
 
 def assert_json_match(expected, result, dosort=False):
     if dosort and isinstance(expected, list):
@@ -59,7 +61,6 @@ def assert_stmts_and_back_match(stmts, expectedobj = None, serializerNameMap=Non
     result_stmts = Parser(generateBnode='counter', addOrderInfo=addOrderInfo).to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
-import unittest
 class SjsonTestCase(unittest.TestCase):
     def testAll(self):
         test()

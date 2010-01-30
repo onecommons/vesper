@@ -6,8 +6,8 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-from rx import utils
-from rx.utils import *
+from vesper import utils
+from vesper.utils import *
     
 class utilsTestCase(unittest.TestCase):
     def testSingleton(self):

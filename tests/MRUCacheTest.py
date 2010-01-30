@@ -6,7 +6,7 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-from rx import MRUCache
+from vesper.utils import MRUCache
 
 class MRUCacheTestCase(unittest.TestCase):
     def setUp(self):

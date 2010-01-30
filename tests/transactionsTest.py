@@ -2,7 +2,7 @@
 Transaction and Persistence tests
 """
 
-from rx.transactions import *
+from vesper.data.transactions import *
 import unittest, glob, os, os.path
 
 class TxnStateTest(unittest.TestCase):

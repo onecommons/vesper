@@ -2,14 +2,17 @@ import unittest
 import random
 import time
 import multiprocessing
-from rx.python_shim import json
 from urllib2 import urlopen
 from urllib import urlencode
 
 import morbid
 from twisted.internet import reactor
 
-import raccoon, rx.replication, rx.route
+from vesper.backports import json
+from vesper import app
+from vesper.data import replication
+from vesper.web import route
+
 import logging
 logging.basicConfig()
 
@@ -64,20 +67,20 @@ def startRhizomeInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
     else:
         autoAck=True
     
-    rep = rx.replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
+    rep = replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
     conf['CHANGESET_HOOK'] = rep.replication_hook
     
-    @raccoon.Action
+    @app.Action
     def startReplication(kw, retVal):
         # print "startReplication callback!"
         rep.start(kw.__server__)
         
     conf['actions'] = {
-        'http-request':rx.route.gensequence,
+        'http-request':route.gensequence,
         'load-model':[startReplication]    
     }
 
-    raccoon.createApp('miniserver.py',model_uri = 'test:', PORT=port, **conf).run()
+    app.createApp('miniserver.py',model_uri = 'test:', PORT=port, **conf).run()
     # blocks forever
     
 

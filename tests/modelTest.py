@@ -9,8 +9,8 @@ import unittest
 import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
-from rx.RxPath import *
-from rx import RxPath, RxPathGraph
+from vesper.data.RxPath import *
+from vesper.data import RxPath, RxPathGraph
 
 graphManagerClass = RxPathGraph.MergeableGraphManager
 #graphManagerClass = RxPathGraph.NamedGraphManager

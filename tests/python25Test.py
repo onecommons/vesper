@@ -3,11 +3,11 @@ from __future__ import with_statement
 Unit tests for functionality only available in Python 2.5 and later
 '''
 import unittest
-import raccoon
+import vesper.app
 
 class Python25TestCase(unittest.TestCase):
     def testTxnContext(self):
-      root = raccoon.createApp().load()
+      root = vesper.app.createApp().load()
       self.failUnless(not root.txnSvc.isActive())
       with root.inTransaction():
           self.failUnless(root.txnSvc.isActive())

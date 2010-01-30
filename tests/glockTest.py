@@ -6,7 +6,7 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-from rx import glock
+from vesper.utils import glock
 import threading
 threading._VERBOSE = 0
 

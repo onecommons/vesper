@@ -5,8 +5,11 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-import raccoon, web
-from rx import utils, logging, transactions, RxPath
+import vesper.app, vesper.web
+from vesper import utils
+from vesper.data import transactions, RxPath
+
+import logging
 import unittest, glob, os, os.path, traceback
  
 def makeChangeset(branchid, rev, baserevision='0', resname='a_resource'):
@@ -47,14 +50,14 @@ class RaccoonTestCase(unittest.TestCase):
         logging.root.removeHandler( self.logHandler )
     
     def testMinimalApp(self):
-        app = raccoon.loadApp(baseapp='testMinimalApp.py', model_uri='test:')
+        app = vesper.app.loadApp(baseapp='testMinimalApp.py', model_uri='test:')
         root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)
         
         #XXX test for InputSource
-        #result = raccoon.InputSource.DefaultFactory.fromUri(
+        #result = app.InputSource.DefaultFactory.fromUri(
         #    'site:///foo', resolver=root.resolver).read()    
         #print type(result), repr(result), result
         self.assertEquals(response, result)
@@ -64,12 +67,12 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals( '<html><body>not found!</body></html>', result)
 
     def testSequencerApp(self):
-        app = raccoon.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app = vesper.app.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
         root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
         self.assertEquals("<html><body>page content.</body></html>", result)
 
-        app = raccoon.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app = vesper.app.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
         root = app._server
         # XXX loadApp doesn't specify whether to create a RequestProcessor or HTTPRequestProcessor
         # root = web.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
@@ -84,7 +87,7 @@ class RaccoonTestCase(unittest.TestCase):
         
 
     def _testErrorHandling(self, appVars=None):
-        app = raccoon.loadApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
+        app = vesper.app.loadApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
         root = app._server
         #make sure the error handler is run and sets the status code to 404 instead of the default 200
         kw = dict(_name='foo', 
@@ -116,8 +119,8 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('CRITICAL' in [r.levelname for r in self.logHandler.records])     
         
     def testUpdatesApp(self):
-        # root = raccoon.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
-        app = raccoon.loadApp(baseapp='testUpdatesApp.py', model_uri='test:')
+        # root = app.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
+        app = vesper.app.loadApp(baseapp='testUpdatesApp.py', model_uri='test:')
         root = app._server                
         #set timestamp to 0 so tests are reproducible:
         root.dataStore.model.createTxnTimestamp = lambda *args: 0
@@ -172,7 +175,7 @@ class RaccoonTestCase(unittest.TestCase):
         else:
             self.fail('should have raised an error')
         
-        app2 = raccoon.loadApp(baseapp='testUpdatesApp.py', model_uri='test:', trunkId='0A', branchId='0B')
+        app2 = vesper.app.loadApp(baseapp='testUpdatesApp.py', model_uri='test:', trunkId='0A', branchId='0B')
         root2 = app2._server
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
                 
@@ -180,7 +183,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
     
     def testRemoves(self):
-        store = raccoon.createStore({
+        store = vesper.app.createStore({
         "id": "hello", 
         "tags": [
           { "id": "tag1" }, 
@@ -191,7 +194,7 @@ class RaccoonTestCase(unittest.TestCase):
         #print 'hello', store.model.by_s.get('hello')
         store.remove({"id":"hello","tags":"@tag2"})
         #utils.debugp('hello', store.model.by_s.get('hello'))
-        import sjson
+        from vesper import sjson
         self.assertEquals(sjson.tojson(store.model.getStatements())['data'],
             [{"id": "hello", 
                "tags": ["@tag1"]
@@ -199,7 +202,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
         
     def testMerge(self):
-        store1 = raccoon.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')
                 
         store1.add([{ 'id' : '1', 'prop' : 0,
@@ -260,7 +263,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals([], store1.model.isModifiedAfter(
             store1.model.getCurrentContextUri(), ['a_resource', '1'], True))
         
-        from rx.RxPathGraph import MergeableGraphManager
+        from vesper.data.RxPathGraph import MergeableGraphManager
         self.assertEquals(-1, MergeableGraphManager.comparecontextversion(
                 'context:txn:test:;0A00001,0B00003', 'context:txn:test:;0B00002'))
 
@@ -271,7 +274,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
                 
     def testMergeConflict(self):        
-        store1 = raccoon.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
         store1.add([{ 'id' : 'a_resource',
            'newprop' : 'change an existing resource'
         }])
@@ -285,7 +288,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testMergeInTransaction(self):
         #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
-        store1 = raccoon.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
@@ -358,8 +361,8 @@ class RaccoonTestCase(unittest.TestCase):
         '''
         Test updates with multiple transaction participants
         '''
-        from rx import DataStore
-        store = raccoon.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')
+        from vesper.data import DataStore
+        store = vesper.app.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')
         root = store.requestProcessor        
         if saveHistory == 'split':
             graphParticipants = 2            
@@ -444,7 +447,7 @@ class RaccoonTestCase(unittest.TestCase):
         self._test2PhaseTxn('combined')
 
     def testGraphManagerSerialize(self):
-        import os, rx.RxPath
+        import os, vesper.data.RxPath
         tmppath = os.tempnam(None, 'raccoontest')+'.json'
         try:
             add = {"id":"1",
@@ -456,15 +459,15 @@ class RaccoonTestCase(unittest.TestCase):
             add = {"id":"1",                    
                   "tags" : [ '@t' ]
                   }            
-            store = raccoon.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=rx.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=True)
+            store = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
+                modelFactory=vesper.data.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=True)
             store.add(add)
             
             #now reload the file into a new store without saveHistory turned on,
             #so that the history representation is visible to the app
             #print file(tmppath).read()            
-            store2 = raccoon.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=rx.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=False)
+            store2 = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
+                modelFactory=vesper.data.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=False)
             #XXX jql is not including scope in results
             self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
         finally:
@@ -473,7 +476,7 @@ class RaccoonTestCase(unittest.TestCase):
               
     def testCreateApp(self):
         #this is minimal logconfig that python's logger seems to accept:
-        app = raccoon.createApp(static_path=['static'], 
+        app = vesper.app.createApp(static_path=['static'], 
           logconfig = '''
           [loggers]
           keys=root

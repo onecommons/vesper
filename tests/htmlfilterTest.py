@@ -6,7 +6,7 @@
     http://rx4rdf.sf.net    
 """
 import unittest
-import htmlfilter
+from vesper import htmlfilter
 
 class TestLinkFixer(htmlfilter.HTMLFilter):
     def __init__(self, out):

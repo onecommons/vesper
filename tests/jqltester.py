@@ -16,14 +16,15 @@ group=None add this test to the given group
 If any of these attributes are set on `t` they will used as the default value for subsequent calls to `t`. For example, setting `t.model` will apply that model to any test added if the test doesn't specify a model.
 '''
 
-import jql, sjson
-from jql.jqlAST import *
-from rx import RxPath
+from vesper import sjson
+from vesper import query as jql
+from vesper.query.jqlAST import *
+from vesper.data import RxPath
 import sys, pprint
-from rx.utils import flatten
+from vesper.utils import flatten
 
-import jql.jqlAST
-import jql.engine
+import vesper.query.jqlAST
+import vesper.query.engine
 
 class Test(object):
     def __init__(self, attrs):

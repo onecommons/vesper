@@ -10,7 +10,7 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 import modelTest 
-from rx.RxPath import FileModel, TransactionFileModel, IncrementalNTriplesFileModel, IncrementalNTriplesFileModelBase, Statement
+from vesper.data.RxPath import FileModel, TransactionFileModel, IncrementalNTriplesFileModel, IncrementalNTriplesFileModelBase, Statement
 
 class FileModelTestCase(modelTest.BasicModelTestCase):
     

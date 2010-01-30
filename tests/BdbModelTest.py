@@ -10,7 +10,7 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 import modelTest 
-from rx.store.RxPathModelBdb import BdbModel, TransactionBdbModel
+from vesper.data.store.RxPathModelBdb import BdbModel, TransactionBdbModel
 
 class BdbModelTestCase(modelTest.BasicModelTestCase):
     

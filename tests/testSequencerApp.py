@@ -1,9 +1,9 @@
 import os
-from rx.route import Route, gensequence
+from vesper.web.route import Route, gensequence
 
 @Action
 def fromdatastore(kw, retval):
-    import jql
+    from vesper import query as jql
     query = "{comment:* where(label='%s')}" % kw['_name'] #XXX qnames are broken 
     result = list(jql.runQuery(query, kw['__server__'].dataStore.model))
     #print result
