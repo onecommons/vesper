@@ -3,9 +3,9 @@ ez_setup.use_setuptools()
 from setuptools import setup, find_packages
 import sys
 
-install_requires = ['ply']
-#XXX add: optional mako, pyyaml, routes 
-PACKAGE_NAME = 'rhizome2'
+install_requires = ['ply', 'routes']
+#XXX add: optional mako, pyyaml, stomp.py
+PACKAGE_NAME = 'vesper'
 pyver = sys.version_info[:2]
 if pyver < (2,4):
     print "Sorry, %s requires version 2.4 or later of Python" % PACKAGE_NAME
@@ -20,7 +20,7 @@ setup(
     version = "0.0.1",
     package_dir = {'': 'src'},
     packages = find_packages('src'),
-    py_modules = ['sjson', 'raccoon', 'htmlfilter'],
+    #py_modules = ['sjson', 'raccoon', 'htmlfilter'],
     install_requires = install_requires,
 
    XXXentry_points = {

@@ -20,7 +20,7 @@ logging.basicConfig()
 USE_EXISTING_MQ = None #"test-queue:61613"
 
 def invokeAPI(name, data, where=None, port=8000):
-    "make a rhizome api call"
+    "make a vesper api call"
     url = "http://localhost:%d/api/%s" % (port, name)
     
     if isinstance(data, dict):
@@ -50,8 +50,8 @@ def startMorbidQueue(port):
     reactor.listenTCP(options['port'], stomp_factory, interface=options['interface'])
     reactor.run()
 
-def startRhizomeInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
-    print "creating rhizome instance:%s (%s:%d)" % (nodeId, queueHost, port)
+def startVesperInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
+    print "creating vesper instance:%s (%s:%d)" % (nodeId, queueHost, port)
     conf = {
         'STORAGE_URL':"mem://",
         'saveHistory':True,
@@ -100,9 +100,9 @@ class BasicReplicationTest(unittest.TestCase):
         self.rhizomeA_port = random.randrange(5000,9999)
         self.rhizomeB_port = random.randrange(5000,9999)
         
-        self.rhizomeA   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", "AA", self.rhizomeA_port, mq_host, mq_port, self.replicationTopic))
+        self.rhizomeA   = multiprocessing.Process(target=startVesperInstance, args=("AA", "AA", self.rhizomeA_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeA.start()
-        self.rhizomeB   = multiprocessing.Process(target=startRhizomeInstance, args=("AA", "BB", self.rhizomeB_port, mq_host, mq_port, self.replicationTopic))
+        self.rhizomeB   = multiprocessing.Process(target=startVesperInstance, args=("AA", "BB", self.rhizomeB_port, mq_host, mq_port, self.replicationTopic))
         self.rhizomeB.start()
         time.sleep(1) # XXX
         

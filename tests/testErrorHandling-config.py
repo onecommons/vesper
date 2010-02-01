@@ -20,14 +20,14 @@ def testInTransactionAction(kw, retval):
         
     global originalCommit    
     originalCommit = kw.__server__.dataStore.model.commit
-    from rx import DataStore
+    from vesper.data import DataStore
     if isinstance(kw.__server__.dataStore.model, DataStore.ModelWrapper): 
-        kw.__server__.dataStore.model.model.commit = badCommit
+        kw.__server__.dataStore.model.model.commit = badCommit        
     else:
         kw.__server__.dataStore.model.commit = badCommit 
     return 'success'
 
-@Action    
+@Action
 def errorhandler(kw, retval):
     #print 'in error handler', kw['_errorInfo']['errorCode'], 'badCommit', badCommitCalled, kw.__server__.dataStore.model
     if originalCommit:

@@ -22,14 +22,9 @@ def _my_import(name):
     
 def get_factory(proto):
     full_model = _proto_map[proto].split('.')
-    model_pkg = '.'.join(full_model[:-1]) # e.g. 'rx.RxPathModelTyrant'
+    model_pkg = '.'.join(full_model[:-1]) # e.g. 'vesper.store.RxPathModelTyrant'
     model_class = full_model[-1] # e.g. 'TransactionTyrantModel'
 
     mod = _my_import(model_pkg)
     fac = getattr(mod, model_class)
     return fac
-
-# from rx.store.RxPathModelBdb import *
-# from rx.store.RxPathModelFt  import *
-# from rx.store.RxPathModelMemcache import *
-# from rx.store.RxPathModelTyrant import *
