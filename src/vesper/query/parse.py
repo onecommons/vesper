@@ -710,7 +710,7 @@ def buildparser(errorlog=None, debug=0):
         import vesper.query.lextab
         lextab=vesper.query.lextab
     except ImportError:
-        if not debug: errorlog.warning('jql.lextab not found, generating local lextab.py')
+        if not debug: errorlog.warning('vesper.query.lextab not found, generating local lextab.py')
         lextab = 'lextab'
     
     if debug:
@@ -723,7 +723,7 @@ def buildparser(errorlog=None, debug=0):
         import vesper.query.parsetab
         tabmodule=vesper.query.parsetab
     except ImportError:
-        if not debug: errorlog.warning('jql.parsetab not found, generating local parsetab.py')
+        if not debug: errorlog.warning('vesper.query.parsetab not found, generating local parsetab.py')
         tabmodule = 'parsetab'
 
     try:
@@ -738,7 +738,7 @@ def buildparser(errorlog=None, debug=0):
         #because its expecting a string not a module
         #this happens when the jql.parsetab is out of data
         tabmodule = 'parsetab'
-        errorlog.warning('jql.parsetab was out of date, generating local parsetab.py')
+        errorlog.warning('vesper.query.parsetab was out of date, generating local parsetab.py')
         parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)
         parser.errorlog = errorlog
 
