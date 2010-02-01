@@ -5,8 +5,8 @@ This tutorial.
 
 First let's create a store with some JSON. For readability, we'll use native Python dictionaries and lists instead of long string of JSON.   
 
- >>> import raccoon
- >>> datastore = raccoon.createStore({
+ >>> from vesper import app
+ >>> datastore = app.createStore({
  ...    "foo" : "bar"
  ... })
 
