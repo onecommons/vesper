@@ -9,6 +9,7 @@ import StringIO, copy
 from vesper.data import RxPathUtils, RxPathModel
 from vesper.data.RxPathUtils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
 from vesper.data.RxPathUtils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
+from vesper.data.store.basic import TransactionMemStore
 
 class BaseSchema(object):
     '''
@@ -107,7 +108,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
     def __init__(self, model, entailmentModel=None):
         self.model = model
-        self.entailments = entailmentModel or RxPathModel.TransactionMemModel()
+        self.entailments = entailmentModel or TransactionMemStore()
         self.models = (model, self.entailments)        
         self.domains = {}
         self.ranges = {}

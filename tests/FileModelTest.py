@@ -10,7 +10,8 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 import modelTest 
-from vesper.data.RxPath import FileModel, TransactionFileModel, IncrementalNTriplesFileModel, IncrementalNTriplesFileModelBase, Statement
+from vesper.data.RxPath import Statement
+from vesper.data.store.basic import FileStore, TransactionFileStore, IncrementalNTriplesFileStore, IncrementalNTriplesFileStoreBase
 
 class FileModelTestCase(modelTest.BasicModelTestCase):
     
@@ -21,11 +22,11 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
     def getModel(self):
         #print 'opening', self.tmpfilename
         #sys.stdout.flush()
-        model = FileModel(self.tmpfilename)
+        model = FileStore(self.tmpfilename)
         return model #self._getModel(model)
 
     def getTransactionModel(self):
-        model = FileModel(self.tmpfilename)
+        model = FileStore(self.tmpfilename)
         return model #self._getModel(model)
 
     def setUp(self):
@@ -84,7 +85,7 @@ class MultipartJsonFileModelTestCase(FileModelTestCase):
 class TransactionFileModelTestCase(FileModelTestCase):
 
     def getTransactionModel(self):
-        model = TransactionFileModel(self.tmpfilename)
+        model = TransactionFileStore(self.tmpfilename)
         return model#self._getModel(model)
 
 class IncrementalFileModelTestCase(FileModelTestCase):
@@ -94,20 +95,20 @@ class IncrementalFileModelTestCase(FileModelTestCase):
     def getModel(self):
         #print 'opening', self.tmpfilename
         #sys.stdout.flush()
-        model = IncrementalNTriplesFileModelBase(self.tmpfilename)
+        model = IncrementalNTriplesFileStoreBase(self.tmpfilename)
         return model#self._getModel(model)
 
     def getTransactionModel(self):
-        model = IncrementalNTriplesFileModel(self.tmpfilename)
+        model = IncrementalNTriplesFileStore(self.tmpfilename)
         return model#self._getModel(model)
     
     def testCommitFailure(self):
-        pass #this test needs to be disabled for IncrementalNTriplesFileModel
+        pass #this test needs to be disabled for IncrementalNTriplesFileStore
 
 class TransactionIncrementalFileModelTestCase(IncrementalFileModelTestCase):
 
     def getModel(self):
-        model = IncrementalNTriplesFileModel(self.tmpfilename)
+        model = IncrementalNTriplesFileStore(self.tmpfilename)
         return model#self._getModel(model)
 
 if __name__ == '__main__':

@@ -10,6 +10,8 @@ import cStringIO
 from pprint import *
 
 from vesper.data.RxPath import *
+from vesper.data.store.basic import *
+
 from vesper.data import RxPathGraph
 
 import time
@@ -84,7 +86,7 @@ class RDFDomTestCase(unittest.TestCase):
         elif DRIVER == 'Redland':
             self.loadModel = self.loadRedlandModel
         elif DRIVER == 'Mem':
-            self.loadModel = self.loadMemModel
+            self.loadModel = self.loadMemStore
         elif DRIVER == 'Bdb':
             self.loadModel = self.loadBdbModel
         elif DRIVER == 'Tyrant':
@@ -103,7 +105,7 @@ class RDFDomTestCase(unittest.TestCase):
                 revmodel = None
             else:
                 assert self.testHistory == 'split'
-                revmodel = TransactionMemModel()
+                revmodel = TransactionMemStore()
             graphManager = self.graphManagerClass(model, revmodel, modelUri)
             model = graphManager
         else:
@@ -153,15 +155,15 @@ class RDFDomTestCase(unittest.TestCase):
             type = 'xml'
         return initRDFLibModel(dest, source, type)
 
-    def loadMemModel(self, source, type='nt'):
+    def loadMemStore(self, source, type='nt'):
         if type == 'nt':
             type = 'ntriples'
         elif type == 'rdf':
             type = 'rdfxml'        
         if isinstance(source, (str, unicode)):
-            return TransactionMemModel(parseRDFFromURI('file:'+source,type))
+            return TransactionMemStore(parseRDFFromURI('file:'+source,type))
         else:
-            return TransactionMemModel(parseRDFFromString(source.read(),'test:', type))
+            return TransactionMemStore(parseRDFFromString(source.read(),'test:', type))
 
     def loadTyrantModel(self, source, type='nt'):
         from vesper.data.store.RxPathModelTyrant import TransactionTyrantModel

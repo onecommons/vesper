@@ -27,6 +27,7 @@ from vesper.data.RxPath import OBJECT_TYPE_LITERAL
 from vesper.data.RxPath import OBJECT_TYPE_RESOURCE
 from vesper.data.RxPath import RDF_MS_BASE
 from vesper.data.RxPath import Statement, isBnode, Triple
+from vesper.data.store.basic import MemStore
 from vesper.utils import attrdict
 
 log = logging.getLogger("db")
@@ -192,7 +193,7 @@ class NamedGraphManager(RxPath.Model):
                     model = self.revisionModel
                 else:
                     #note: this can be expensive!
-                    model = RxPath.MemModel(self.getStatementsForContextAndRevision(context))
+                    model = MemStore(self.getStatementsForContextAndRevision(context))
                     context = None
 
             return model.getStatements(subject, predicate, object,

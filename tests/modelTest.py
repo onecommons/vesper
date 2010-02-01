@@ -11,6 +11,7 @@ import string, random, shutil, time
 
 from vesper.data.RxPath import *
 from vesper.data import RxPath, RxPathGraph
+from vesper.data.store.basic import *
 
 graphManagerClass = RxPathGraph.MergeableGraphManager
 #graphManagerClass = RxPathGraph.NamedGraphManager
@@ -26,12 +27,12 @@ class BasicModelTestCase(unittest.TestCase):
         return model
 
     def getModel(self):
-        model = MemModel()
+        model = MemStore()
         self.persistentStore = False
         return self._getModel(model)
 
     def getTransactionModel(self):
-        model = TransactionMemModel()
+        model = TransactionMemStore()
         self.persistentStore = False
         return self._getModel(model)
     
@@ -376,7 +377,7 @@ class SplitGraphModelTestCase(BasicModelTestCase):
     
     def _getModel(self, model):
         modelUri = RxPath.generateBnode()
-        revmodel = RxPath.TransactionMemModel()
+        revmodel = TransactionMemStore()
         return graphManagerClass(model, revmodel, modelUri)
     
 BIG = 100 #10000

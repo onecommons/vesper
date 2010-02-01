@@ -152,6 +152,7 @@ import re
 
 from vesper.backports import *
 from vesper.data import RxPath
+from vesper.data.store.basic import MemStore
 from vesper.data.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
 from vesper.data.RxPathUtils import encodeStmtObject, OrderedModel, peekpair
 from vesper import multipartjson
@@ -730,7 +731,7 @@ class Parser(object):
         self.defaultParseContext.context = scope
     
     def to_rdf(self, json, scope = None):
-        m = RxPath.MemModel() #XXX        
+        m = MemStore() #XXX
 
         parentid = ''
         parseContext = self.defaultParseContext

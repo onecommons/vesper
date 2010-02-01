@@ -2,8 +2,8 @@ __all__ = ['get_factory']
 
 _proto_map = { # XXX don't hardcode this
     'tyrant':'vesper.data.store.RxPathModelTyrant.TransactionTyrantModel',
-    'rdf':'vesper.data.RxPath.FileModel',
-    'mem':'vesper.data.RxPathModel.MemModel',
+    'rdf':'vesper.data.store.basic.FileStore',
+    'mem':'vesper.data.store.basic.MemStore',
     'bdb':'vesper.data.store.RxPathModelBdb.TransactionBdbModel'
 }
 # get a reference to the module object

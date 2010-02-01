@@ -870,7 +870,7 @@ values
 #test multivalued properties without any associated json list info
 t.group = 'multivalue'
 
-t.model = RxPath.MemModel([
+t.model = vesper.data.store.basic.MemStore([
  ('1', 'multivalued', 'b', 'R', ''),
  ('1', 'multivalued', 'a', 'R', ''),
  ('1', 'multivalued', '0', 'http://www.w3.org/2001/XMLSchema#integer', ''),

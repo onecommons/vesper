@@ -8,6 +8,7 @@
 import vesper.app, vesper.web
 from vesper import utils
 from vesper.data import transactions, RxPath
+from vesper.data.store.basic import TransactionMemStore
 
 import logging
 import unittest, glob, os, os.path, traceback
@@ -113,10 +114,10 @@ class RaccoonTestCase(unittest.TestCase):
         self.failUnless('WARNING' in [r.levelname for r in self.logHandler.records])
         
         #use a model that doesn't support 2phase commit (i.e. doesn't support updateAdvisory) 
-        self.failUnless(not RxPath.TransactionMemModel.updateAdvisory)        
-        self._testErrorHandling(appVars=dict(modelFactory=RxPath.TransactionMemModel))   
+        self.failUnless(not TransactionMemStore.updateAdvisory)
+        self._testErrorHandling(appVars=dict(modelFactory=TransactionMemStore))
         #now we will have a critical error
-        self.failUnless('CRITICAL' in [r.levelname for r in self.logHandler.records])     
+        self.failUnless('CRITICAL' in [r.levelname for r in self.logHandler.records])
         
     def testUpdatesApp(self):
         # root = app.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
@@ -462,14 +463,14 @@ class RaccoonTestCase(unittest.TestCase):
                   "tags" : [ '@t' ]
                   }            
             store = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=vesper.data.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=True)
+                modelFactory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', saveHistory=True)
             store.add(add)
             
             #now reload the file into a new store without saveHistory turned on,
             #so that the history representation is visible to the app
             #print file(tmppath).read()            
             store2 = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=vesper.data.RxPath.FileModel,BASE_MODEL_URI = 'test:', saveHistory=False)
+                modelFactory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', saveHistory=False)
             #XXX jql is not including scope in results
             self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
         finally:

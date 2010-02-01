@@ -32,6 +32,3 @@ if __name__ == '__main__':
     for modname in __all__:
         print 'testing', modname
         TestProgram(modname)
-    import docTest
-    print 'running docTests...'
-    docTest.runner.run(docTest.suite)
