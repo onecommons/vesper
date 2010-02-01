@@ -209,7 +209,7 @@ def p_root(p):
     #we're when done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     labeledjoins = {}
-    for label, joins in p.parser.jqlState.labeledjoins.items():
+    for label, joins in sorted(p.parser.jqlState.labeledjoins.items()):
         if not joins:
             continue
         #construct that only have id labels will not have a join

@@ -509,7 +509,7 @@ class MergeJoin(Join):
     def getJoinType(self):
         return 'ordered merge'
 
-def getColumns(keypos, row, tableType=Tupleset):
+def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
     '''
     Given a row which may contain nested tuplesets as cells and a "key" cell position,
     yield (key, row) pairs where the returned rows doesn't include the key cell.
@@ -537,15 +537,16 @@ def getColumns(keypos, row, tableType=Tupleset):
             keycell = cell
         else:
             cols.append(cell)
-    
-    assert keycell
+    assert outerjoin or keycell
     if not keypos:
         yield keycell, cols
     else: #i above keypos
         assert isinstance(keycell, tableType), "cell %s (%s) is not %s p %s restp %s" % (keycell, type(keycell), tableType, pos, keypos)
-        #print 'keycell', keycell
+        if outerjoin and not keycell:            
+            nullrow = getNullRows(keycell.columns[0])
+            for key, nestedcols in getColumns(keypos, nullrow, tableType):
+                yield key, cols+nestedcols                
         for nestedrow in keycell:
-            #print 'nestedrow', nestedrow
             for key, nestedcols in getColumns(keypos, nestedrow, tableType):
                 yield key, cols+nestedcols
 
@@ -568,7 +569,7 @@ def getColumnsColumns(keypos, columns):
             cols.append(c)
     return cols
             
-def groupbyUnordered(tupleset, groupby, debug=False):
+def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
     '''
     Group the given tupleset by the column specified by groupby
     yields a row the groupby key and a nested tupleset containing the non-key columns
@@ -601,11 +602,12 @@ def groupbyUnordered(tupleset, groupby, debug=False):
     #>>> t = ('a1', [('b1', ('c1','c2'))], ('a2', [('b2', ('c1','c2'))] ))    
     #>>> list(groupbyUnordered([t], (1,1)))
     #[[('c1', 'c2'), MutableTupleset[['a1', ('a2', [('b2', ('c1', 'c2'))]), 'b1']]]]
+
     resources = {}
     for row in tupleset:
         #print 'gb', groupby, row
         if debug: validateRowShape(tupleset.columns, row) 
-        for key, outputrow in getColumns(groupby, row):
+        for key, outputrow in getColumns(groupby, row, outerjoin=outerjoin):
             vals = resources.get(key)
             if vals is None:
                 vals = MutableTupleset()
@@ -856,6 +858,8 @@ def getNullRows(columns):
     for i, c in enumerate(columns):        
         if isinstance(c.type, Tupleset):
             nullrows[i] = MutableTupleset([getNullRows(c.type.columns)])
+        else:
+            nullrows[i] = ColumnInfo(c.label, None)
     return nullrows
 
 #for associative ops: (a op b) op c := a op b op c
@@ -871,6 +875,7 @@ def flattenOp(args, opType):
 
 def _setConstructProp(shape, pattern, prop, v, name):
     isSeq = isinstance(v, (list,tuple))
+    #print '_setConstructProp', v, isSeq, prop.ifEmpty
     if v == RDF_MS_BASE+'nil': #special case to force empty list
         val = []
     elif v is None or (isSeq and not len(v)):
@@ -878,7 +883,8 @@ def _setConstructProp(shape, pattern, prop, v, name):
             return pattern
         elif prop.ifEmpty == jqlAST.PropShape.uselist:
             if not isSeq:
-                val = [v]
+                assert v is None
+                val = []
             else:
                 val = v
         elif prop.ifEmpty == jqlAST.PropShape.usenull:
@@ -1056,7 +1062,6 @@ class SimpleQueryEngine(object):
         '''
         tupleset = context.currentTupleset
         assert isinstance(tupleset, Tupleset), type(tupleset)
-
         if not op.parent.groupby and not op.id.getLabel(): 
             subjectcol = (0,) 
             rowcolumns = tupleset.columns
@@ -1084,6 +1089,7 @@ class SimpleQueryEngine(object):
           assert context.currentTupleset is tupleset
 
           for outerrow in tupleset:
+            #print 'outerrow', subjectlabel, subjectcol, hex(id(tupleset)), outerrow
             for idvalue, row in getColumns(subjectcol, outerrow):
                 if self.isPropertyList(context, idvalue):
                     continue #skip prop list descriptor resources
@@ -1095,6 +1101,11 @@ class SimpleQueryEngine(object):
                 else:
                     shape = op.shape
                     islist = False
+                if isinstance(idvalue, ColumnInfo) and idvalue.type is None:
+                    #this is what a outer join null looks like 
+                    if op.shape is op.listShape: #return an empty list
+                        yield self.getShape(context, op.shape)
+                    return
                 i+=1                
                 if op.parent.offset is not None and op.parent.offset < i:
                     continue
@@ -1102,8 +1113,9 @@ class SimpleQueryEngine(object):
                 context.currentRow = [idvalue] + row
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
-                    print >> context.debug, 'valid outer'
-                if context.debug: validateRowShape(rowcolumns, context.currentRow)
+                    print >> context.debug, 'valid outerrow'
+                #XXX: re-enable validation-- currently right outer join break this 
+                #if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
                 pattern = self.getShape(context, shape)
                 allpropsOp = None
@@ -1148,9 +1160,8 @@ class SimpleQueryEngine(object):
                                 ccontext.currentTupleset = ccontext.initialModel
                             else:
                                 pos, rowInfoTupleset = col
-
                                 v = list([irow for cell, i, irow in getColumn(pos, outerrow)])
-                                #print '!!!v', col, label, v, 'row', row                            
+                                #print '!!!v', col, label, len(v), v#, 'row', row
                                 #assert isinstance(col.type, Tupleset)
                                 ccontext.currentTupleset = SimpleTupleset(v,
                                 columns=rowInfoTupleset.columns,
@@ -1158,8 +1169,8 @@ class SimpleQueryEngine(object):
                                 op='nested construct value', debug=context.debug)
                                 
                             #print '!!v eval', prop, ccontext.currentRow, rowcolumns
-                            v = flatten(prop.value.evaluate(self, ccontext),
-                                                        flattenTypes=Tupleset)
+                            v = prop.value.evaluate(self, ccontext)
+                            v = flatten(v, flattenTypes=Tupleset)
                         else:
                             v = context.currentRow
                             ccontext.currentTupleset = SimpleTupleset(v,
@@ -1180,7 +1191,7 @@ class SimpleQueryEngine(object):
                         if prop.nameFunc:
                             name = flatten(prop.nameFunc.evaluate(self, ccontext))                            
                         else:
-                            name = prop.name or prop.value.name
+                            name = prop.name or prop.value.name                            
                         pattern = _setConstructProp(shape, pattern, prop, v, name)                        
                         if prop.value.name and isinstance(prop.value, jqlAST.Project):
                             propsAlreadyOutput.add(prop.value.name)
@@ -1260,7 +1271,6 @@ class SimpleQueryEngine(object):
         label = op.name         
         position = tupleset.findColumnPos(label)
         assert position is not None, 'cant find %s in %s %s' % (label, tupleset, tupleset.columns)
-        #print 'group by', joincond.position, position, tupleset.columns
         coltype = object        
         columns = [
             ColumnInfo(label, coltype),
@@ -1280,18 +1290,18 @@ class SimpleQueryEngine(object):
         #XXX use groupbyOrdered if we know tupleset is ordered by groupby key
         position = tupleset.findColumnPos(joincond.position)
         assert position is not None, '%s %s' % (tupleset, tupleset.columns)
-        #print '_groupby', joincond.position, position, tupleset.columns
         coltype = object        
         columns = [
             ColumnInfo(joincond.parent.name or '', coltype),
             ColumnInfo(joincond.getPositionLabel(),
                                     chooseColumns(position,tupleset.columns) )
-        ]        
+        ]
+        outerjoin = joincond.join in ('i', 'r')
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
-                debug=debug and columns),
+                debug=debug and columns, outerjoin=outerjoin),
             columns=columns, 
-            hint=tupleset, op=msg + repr(joincond.position),  debug=debug)
+            hint=tupleset, op=msg + repr((joincond.join, joincond.position)),  debug=debug)
 
     def reorderWithListInfo(self, context, op, listval):
         if isinstance(op.name, int):
@@ -1403,7 +1413,6 @@ class SimpleQueryEngine(object):
             assert isinstance(result, Tupleset)
 
             current = self._groupby(result, joincond,debug=context.debug)
-            #print 'groupby col', current.columns
             if previous:
                 def bindjoinFunc(jointype, current):
                     '''
@@ -1441,14 +1450,20 @@ class SimpleQueryEngine(object):
                     columns = previous.columns + current.columns
                 elif jointype in ('a','s'):
                     columns = previous.columns
+                elif jointype == 'r':
+                    columns = current.columns + previous.columns
                 else:
-                    assert False, 'unknown jointype: '+ jointype                
-                previous = IterationJoin(previous, current,
-                                bindjoinFunc(jointype, current),
-                                columns,joincond.name,debug=context.debug)
+                    assert False, 'unknown jointype: '+ jointype
+                if jointype == 'r': #right outer 
+                    previous = IterationJoin(current, previous,
+                                    bindjoinFunc('l', previous),
+                                    columns,joincond.name,debug=context.debug)
+                else:
+                    previous = IterationJoin(previous, current,
+                                    bindjoinFunc(jointype, current),
+                                    columns,joincond.name,debug=context.debug)
             else:
                 previous = current
-        #print 'join col', previous.columns
         return previous
 
     def _findSimplePredicates(self, op, context):

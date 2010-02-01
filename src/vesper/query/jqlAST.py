@@ -250,7 +250,7 @@ class JoinConditionOp(QueryOp):
     '''
     INNER = 'i'
     LEFTOUTER = 'l'
-    #RIGHTOUTER = 'r'
+    RIGHTOUTER = 'r'
     #FULLOUTER = 'f'
     ANTI = 'a'
     SEMI = 's'
