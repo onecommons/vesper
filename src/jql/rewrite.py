@@ -72,9 +72,17 @@ class _ParseState(object):
             from_.replaceArg(join, Label(join.name))
             return True
         elif isinstance(from_, Select):
-            to.parent.where = None            
+            #if the old parent is a Select             
+            if isinstance(to.parent, Select):
+                to.parent.where = None
+            #else: 
+            #   usually a Select but can And, e.g. with:
+            #   {* where ({id = ?tag and ?tag = 'dd'} and subject = ?tag) }
+            #set its construct id to a Label
             from_.construct.id.appendArg( Label(join.name) )
+            #set its where clause to the new join
             from_.where = to
+            #set the where clause of the new parent to be the join being move
             to.parent = from_
         return False
 
@@ -161,8 +169,8 @@ class _ParseState(object):
         return left
 
     def _buildJoinsFromReferences(self, labeledjoins):
-        skipped = []
-        for join, conditions in self.labelreferences.items():
+        skipped = {}
+        for join, conditions in sorted(self.labelreferences.items()):
             currentjoin = join
     
             def labelkey(item):
@@ -183,25 +191,27 @@ class _ParseState(object):
                     else:
                         #XXX keep skipped around to check if there are construct labels
                         #for this label, if not, emit warning
-                        skipped.append(label)
+                        skipped[label] = (op, pred, joinType)
                     continue
                     
                 if op is join:
                     #any subsequent join predicates should operate on the new join
                     op = currentjoin
                 if op is not labeledjoin:
-                    from_ = op.parent
                     if isinstance(op, Join):
-                        #print 'op moved', op
-                        #print 'to', labeledjoin
-                        self.joinMoved(op, op.parent, labeledjoin)                    
+                        #remove from join from parent 
+                        self.joinMoved(op, op.parent, labeledjoin)
+                        if joinType == 'l': #we moving the join, so switch from left to right outer join
+                            joinType = 'r'
                     labeledjoin.appendArg(JoinConditionOp(op, pred, join=joinType))
-                    #print 'from', from_
                 currentjoin = labeledjoin
     
-        if skipped: #XXX should just be warning?
+        if skipped: 
+            #XXX should just be warning? but if we don't raise now we get:
+            #AttributeError: 'SimpleQueryEngine' object has no attribute 'evalLabel'
+            #with { 'tags' : ?tag  where (tags = ?tag) }
             raise QueryException(
-                    'reference to unknown label(s): '+ ', '.join(skipped))
+                    'reference to unknown label(s): '+ ', '.join(skipped.keys() ))
         return skipped
 
     logicalops = {
@@ -295,8 +305,6 @@ class _ParseState(object):
         visited = set()
         to_visit.append( (None, expr) )
     
-        labeledjoins = self.labeledjoins
-        labelreferences = self.labelreferences
         newexpr = None
         while to_visit:
             parent, v = to_visit.pop()
@@ -390,7 +398,7 @@ class _ParseState(object):
                     labels.setdefault(child.name,[]).append(child)
 
             if len(labels) > 1:
-                if len(labels) == 2:
+                if len(labels) == 2:                    
                     ##XXX buildJoinsFromReferences asserts: pos 0 but not a Filter: <class Label>
                     #with {id=?a and ?a = 1} and {id=?b and ?b = 2} and ?b = ?a
                     #XXX currently only handle patterns like ?a = ?b
@@ -402,7 +410,7 @@ class _ParseState(object):
                         childjoin = self.getLabeledJoin(b.name)                                                
                         if parentjoin and childjoin:
                             joincond = (childjoin, b.name) #(op to join with, join pred)
-                            labelreferences.setdefault(parentjoin, []).append(
+                            self.labelreferences.setdefault(parentjoin, []).append(
                                                 (b.name, joincond, joinType) )
                         else:
                             #XXX handle the case where joins that the labels are 
@@ -414,7 +422,7 @@ class _ParseState(object):
                     raise QueryException('expressions like ?a = ?b not yet supported')
             else:
                 #handle filter conditions that contain a label (which is a reference to another join)                
-                for labelname, ops in labels.items():
+                for labelname, ops in sorted(labels.items()):
                     child = ops[0] #XXX need to worry about expressions like foo(?a, ?a) ?
                     if root == Eq(Project(SUBJECT), Label(child.name)):
                         #its a declaration like id = ?label
@@ -430,11 +438,11 @@ class _ParseState(object):
                             #depends on both the parent and the label's join, 
                             #so join them together
                             joincond = (parent, root) #join, join pred
-                        #replace the label reference with a Project(SUBJECT):                        
+                        #replace the label reference with a Project(SUBJECT):
                         #print 'child1', child, 'child.parent', child.parent, 'root', root
                         Project(SUBJECT)._mutateOpToThis(child)
                         #print 'adding labelref', labelname, 'joincond', joincond, 'parent', parent
-                        labelreferences.setdefault(parent, []).append(
+                        self.labelreferences.setdefault(parent, []).append(
                                                             (labelname, joincond, joinType) )
                     skipRoot = True #don't include this root in this join
     

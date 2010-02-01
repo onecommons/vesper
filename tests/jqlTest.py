@@ -39,10 +39,10 @@ t.model = modelFromJson([
 t.group = 'smoke'
 
 t('{*}',
-[{'foo': 'bar', 'id': '3'},
- {'foo': 'bar', 'id': '2'},
- {'child': '2', 'id': '_:2', 'parent': '1'},
- {'child': '3', 'id': '_:1', 'parent': '1'} 
+[ {'foo': 'bar', 'id': '3'},
+  {'foo': 'bar', 'id': '2'},
+   {'child': '2', 'id': '_:2', 'parent': '1'}, 
+  {'child': '3', 'id': '_:1', 'parent': '1'},
 ])
 
 t('''
@@ -51,7 +51,7 @@ t('''
 [['bar'], ['bar'], ['1', '2'], ['1', '3']]
 )
 
-t("{id}", [{'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}])
+t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}, ])
 
 t("{}", [{}]) 
 
@@ -82,10 +82,10 @@ t('''{ * where ( child = @child) }''',
         bindvars={'child':'2'})
 
 t("{ id, 'parent' : child }",
-[{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'}])
+[{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'},])
 
 t("{ parent : child, id }",
-   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'}])
+   [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'},])
 
 t(
 ''' { ?childid,
@@ -224,15 +224,6 @@ res = [{'child': '3', 'id': '_:1', 'parent': '1'},
 t('''{ * orderby(child desc, id) }''', res)
 t('''{ * orderby(child desc, id asc) }''', res)
 
-t.group = 'outer'
-
-#XXX join from foo property masks outer join 
-skip('''{
-    foo 
-    where(maybe foo = 1)
-    }
-''')
-
 t.group = 'parse'
 
 t('''
@@ -257,7 +248,7 @@ syntaxtests = [
 ''',
 '''
 (rdfs:comment where(rdfs:label='foo'))
-'''
+''',
 ]
 
 #XXX fix failing queries!
@@ -465,9 +456,11 @@ t('''{
   ''',
 [{'count': 2, 'count2': 2, 'subject': 'commons'}, {'count': 1, 'count2': 1, 'subject': 'rhizome'}])
 
+#renable
 #expression needs to be evaluated on each item
-
-t('''
+#XXX consolidate filters -- multiple references to the same property create 
+#duplicate filters and joins
+skip('''
 {
 key,
 'valTimesTypeDoubled' : val*type*2, #(-2*1, -4*1, 2*2, 4*2)*2
@@ -535,6 +528,18 @@ where (subsumedby = *)
  {'id': 'todo'},
  {'id': 'rhizome'},
  {'id': 'commons'},])
+
+ #the nested construct will not have a where clause
+ #but we have a joincondition referencing that object
+t('''
+ { 'inner' : { ?foo, id }
+   where ( ?foo = subject) }
+ ''',
+ [{'inner': {'id': 'commons'}},
+  {'inner': {'id': 'commons'}},
+  {'inner': {'id': 'rhizome'}}]
+ , name='labeled but no where'
+ )
 
 #throws: jql.QueryException: unlabeled joins not yet supported "tag"
 skip('''
@@ -862,15 +867,6 @@ values
  {'id': '4', 'values': [1, '1', 1.1]}]
  )
 
-#XXX
-skip(name='labeled but no where',
-#the nested construct will not have a where clause
-#but we have a joincondition referencing that object
-query='''
-{ 'inner' : { ?foo, id }
-  where ( ?foo = bar) }
-''')
-
 #test multivalued properties without any associated json list info
 t.group = 'multivalue'
 
@@ -945,6 +941,7 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
   'listprop4': [[]]}]
 )
 
+
 #XXX t.group = 'exclude'
 #html5 json microdata representation:
 #issue: @ in type's value, need a way to control that (by prop)
@@ -959,10 +956,147 @@ id, type,
 }
 '''
 
+t.group = 'outer'
+
+#XXX join from foo property masks outer join 
+skip('''{
+    foo 
+    where(maybe foo = 1)
+    }
+''')
+
+t.model = modelFromJson([
+        { "label": "tag 1", 'id': 'tag1'},
+        { "parent":"1", "child":"3", 'id': '_:1'},
+        { "id" : "2", "type" : "post", "tags" : "tag1"},
+        { "id" : "3", "type" : "post"}
+    ])
+
+t('''
+{   id, 
+    'tags' : {id where (id=?tag)}
+    where (maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': None},
+ {'id': 'tag1', 'tags': None},
+  {'id': '_:1', 'tags': None},
+ {'id': '2', 'tags': {'id': 'tag1'}},
+], unordered=True
+)
+ 
+#construct an array but note that nulls appear instead an empty list
+t('''
+{   ?post, id, 
+    'tags' : [id where (id=?tag)]
+    where (maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': None},
+ {'id': 'tag1', 'tags': None},
+ {'id': '_:1', 'tags': None},
+ {'id': '2', 'tags': ['tag1']}]
+, unordered=True)
+
+
+#construct an array but also force a list so empty list appears instead of null
+t('''
+{   ?post, id, 
+    'tags' : [[id where (id=?tag)]]
+    where (maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': []},
+ {'id': 'tag1', 'tags': []},
+ {'id': '_:1', 'tags': []},
+ {'id': '2', 'tags': ['tag1']}
+]
+, unordered=True)
+
+#force a list so an empty list appears instead of a null
+t('''
+{   ?post, id, 
+    'tags' : [{id where (id = ?tag)}]
+    where (maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': []},
+ {'id': 'tag1', 'tags': []},
+ {'id': '2', 'tags': [{'id': 'tag1'}]},
+ {'id': '_:1', 'tags': []}
+]
+, unordered=True)
+
+t('''
+{   *,
+    'tags' : {id where (id=?tag)}   
+    where (type='post' and maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': None, 'type': 'post'},
+ {'id': '2', 'tags': {'id': 'tag1'}, 'type': 'post'}]
+)
+
+t('''
+{   *,
+    'tags' : {* where (id=?tag)}   
+    where (type='post' and maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': None, 'type': 'post'},
+ {'id': '2', 'tags': {'id': 'tag1', 'label': 'tag 1'}, 'type': 'post'}]
+)
+
+#XXX throws jql.QueryException: reference to unknown label(s): tag
+#'tags' : ?tag should be treated like 'tags' : {?tag}  
+skip('''
+{ 
+    'tags' : ?tag 
+    where (tags = ?tag)
+}
+'''
+)
+
+
 import unittest
 class JQLTestCase(unittest.TestCase):
     def testAll(self):
         main(t, ['--quiet'])
 
+    def XXXtestSerializationClassOveride(self):
+        '''
+        test that query results always use the user specified list and dict classes
+        '''
+        #broken: evalProject and _setConstructProp don't create user-specified list shape
+        
+        #some hacky classes so we can call set() on the query results
+        class hashabledict(dict):
+            def __hash__(self):
+                #print self
+                return hash(tuple(sorted(self.items())))
+
+            def __repr__(self):
+                return 'HashableList'+super(hashablelist, self).__repr__()
+        
+        class hashablelist(list):
+            def __hash__(self):
+                return hash(tuple(self))
+
+            def __repr__(self):
+                return 'HashableList'+super(hashablelist, self).__repr__()
+
+        try:
+            save =jql.QueryContext.shapes
+            jql.QueryContext.shapes = { dict:hashabledict, list:hashablelist}            
+            set(jql.getResults("{*}", t.model).results)            
+        finally:
+            jql.QueryContext.shapes = save
+                    
 if __name__ == "__main__":
-    main(t)
+    import sys
+    try:
+        sys.argv.remove("--unittest")        
+    except:
+        main(t)
+    else:
+        unittest.main()

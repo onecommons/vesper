@@ -30,8 +30,8 @@ class Test(object):
         self.__dict__.update(attrs)
 
 class Suite(object):    
-    defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None,
-        skipParse=False, model=None, name=None, query=None, group=None, forUpdate=False)
+    defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None, printdebug=False,
+        skipParse=False, model=None, name=None, query=None, group=None, unordered=False, forUpdate=False)
 
     def __init__(self):
         self.tests = []
@@ -43,7 +43,7 @@ class Suite(object):
         '''
         self._nextdoc.append(doc)
         
-    def __call__(self, query=None, results=None, model=None, **kw):
+    def __call__(self, query=None, results=None, **kw):
         '''
         optional arguments:
         rows: test the tupleset result matches this
@@ -53,10 +53,10 @@ class Suite(object):
         defaults = self.defaults.copy()
         defaults.update(self.__dict__)
         defaults.update(query=query, results=results)
-        if model:
+        model=kw.get('model')
+        if model is not None:
             if not isinstance(model, RxPath.Model):
-                model = modelFromJson(model)
-            defaults['model'] = model
+                model = modelFromJson(model)            
         defaults.update(kw)
         t = Test(defaults)
         t.doc = '\n'.join(self._nextdoc)
@@ -83,7 +83,7 @@ def cp(name, *args, **kw):
 
 _models = {}
 def modelFromJson(modelsrc, modelname=None):
-    model = sjson.Parser(generateBnode='counter').to_rdf(modelsrc)
+    model = sjson.Parser(generateBnode='counter', nameMap={'refs':'(URIREF)'}).to_rdf(modelsrc)
     model = RxPath.MemModel(model)
     model.bnodePrefix = '_:'
     if not modelname:
@@ -127,7 +127,6 @@ def listgroups():
             if currentgroup: print currentgroup, count
             currentgroup = test.group
             count = 0
-
 
 def main(t, cmdargs=None):
     from optparse import OptionParser
@@ -246,7 +245,7 @@ def main(t, cmdargs=None):
         else:
             explain = None
         
-        if options.printdebug:
+        if options.printdebug or test.printdebug:
             debug = sys.stdout
         else:
             debug = None
@@ -262,6 +261,12 @@ def main(t, cmdargs=None):
             pprint.pprint(testresults)
 
         if test.results is not None:
-            assert test.results == testresults,  ('unexpected results for test %d' % i)#, [(k, type(k)) for k in testresults[0]])
+            resultsMatch = test.results == testresults 
+            if not resultsMatch and test.unordered:                
+                assert sorted(test.results) == sorted(testresults),  (
+                            'unexpected (unordered) results for test %d' % i)
+                print "warning: order doesn't match in debug mode for test %d" % i
+            else:
+                assert resultsMatch,  ('unexpected results for test %d' % i)
 
     print '***** %d tests passed, %d skipped' % (count, skipped)
