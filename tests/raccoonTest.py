@@ -444,6 +444,8 @@ class RaccoonTestCase(unittest.TestCase):
 
     def testGraphManagerSerialize(self):
         import os, rx.RxPath
+        import warnings
+        warnings.simplefilter("ignore", RuntimeWarning) #suppress tempnam is insecure warning
         tmppath = os.tempnam(None, 'raccoontest')+'.json'
         try:
             add = {"id":"1",

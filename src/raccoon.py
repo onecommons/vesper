@@ -598,11 +598,12 @@ def createApp(fromFile=None, **config):
     file containing config variables is given, they will be merged with the
     config args
     """
+    if fromFile:
+        execfile(fromFile, config, config)
     global _current_config
     _current_config = AppConfig()
-    _current_config.update(config)
-    if fromFile:
-        execfile(fromFile, _current_config, _current_config)
+    loadApp(None, **config)
+    
     return _current_config
 
 def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
@@ -617,9 +618,10 @@ def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
     '''
     global _current_config
     
-    assert isinstance(baseapp, (str, unicode))
-    baseapp = _importApp(baseapp)
-    _current_config = baseapp._app_config
+    if baseapp:
+        assert isinstance(baseapp, (str, unicode))
+        baseapp = _importApp(baseapp)
+        _current_config = baseapp._app_config
     
     #config variables that shouldn't be simply overwritten should be specified 
     #as an explicit function args
@@ -632,7 +634,6 @@ def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
         _current_config.actions = actions or {}
     
     basedir = _current_configpath[-1] or os.getcwd()
-    
     if isinstance(static_path, (str, unicode)):
         static_path = [static_path]     
     static_path = list(static_path) + _current_config.get('static_path',[])
