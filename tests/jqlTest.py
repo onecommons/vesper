@@ -87,6 +87,8 @@ t("{ id, 'parent' : child }",
 t("{ parent : child, id }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'},])
 
+t.group = 'joins'
+
 t(
 ''' { ?childid,
         *
@@ -1037,6 +1039,17 @@ t('''
  {'id': '2', 'tags': {'id': 'tag1'}, 'type': 'post'}]
 )
 
+#XXX"maybe" parsed wrong, not doing outer join
+skip('''
+{   *, 
+    'tags' : [id where (id=?tag)]
+    where (maybe tags = ?tag and type='post')
+}
+''',
+[{'id': '3', 'tags': None, 'type': 'post'},
+ {'id': '2', 'tags': {'id': 'tag1'}, 'type': 'post'}]
+, unordered=True)
+
 t('''
 {   *,
     'tags' : {* where (id=?tag)}   
@@ -1046,6 +1059,20 @@ t('''
 [{'id': '3', 'tags': None, 'type': 'post'},
  {'id': '2', 'tags': {'id': 'tag1', 'label': 'tag 1'}, 'type': 'post'}]
 )
+
+#syntax error, need to fix maybe parse rules   
+skip('''
+{   ?post, id, 
+    'tags' : [id where (id=?tag)]
+    where ((maybe tags = ?tag) and type='post')
+}
+''',
+[{'id': '3', 'tags': None},
+ {'id': 'tag1', 'tags': None},
+ {'id': '_:1', 'tags': None},
+ {'id': '2', 'tags': ['tag1']}]
+, unordered=True)
+
 
 #XXX throws jql.QueryException: reference to unknown label(s): tag
 #'tags' : ?tag should be treated like 'tags' : {?tag}  
@@ -1057,6 +1084,36 @@ skip('''
 '''
 )
 
+t.group = 'onetomany'
+t.model = modelFromJson([
+        { "label": "tag 1", 'id': 'tag1'},
+        { "label": "tag 2", 'id': 'tag2'},
+        { "parent":"1", "child":"3", 'id': '_:1'},
+        { "id" : "2", "type" : "post", "tags" : "tag1"},
+        { "id" : "2", "type" : "post", "tags" : "tag2"},
+        { "id" : "3", "type" : "post"}
+    ])
+
+t.skip = True #XXX these need to be fixed!
+
+t('''
+{   ?post, id, 
+    'tags' : [id where (id=?tag)]
+    where (type='post' and maybe tags = ?tag)
+}
+''',
+[{'id': '3', 'tags': None},
+ {'id': 'tag1', 'tags': None},
+ {'id': '_:1', 'tags': None},
+ {'id': '2', 'tags': ['tag1']}]
+, unordered=True)
+
+
+t('''
+{   ?post, id, 
+    'tags' : [id where (id=?tag)]
+    where (tags = ?tag and type='post')
+}''',[])
 
 import unittest
 class JQLTestCase(unittest.TestCase):

@@ -5,7 +5,7 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-import os, sys, traceback, re
+import os, os.path, sys, traceback, re
 
 from vesper import utils
 from vesper.utils import glock, MRUCache
@@ -581,18 +581,36 @@ def _normpath(basedir, path):
 
 def _importApp(baseapp):
     '''
-    Executes the given config file and returns a Python module-like object that contains the global variables defined by it.
-    If `createApp()` was called during execution, it have an attribute called `_app_config` set to the app configuration returned by `createApp()`.
+    Executes the given app config file. If `createApp()` was 
+    called during execution of the config file, the `_current_config`
+    global will be set to the app configuration returned by `createApp()`.
     '''
     baseglobals = utils.attrdict(Action=Action, createApp=createApp)
-    #set this global so we can resolve relative paths against the location
-    #of the config file they appear in
-    _current_configpath.append( os.path.dirname(os.path.abspath(baseapp)) )
     #assuming the baseapp file calls createApp(), it will set _current_config
-    execfile(baseapp, baseglobals)
+    if os.path.exists(baseapp):
+        #set this global so we can resolve relative paths against the location
+        #of the config file they appear in
+        _current_configpath.append( os.path.dirname(os.path.abspath(baseapp)) )
+        execfile(baseapp, baseglobals)
+    else:
+        import imp
+        parts = baseapp.split('.')
+        parts.reverse()
+        path = None
+        while parts:
+            part = parts.pop()
+            f = None
+            try:
+                f, path, descr = imp.find_module(part, path and [path] or None)
+            finally:
+                if f: f.close()
+        assert path
+        #set this global so we can resolve relative paths against the location
+        #of the config file they appear in
+        _current_configpath.append( os.path.abspath(path) )
+        __import__(baseapp, baseglobals)
     _current_configpath.pop()
-    baseglobals._app_config = _current_config
-    return baseglobals
+
 
 def createApp(fromFile=None, **config):
     """
@@ -622,8 +640,8 @@ def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
     
     if baseapp:
         assert isinstance(baseapp, (str, unicode))
-        baseapp = _importApp(baseapp)
-        _current_config = baseapp._app_config
+        #sets _current_config if the baseapp calls createApp
+        _importApp(baseapp)                    
     
     #config variables that shouldn't be simply overwritten should be specified 
     #as an explicit function args
