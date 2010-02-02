@@ -85,7 +85,7 @@ def cp(name, *args, **kw):
 _models = {}
 def modelFromJson(modelsrc, modelname=None):
     model = sjson.Parser(generateBnode='counter', nameMap={'refs':'(URIREF)'}).to_rdf(modelsrc)
-    model = RxPath.MemModel(model)
+    model = vesper.data.store.basic.MemStore(model)
     model.bnodePrefix = '_:'
     if not modelname:
         modelname = 'model%s' % (len(_models)+1)

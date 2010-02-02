@@ -1,4 +1,4 @@
-__all__ = ['BdbModel', 'TransactionBdbModel']
+__all__ = ['BdbStore', 'TransactionBdbStore']
 
 import os, os.path
 import logging
@@ -42,7 +42,7 @@ def _to_safe_str(s):
     elif not isinstance(s, str):
         s = str(s)
     if '\0' in s:
-        raise RuntimeError(r'strings with \0 can not be save in BdbModel')
+        raise RuntimeError(r'strings with \0 can not be save in BdbStore')
     return s 
 
 def _encodeValues(*args):
@@ -67,7 +67,7 @@ def _btopen(env, file, flag='c', mode=0666,
     d.open(file, dbtype=bsddb.db.DB_BTREE, flags=flags, mode=mode)
     return bsddb._DBWithCursor(d)
 
-class BdbModel(Model):
+class BdbStore(Model):
     '''
     datastore using Berkeley DB using Python's bsddb module
     
@@ -284,7 +284,7 @@ class BdbModel(Model):
             return True
         return False
 
-class TransactionBdbModel(TransactionModel, BdbModel):
+class TransactionBdbStore(TransactionModel, BdbStore):
     '''
-    Provides in-memory transactions to MemCacheModel
+    Provides in-memory transactions to BdbStore
     '''

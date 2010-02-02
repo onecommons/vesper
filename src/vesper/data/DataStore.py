@@ -9,6 +9,7 @@ import StringIO, os, os.path
 import logging
 
 from vesper.data import RxPath, transactions, RxPathGraph
+from vesper.data.store.basic import MemStore, FileStore, IncrementalNTriplesFileStoreBase
 from vesper.utils import debugp, flatten
 from vesper.data.RxPathUtils import OrderedModel
 from vesper import sjson
@@ -119,7 +120,7 @@ class BasicStore(DataStore):
             #setupHistory didn't initialize the store, so do it now
             #modelFactory will load the store specified by `source` or create
             #new one at that location and initializing it with `defaultStmts`
-            modelFactory = self.modelFactory or RxPath.FileModel
+            modelFactory = self.modelFactory or FileStore
             model = modelFactory(source=source, defaultStatements=defaultStmts,
                                                             **self.modelOptions)
                 
@@ -128,7 +129,7 @@ class BasicStore(DataStore):
         if self.APPLICATION_MODEL:
             stmtGen = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
                 requestProcessor.MODEL_RESOURCE_URI, scope=RxPathGraph.APPCTX) 
-            appmodel = RxPath.MemModel(stmtGen)
+            appmodel = MemStore(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
             #the application data in the model and update it if its difference 
             #from what's stored (this requires a context-aware store)
@@ -194,11 +195,11 @@ class BasicStore(DataStore):
                     versionModelFactory = self.modelFactory
                     versionModelOptions = self.modelOptions
                 elif self.STORAGE_PATH or self.VERSION_STORAGE_PATH: #use the default
-                    versionModelFactory = RxPath.IncrementalNTriplesFileModelBase
+                    versionModelFactory = IncrementalNTriplesFileStoreBase
                 else:
-                    versionModelFactory = RxPath.MemModel
+                    versionModelFactory = MemStore
 
-            if not self.VERSION_STORAGE_PATH and issubclass(versionModelFactory, RxPath.FileModel):
+            if not self.VERSION_STORAGE_PATH and issubclass(versionModelFactory, FileStore):
                 #generate path based on primary path
                 assert self.STORAGE_PATH
                 import os.path
@@ -228,7 +229,7 @@ class BasicStore(DataStore):
         if self.saveHistory == 'split' and getattr(
                 self.modelFactory, 'loadNtriplesIncrementally', False):
             if not revisionModel:
-                revisionModel = RxPath.MemModel()
+                revisionModel = MemStore()
             dmc = RxPathGraph.DeletionModelCreator(revisionModel)
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)

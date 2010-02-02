@@ -10,6 +10,8 @@ import cStringIO
 from pprint import *
 
 from vesper.data.RxPath import *
+from vesper.data.store.basic import *
+
 from vesper.data import RxPathGraph
 
 import time
@@ -84,7 +86,7 @@ class RDFDomTestCase(unittest.TestCase):
         elif DRIVER == 'Redland':
             self.loadModel = self.loadRedlandModel
         elif DRIVER == 'Mem':
-            self.loadModel = self.loadMemModel
+            self.loadModel = self.loadMemStore
         elif DRIVER == 'Bdb':
             self.loadModel = self.loadBdbModel
         elif DRIVER == 'Tyrant':
@@ -103,7 +105,7 @@ class RDFDomTestCase(unittest.TestCase):
                 revmodel = None
             else:
                 assert self.testHistory == 'split'
-                revmodel = TransactionMemModel()
+                revmodel = TransactionMemStore()
             graphManager = self.graphManagerClass(model, revmodel, modelUri)
             model = graphManager
         else:
@@ -145,7 +147,7 @@ class RDFDomTestCase(unittest.TestCase):
                 stream = source
             stmts = NTriples2Statements(stream)
             return RedlandHashMemModel("RDFDomTest", stmts)
-            #return RedlandHashBdbModel("RDFDomTest", stmts)
+            #return RedlandHashBdbStore("RDFDomTest", stmts)
 
     def loadRdflibModel(self, source, type='nt'):
         dest = tempfile.mktemp()
@@ -153,18 +155,18 @@ class RDFDomTestCase(unittest.TestCase):
             type = 'xml'
         return initRDFLibModel(dest, source, type)
 
-    def loadMemModel(self, source, type='nt'):
+    def loadMemStore(self, source, type='nt'):
         if type == 'nt':
             type = 'ntriples'
         elif type == 'rdf':
             type = 'rdfxml'        
         if isinstance(source, (str, unicode)):
-            return TransactionMemModel(parseRDFFromURI('file:'+source,type))
+            return TransactionMemStore(parseRDFFromURI('file:'+source,type))
         else:
-            return TransactionMemModel(parseRDFFromString(source.read(),'test:', type))
+            return TransactionMemStore(parseRDFFromString(source.read(),'test:', type))
 
     def loadTyrantModel(self, source, type='nt'):
-        from vesper.data.store.RxPathModelTyrant import TransactionTyrantModel
+        from vesper.data.store.tyrant import TransactionTyrantStore
         
         if type == 'nt':
             type = 'ntriples'
@@ -177,12 +179,12 @@ class RDFDomTestCase(unittest.TestCase):
             data = parseRDFFromString(source.read(),'test:', type)
 
         port = self.tyrant['port']
-        model = TransactionTyrantModel('localhost', port)
+        model = TransactionTyrantStore('localhost', port)
         model.addStatements(data)
         return model
 
     def loadBdbModel(self, source, type='nt'):
-        from vesper.data.store.RxPathModelBdb import TransactionBdbModel
+        from vesper.data.store.bdb import TransactionBdbStore
         
         if type == 'nt':
             type = 'ntriples'
@@ -198,7 +200,7 @@ class RDFDomTestCase(unittest.TestCase):
             if os.path.exists(f):
                 os.unlink(f)
         
-        model = TransactionBdbModel('RDFDomTest.bdb', data)
+        model = TransactionBdbStore('RDFDomTest.bdb', data)
         return model
 
     def getModel(self, source, type='nt'):

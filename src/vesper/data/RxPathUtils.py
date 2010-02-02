@@ -385,7 +385,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                     type = 'mjson'
                     break
             try:
-                from vesper import htmlfilter
+                from vesper.utils import htmlfilter
                 ns, prefix, local = htmlfilter.getRootElementName(contents)
                 if ns == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#':
                     type = 'rdfxml'
