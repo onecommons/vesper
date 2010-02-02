@@ -144,7 +144,7 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
                 blobs[blob.id] = blob.data
         elif data[0].isspace():
             pos = 1
-        else:            
+        else:
             obj, pos = decoder.raw_decode(data)
             objs.append(obj)
         data = data[pos:]
@@ -155,6 +155,23 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
         return objs, blobs
     else:
         return objs
+
+if json.__version__[:3] < '2.0':
+    #the version of json that ships with 2.6 returns unicode even when passed a string
+    #update the docstring so doctests don't fail 
+    loads.__doc__='''
+>>> loads("""=multipart-json
+... = id1 ===
+... adsfasdfasdf
+... ===
+... { "hello" : "world" }
+... = id2 ====
+... adsfas===dfasdf
+... ====
+... ["a", "json", "array"]
+... """, returnblobs=True)
+([{u'hello': u'world'}, [u'a', u'json', u'array']], {'id2': 'adsfas===dfasdf', 'id1': 'adsfasdfasdf'})
+    '''
 
 def resolve(json, handleUnresolved='raise', default=None):
     '''
@@ -226,7 +243,7 @@ def dump(objs, stream, blobmax=1024, blobmin=30, includeHeader=True,
 ... "a long json string"
 ... ], stream, 9, 9)
 >>> stream.getvalue()
-'=multipart-json\\n{"1": 2, "short": "12345", "longkey1234567890": {"multipartjsonref":"1"}, "long": {"multipartjsonref":"2"}}\\n= 1 ===\\nabcdefghij\\n===\\n= 2 ===\\n1234567890\\n===\\n["short", "long: 1234567890"]\\n{"multipartjsonref":"3"}\\n= 3 ===\\na long json string\\n===\\n'
+'=multipart-json\\n{"1": 2, "short": "12345", "longkey1234567890": {"multipartjsonref":"1"}, "long": {"multipartjsonref":"2"}}\\n= 1 ===\\nabcdefghij\\n===\\n= 2 ===\\n1234567890\\n===\\n["short", {"multipartjsonref":"3"}]\\n= 3 ===\\nlong: 1234567890\\n===\\n{"multipartjsonref":"4"}\\n= 4 ===\\na long json string\\n===\\n'
     '''
     if includeHeader:
         stream.write(header)
@@ -235,6 +252,11 @@ def dump(objs, stream, blobmax=1024, blobmin=30, includeHeader=True,
     key_separator = encoder.key_separator
     count = 0
     def process(chunk, count):
+        if chunk[0] == ',':
+            startstring = chunk.find('"')
+            if startstring > -1:
+                stream.write(chunk[:startstring])
+                chunk = chunk[startstring:] 
         if chunk[0] == '"' and len(chunk) > blobmin+2 and (
                         len(chunk) > blobmax+2 or r'\n' in chunk):
             decoded = json.loads(chunk)

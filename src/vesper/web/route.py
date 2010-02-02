@@ -38,7 +38,7 @@ def gensequence(kw, default=None):
     # print "matching on:'%s' default:%s" % (request_url, str(default))
     r = route_map.match(request_url)
     if r:
-        kw['urlvars'] = r # XXX should probably strip 'action' & 'controller'
+        kw['urlvars'] = defaultattrdict(r) # XXX should probably strip 'action' & 'controller'
         yield r['controller']
     elif default:
         yield default
