@@ -1,4 +1,4 @@
-__all__ = ['MemCacheModel', 'TransactionMemCacheModel']
+__all__ = ['MemCacheStore', 'TransactionMemCacheStore']
 
 from vesper.backports import *
 from vesper.data.RxPathModel import *
@@ -40,7 +40,7 @@ class _DictHack(object):
         value = str(json.dumps(value))
         self.mc.append(self.prefix+str(key), '||del:'+value)
 
-class MemCacheModel(Model):
+class MemCacheStore(Model):
     '''
     simple in-memory module
     '''
@@ -118,7 +118,7 @@ class MemCacheModel(Model):
         self.by_p.remove(stmt.predicate, stmt)
         self.by_o.remove(stmt.object, stmt)
 
-class TransactionMemCacheModel(TransactionModel, MemCacheModel):
+class TransactionMemCacheStore(TransactionModel, MemCacheStore):
     '''
-    Provides in-memory transactions to MemCacheModel
+    Provides in-memory transactions to MemCacheStore
     '''

@@ -147,7 +147,7 @@ class RDFDomTestCase(unittest.TestCase):
                 stream = source
             stmts = NTriples2Statements(stream)
             return RedlandHashMemModel("RDFDomTest", stmts)
-            #return RedlandHashBdbModel("RDFDomTest", stmts)
+            #return RedlandHashBdbStore("RDFDomTest", stmts)
 
     def loadRdflibModel(self, source, type='nt'):
         dest = tempfile.mktemp()
@@ -166,7 +166,7 @@ class RDFDomTestCase(unittest.TestCase):
             return TransactionMemStore(parseRDFFromString(source.read(),'test:', type))
 
     def loadTyrantModel(self, source, type='nt'):
-        from vesper.data.store.RxPathModelTyrant import TransactionTyrantModel
+        from vesper.data.store.tyrant import TransactionTyrantStore
         
         if type == 'nt':
             type = 'ntriples'
@@ -179,12 +179,12 @@ class RDFDomTestCase(unittest.TestCase):
             data = parseRDFFromString(source.read(),'test:', type)
 
         port = self.tyrant['port']
-        model = TransactionTyrantModel('localhost', port)
+        model = TransactionTyrantStore('localhost', port)
         model.addStatements(data)
         return model
 
     def loadBdbModel(self, source, type='nt'):
-        from vesper.data.store.RxPathModelBdb import TransactionBdbModel
+        from vesper.data.store.bdb import TransactionBdbStore
         
         if type == 'nt':
             type = 'ntriples'
@@ -200,7 +200,7 @@ class RDFDomTestCase(unittest.TestCase):
             if os.path.exists(f):
                 os.unlink(f)
         
-        model = TransactionBdbModel('RDFDomTest.bdb', data)
+        model = TransactionBdbStore('RDFDomTest.bdb', data)
         return model
 
     def getModel(self, source, type='nt'):

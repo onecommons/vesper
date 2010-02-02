@@ -74,7 +74,7 @@ def redland2Statements(redlandStatements, defaultScope=''):
                         node2String(stmt.object), objectType=objectType,
                         scope=node2String(context) or defaultScope)
     
-class RedlandModel(Model):
+class RedlandStore(Model):
     '''
     wrapper around Redland's RDF.Model
     '''
@@ -152,7 +152,7 @@ class RedlandModel(Model):
         self.model.remove_statement(statement2Redland(statement),
                                     context=context)
 
-class RedlandHashBdbModel(TransactionModel, RedlandModel):
+class RedlandHashBdbStore(TransactionModel, RedlandStore):
     def __init__(self, source='', defaultStatements=(),**kw):
         if os.path.exists(source + '-sp2o.db'):
             storage = RDF.HashStorage(source,
@@ -170,15 +170,15 @@ class RedlandHashBdbModel(TransactionModel, RedlandModel):
                     context = None
                 model.add_statement( statement2Redland(stmt),context=context)
             model.sync()
-        super(RedlandHashBdbModel, self).__init__(model)
+        super(RedlandHashBdbStore, self).__init__(model)
 
-class RedlandHashMemModel(TransactionModel, RedlandModel):
+class RedlandHashMemStore(TransactionModel, RedlandStore):
     def __init__(self, source='dummy', defaultStatements=(),**kw):
         # Create a new hash memory store
         storage = RDF.HashStorage(source,
                 options="new='yes',hash-type='memory',contexts='yes'")
         model = RDF.Model(storage)
-        super(RedlandHashMemModel, self).__init__(model)
+        super(RedlandHashMemStore, self).__init__(model)
         for stmt in defaultStatements:
             self.addStatement(stmt)
         model.sync()

@@ -10,18 +10,18 @@ import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
 import modelTest
-from vesper.data.store.RxPathModelMemcache import MemCacheModel, TransactionMemCacheModel
+from vesper.data.store.memcache import MemCacheStore, TransactionMemCacheStore
 
 _prefixCounter = time.time()
 
 class MemCacheModelTestCase(modelTest.BasicModelTestCase):   
     
     def getModel(self):    
-        model = MemCacheModel(prefix=str(self._prefixCounter))
+        model = MemCacheStore(prefix=str(self._prefixCounter))
         return self._getModel(model)
 
     def getTransactionModel(self):
-        model = TransactionMemCacheModel(prefix=str(self._prefixCounter))
+        model = TransactionMemCacheStore(prefix=str(self._prefixCounter))
         return self._getModel(model)
 
     def setUp(self):

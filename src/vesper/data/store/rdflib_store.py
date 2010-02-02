@@ -7,7 +7,7 @@ from vesper.data.RxPathModel import *
 
 def statement2rdflib(statement):
     if statement.objectType == OBJECT_TYPE_RESOURCE:            
-        object = RDFLibModel.URI2node(statement.object)
+        object = RDFLibStore.URI2node(statement.object)
     else:
         kwargs = {}
         if statement.objectType.find(':') > -1:
@@ -15,8 +15,8 @@ def statement2rdflib(statement):
         elif len(statement.objectType) > 1: #must be a language id
             kwargs['lang'] = statement.objectType
         object = Literal(statement.object, **kwargs)            
-    return (RDFLibModel.URI2node(statement.subject),
-            RDFLibModel.URI2node(statement.predicate), object)
+    return (RDFLibStore.URI2node(statement.subject),
+            RDFLibStore.URI2node(statement.predicate), object)
 
 def rdflib2Statements(rdflibStatements, defaultScope=''):
     '''RDFLib triple to Statement'''
@@ -25,12 +25,12 @@ def rdflib2Statements(rdflibStatements, defaultScope=''):
             objectType = object.language or object.datatype or OBJECT_TYPE_LITERAL
         else:
             objectType = OBJECT_TYPE_RESOURCE            
-        yield Statement(RDFLibModel.node2String(subject),
-                        RDFLibModel.node2String(predicate),
-                        RDFLibModel.node2String(object),
+        yield Statement(RDFLibStore.node2String(subject),
+                        RDFLibStore.node2String(predicate),
+                        RDFLibStore.node2String(object),
                         objectType=objectType, scope=defaultScope)
 
-class RDFLibModel(Model):
+class RDFLibStore(Model):
     '''
     wrapper around rdflib's TripleStore
     '''
@@ -93,7 +93,7 @@ class RDFLibModel(Model):
         '''removes the statement'''
         self.model.remove( statement2rdflib(statement))
 
-class RDFLibFileModel(RDFLibModel):
+class RDFLibFileModel(RDFLibStore):
     def __init__(self,source='', defaultStatements=(), context='', **kw):    
         ntpath, stmts, format = loadRDFFile(source, defaultStatements,context)
         
@@ -110,7 +110,7 @@ class RDFLibFileModel(RDFLibModel):
             self.path = ntpath
 
         from rdflib.TripleStore import TripleStore                                    
-        RDFLibModel.__init__(self, TripleStore())
+        RDFLibStore.__init__(self, TripleStore())
         self.addStatements( stmts )             
 
     def commit(self):

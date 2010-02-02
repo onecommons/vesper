@@ -10,7 +10,7 @@ import subprocess, tempfile, os, signal
 import string, random, shutil, time
 
 import modelTest
-from vesper.data.store.RxPathModelTyrant import TyrantModel, TransactionTyrantModel
+from vesper.data.store.tyrant import TyrantStore, TransactionTyrantStore
 
 def start_tyrant_server():
     "start a local tyrant server, return a dict needed to stop & clean up"
@@ -45,12 +45,12 @@ class TyrantModelTestCase(modelTest.BasicModelTestCase):
 
     def getModel(self):
         port = self.tyrant['port']
-        model = TyrantModel('127.0.0.1', port)
+        model = TyrantStore('127.0.0.1', port)
         return self._getModel(model)
 
     def getTransactionModel(self):
         port = self.tyrant['port']
-        model = TransactionTyrantModel('127.0.0.1', port)
+        model = TransactionTyrantStore('127.0.0.1', port)
         return self._getModel(model)
     
     def setUp(self):

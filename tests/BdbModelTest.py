@@ -10,18 +10,18 @@ import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
 import modelTest 
-from vesper.data.store.RxPathModelBdb import BdbModel, TransactionBdbModel
+from vesper.data.store.bdb import BdbStore, TransactionBdbStore
 
 class BdbModelTestCase(modelTest.BasicModelTestCase):
     
     def getModel(self):
         #print 'opening', self.tmpfilename
         sys.stdout.flush()
-        model = BdbModel(self.tmpfilename)
+        model = BdbStore(self.tmpfilename)
         return self._getModel(model)
 
     def getTransactionModel(self):
-        model = TransactionBdbModel(self.tmpfilename)
+        model = TransactionBdbStore(self.tmpfilename)
         return self._getModel(model)
 
     def setUp(self):

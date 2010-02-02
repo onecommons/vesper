@@ -1,10 +1,10 @@
 __all__ = ['get_factory']
 
 _proto_map = { # XXX don't hardcode this
-    'tyrant':'vesper.data.store.RxPathModelTyrant.TransactionTyrantModel',
-    'rdf':'vesper.data.store.basic.FileStore',
+    'tyrant':'vesper.data.store.tyrant.TransactionTyrantStore',
+    'file':'vesper.data.store.basic.FileStore',
     'mem':'vesper.data.store.basic.MemStore',
-    'bdb':'vesper.data.store.RxPathModelBdb.TransactionBdbModel'
+    'bdb':'vesper.data.store.bdb.TransactionBdbStore'
 }
 # get a reference to the module object
 # workaround an inconvenient behavior with __import__ on
@@ -22,8 +22,8 @@ def _my_import(name):
     
 def get_factory(proto):
     full_model = _proto_map[proto].split('.')
-    model_pkg = '.'.join(full_model[:-1]) # e.g. 'vesper.store.RxPathModelTyrant'
-    model_class = full_model[-1] # e.g. 'TransactionTyrantModel'
+    model_pkg = '.'.join(full_model[:-1]) # e.g. 'vesper.store.tyrant'
+    model_class = full_model[-1] # e.g. 'TransactionTyrantStore'
 
     mod = _my_import(model_pkg)
     fac = getattr(mod, model_class)

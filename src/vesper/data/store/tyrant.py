@@ -8,7 +8,7 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 '''
-__all__ = ['TyrantModel', 'TransactionTyrantModel']
+__all__ = ['TyrantStore', 'TransactionTyrantStore']
 
 from vesper.data.RxPathModel import *
 
@@ -47,13 +47,13 @@ def to_str(s):
     else:
         return str(s)
 
-class TyrantModel(Model):
+class TyrantStore(Model):
     def __init__(self, source, port=1978, defaultStatements=None):
         # accept a host string containing a port number
         if ':' in source:
             (source, port) = source.split(':')
             port = int(port)
-        #print "creating a TyrantModel for %s %d" % (source, port)
+        #print "creating a TyrantStore for %s %d" % (source, port)
         self.tyrant = pytyrant.PyTableTyrant.open(source, port)
         if defaultStatements:
             self.addStatements(defaultStatements)
@@ -157,7 +157,7 @@ class TyrantModel(Model):
         key = make_key(statement)
         del self.tyrant[key]
 
-class TransactionTyrantModel(TransactionModel, TyrantModel):
+class TransactionTyrantStore(TransactionModel, TyrantStore):
     '''
     Use this class when creating a 4Suite Model using a driver that is not transactional
     (in particular, the Memory driver).

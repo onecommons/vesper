@@ -8,7 +8,7 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 '''
-__all__ = ['FtModel', 'TransactionFtModel', 'NTriplesFtModel', 'IncrementalNTriplesFtModel']
+__all__ = ['FtStore', 'TransactionFtStore', 'NTriplesFtStore', 'IncrementalNTriplesFtStore']
 
 import os.path, sys, traceback
 
@@ -43,7 +43,7 @@ def statement2Ft(stmt):
     return FtStatement(stmt.subject, stmt.predicate, stmt.object,
             objectType=stmt.objectType, scope=stmt.scope)
 
-class FtModel(Model):
+class FtStore(Model):
     '''
     wrapper around 4Suite's Ft.Rdf.Model
     '''
@@ -88,7 +88,7 @@ class FtModel(Model):
         self._beginIfNecessary()
         self.model.remove( statement2Ft(statement) )
 
-class TransactionFtModel(TransactionModel, FtModel):
+class TransactionFtStore(TransactionModel, FtStore):
     '''
     Use this class when creating a 4Suite Model using a driver that is not transactional
     (in particular, the Memory driver).
