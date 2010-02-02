@@ -187,7 +187,7 @@ XSD+'int': int,
 XSD+'float' : float,
 }
 
-from vesper.data import Uri
+from vesper.utils import Uri
 ABSURI, URIREF = Uri.getURIRegex(allowbnode=True)
 
 _refpatternregex = re.compile(r'''(.*?)

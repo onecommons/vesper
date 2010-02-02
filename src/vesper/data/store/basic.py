@@ -247,7 +247,7 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None):
     format = extmap.get(ext, 'unknown')        
 
     if os.path.exists(path):
-        from vesper.data import Uri
+        from vesper.utils import Uri
         uri = Uri.OsPathToUri(path)
         if incrementHook:
             options = dict(incrementHook=incrementHook)
