@@ -1,7 +1,7 @@
 __all__ = ['MemCacheStore', 'TransactionMemCacheStore']
 
 from vesper.backports import *
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
     
 class _DictHack(object):
     def __init__(self, mc, prefix):

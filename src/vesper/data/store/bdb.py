@@ -6,7 +6,7 @@ import logging
 import bsddb, bsddb.db
 
 from vesper.backports import *
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 try:
     bsddb.db.DB_GET_BOTH_RANGE

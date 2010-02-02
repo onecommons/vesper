@@ -1,4 +1,4 @@
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 class MemStore(Model):
     '''

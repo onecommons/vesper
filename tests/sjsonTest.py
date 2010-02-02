@@ -3,6 +3,7 @@ from pprint import pprint,pformat
 
 from vesper.sjson import *
 from vesper.utils import pprintdiff
+from vesper.data import base
 
 def assert_json_match(expected, result, dosort=False):
     if dosort and isinstance(expected, list):
@@ -16,7 +17,7 @@ def assert_stmts_match(expected_stmts, result_stmts):
     assert set(result_stmts) == set(expected_stmts), pprintdiff(
                         result_stmts,expected_stmts)
 
-    if not RxPath.graph_compare(expected_stmts, result_stmts):
+    if not base.graph_compare(expected_stmts, result_stmts):
         print 'graph_compare failed'
         print pprintdiff(ge._hashtuple(), gr._hashtuple())
         #print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')

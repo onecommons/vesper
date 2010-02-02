@@ -9,7 +9,7 @@ import unittest, os, os.path, glob, tempfile
 import cStringIO
 from pprint import *
 
-from vesper.data.RxPath import *
+from vesper.data.base import *
 from vesper.data.store.basic import *
 
 from vesper.data import RxPathGraph

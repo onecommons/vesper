@@ -7,7 +7,7 @@
 """
 import vesper.app, vesper.web
 from vesper import utils
-from vesper.data import transactions, RxPath
+from vesper.data import transactions, base
 from vesper.data.store.basic import TransactionMemStore
 
 import logging
@@ -17,7 +17,7 @@ def makeChangeset(branchid, rev, baserevision='0', resname='a_resource'):
     return {'origin': branchid, 'timestamp': 0,
         'baserevision': baserevision, 'revision': rev,
         'statements': 
- [RxPath.Statement(*s) for s in [('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;'+rev), 
+ [base.Statement(*s) for s in [('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#baseRevision', u'0', 'L', 'context:txn:test:;'+rev), 
  ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#hasRevision', rev, 'L', 'context:txn:test:;'+rev), 
  ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#createdOn', u'0', 'L', 'context:txn:test:;'+rev), 
  ('context:txn:test:;'+rev, u'http://rx4rdf.sf.net/ns/archive#includes', 'context:add:context:txn:test:;'+rev+';;', 'R', 'context:txn:test:;'+rev), 
@@ -386,12 +386,12 @@ class RaccoonTestCase(unittest.TestCase):
                     stmts = store._txnparticipants[-2].undo 
                 elif saveHistory == 'combined':
                     stmts = [s for s in store._txnparticipants[-1].undo 
-                            if s[0] is RxPath.Removed and not s[1][4] or len(s) == 1 and not s[0][4] ]
+                            if s[0] is base.Removed and not s[1][4] or len(s) == 1 and not s[0][4] ]
                 else:
                     stmts = store._txnparticipants[-1].undo
                 
                 self.assertEqual(stmts,  [
-                    (RxPath.Removed, ('1', 'prop', u'1', 
+                    (base.Removed, ('1', 'prop', u'1', 
                     'http://www.w3.org/2001/XMLSchema#integer', '')), 
                     (('1', 'prop', u'2', 'http://www.w3.org/2001/XMLSchema#integer', ''),), 
                     (('2', 'prop', 'test', 'R', ''),)

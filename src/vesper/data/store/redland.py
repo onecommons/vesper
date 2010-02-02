@@ -1,4 +1,4 @@
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 import RDF #import Redland RDF
 #import RDF.RDF; RDF.RDF._debug = 1

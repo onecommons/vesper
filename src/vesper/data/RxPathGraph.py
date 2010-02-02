@@ -22,11 +22,11 @@ by providing the ability to create a compensating transaction in the history.
 '''
 import logging, time
 
-from vesper.data import RxPath
-from vesper.data.RxPath import OBJECT_TYPE_LITERAL
-from vesper.data.RxPath import OBJECT_TYPE_RESOURCE
-from vesper.data.RxPath import RDF_MS_BASE
-from vesper.data.RxPath import Statement, isBnode, Triple
+from vesper.data import base
+from vesper.data.base import OBJECT_TYPE_LITERAL
+from vesper.data.base import OBJECT_TYPE_RESOURCE
+from vesper.data.base import RDF_MS_BASE
+from vesper.data.base import Statement, isBnode, Triple
 from vesper.data.store.basic import MemStore
 from vesper.utils import attrdict
 
@@ -99,7 +99,7 @@ def getTxnContextUri(modelUri, versionnum):
     '''
     return TXNCTX + modelUri + ';' + str(versionnum)
 
-class NamedGraphManager(RxPath.Model):
+class NamedGraphManager(base.Model):
     #The orginal implementation included ADD and TXN contexts when it stored statements in the primary store, 
     #and so the secondary store only recorded deletions.  While this is more 
     #space and update time efficient (because no extra statements were stored) it requires the primary be a quad store 
@@ -179,7 +179,7 @@ class NamedGraphManager(RxPath.Model):
                 stmts = filter(lambda s: self.isContextForPrimaryStore(s.scope), stmts)
                 if not asQuad or hints:
                     stmts.sort()
-                    stmts = RxPath.removeDupStatementsFromSortedList(stmts, 
+                    stmts = base.removeDupStatementsFromSortedList(stmts, 
                         asQuad, **hints)
             else:
                 stmts = self.managedModel.getStatements(subject, predicate, object,

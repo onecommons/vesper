@@ -43,7 +43,7 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 
 """
 from vesper.backports import *
-from vesper.data.RxPath import Tupleset, ColumnInfo, EMPTY_NAMESPACE
+from vesper.data.base import Tupleset, ColumnInfo, EMPTY_NAMESPACE
 from vesper import utils
 import StringIO
         
