@@ -3,7 +3,7 @@ from rdflib.Literal import Literal
 from rdflib.BNode import BNode
 from rdflib.URIRef import URIRef
 
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 def statement2rdflib(statement):
     if statement.objectType == OBJECT_TYPE_RESOURCE:            

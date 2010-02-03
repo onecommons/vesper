@@ -151,10 +151,10 @@ The other direction is needs to be specified in the datatype.
 import re
 
 from vesper.backports import *
-from vesper.data import RxPath
+from vesper.data import base
 from vesper.data.store.basic import MemStore
-from vesper.data.RxPath import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
-from vesper.data.RxPathUtils import encodeStmtObject, OrderedModel, peekpair
+from vesper.data.base import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
+from vesper.data.base.utils import encodeStmtObject, OrderedModel, peekpair
 from vesper import multipartjson
 
 try:
@@ -400,7 +400,7 @@ class Serializer(object):
             #print '!!propseq member', p.stmt
             if prop == PROPBAG:
                 propbag = obj
-            elif prop == RxPath.RDF_SCHEMA_BASE+u'member':
+            elif prop == base.RDF_SCHEMA_BASE+u'member':
                 childlist.append( stmt )
         return propbag, childlist
 
@@ -720,7 +720,7 @@ class Parser(object):
         generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
-            self.bnodeprefix = RxPath.BNODE_BASE
+            self.bnodeprefix = base.BNODE_BASE
         self.addOrderInfo = addOrderInfo
         self.setBNodeOnObj = setBNodeOnObj
     
@@ -898,7 +898,7 @@ class Parser(object):
         #j:t:object:n
         #j:e:object:owner:n
         if self._genBNode=='uuid':
-            return RxPath.generateBnode(prefix=prefix)
+            return base.generateBnode(prefix=prefix)
         if self._genBNode=='counter':
             self.bnodecounter+=1
             return self.bnodeprefix + prefix + str(self.bnodecounter)

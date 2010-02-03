@@ -348,7 +348,7 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
 
 def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                        options=None):
-    from vesper.data import RxPath
+    from vesper.data import base
     if scope is None: scope = ''  #workaround 4suite bug
     options = options or {}
 
@@ -417,7 +417,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 import RDF
                 parser=RDF.Parser(type)
                 stream = parser.parse_string_as_stream(contents, baseuri)
-                return RxPath.redland2Statements(stream, scope), type 
+                return base.redland2Statements(stream, scope), type 
             except ImportError:
                 raise ParseException("RDF parse error: "+ type+
                     " is only supported by Redland, which isn't installed")
@@ -439,20 +439,21 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 #a 'name' attribute to set the InputSource's systemId
                 contentsStream.name = baseuri 
                 ts.parse(contentsStream)
-                return RxPath.rdflib2Statements(
+                return base.rdflib2Statements(
                             ts.triples( (None, None, None)),scope), type
             except ImportError:
                 try: #try redland's parser
                     import RDF
                     parser=RDF.Parser('rdfxml')
                     stream = parser.parse_string_as_stream(contents, baseuri)
-                    return RxPath.redland2Statements(stream, scope), type 
+                    return base.redland2Statements(stream, scope), type 
                 except ImportError:
                     #fallback to 4Suite's obsolete parser
                     try:
                         from Ft.Rdf import Util
+                        from vesper.data.store import ft
                         model, db=Util.DeserializeFromString(contents,scope=baseuri)
-                        statements = RxPath.Ft2Statements(model.statements())
+                        statements = ft.Ft2Statements(model.statements())
                         #we needed to set the scope to baseuri for the parser to
                         #resolve relative URLs, so we now need to reset the scope
                         for s in statements:
@@ -518,7 +519,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     type can be one of the following:
         "rdfxml", "ntriples", "ntjson", "yaml", "mjson", or "sjson"
     '''
-    from vesper.data import RxPath
+    from vesper.data import base
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
         type = type.split('-', 1)[1]
 
@@ -531,7 +532,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
                 ts.ns_prefix_map = uri2prefixMap
             
             for stmt in statements:
-                ts.add( RxPath.statement2rdflib(stmt) )                    
+                ts.add( base.statement2rdflib(stmt) )                    
             ts.serialize(format='xml', stream=stream)
         except ImportError:
             try: #try redland's parser
@@ -539,7 +540,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
                 serializer = RDF.RDFXMLSerializer()
                 model = RDF.Model()
                 for stmt in statements:
-                   model.add_statement(RxPath.statement2Redland(stmt))
+                   model.add_statement(base.statement2Redland(stmt))
                 if uri2prefixMap:
                     for uri,prefix in uri2prefixMap.items():
                         if prefix != 'rdf': #avoid duplicate ns attribute bug
@@ -553,9 +554,9 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
                     db = Memory.CreateDb('', 'default')
                     import Ft.Rdf.Model
                     model = Ft.Rdf.Model.Model(db)
-                    from rx import RxPath
+                    from rx import base
                     for stmt in statements:
-                        model.add(RxPath.statement2Ft(stmt) )  
+                        model.add(base.statement2Ft(stmt) )  
                     from Ft.Rdf.Serializers.Dom import Serializer as DomSerializer
                     serializer = DomSerializer()
                     outdoc = serializer.serialize(model, nsMap = uri2prefixMap)
@@ -966,18 +967,18 @@ class OrderedModel(object):
     #         stmt = Statement(*stmt)
     #         if stmt.predicate == RDF_SCHEMA_BASE+'member':
     #             #replace predicate with listID
-    #             stmt = RxPath.Statement(stmt[0], listID, *stmt[2:])
+    #             stmt = base.Statement(stmt[0], listID, *stmt[2:])
     #             return (stmt,)
     #         else:
     #             #replace subject with listID
-    #             stmt = RxPath.Statement(listID, *stmt[1:])                
+    #             stmt = base.Statement(listID, *stmt[1:])                
     #             listStmts = [ stmt ]
     #             if prevListID:
-    #                 listStmts.append( RxPath.Statement(
+    #                 listStmts.append( base.Statement(
     #                 prevListID, RDF_MS_BASE+'rest', listID,
     #                 objectType=OBJECT_TYPE_RESOURCE, scope=stmt.scope))
     #             if not next:
-    #                 listStmts.append( RxPath.Statement( listID,
+    #                 listStmts.append( base.Statement( listID,
     #                     RDF_MS_BASE+'rest', RDF_MS_BASE+'nil',
     #                     objectType=OBJECT_TYPE_RESOURCE, scope=stmt.scope))
     #             return tuple(listStmts)

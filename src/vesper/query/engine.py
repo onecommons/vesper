@@ -220,8 +220,8 @@ construct({ child : ?obj }, filter(?subject, 'child', ?obj))
 import operator, copy, sys, pprint, itertools
 
 from vesper.query import jqlAST
-from vesper.data import RxPath
-from vesper.data.RxPath import RDF_MS_BASE
+from vesper.data import base
+from vesper.data.base import RDF_MS_BASE
 from vesper.utils import flattenSeq, flatten, debugp
 from vesper import sjson
 from vesper.query import *
@@ -405,7 +405,7 @@ def crossJoin(rowA,tableB,lastRowA):
     for row in tableB:
         yield row
     
-class Join(RxPath.Tupleset):
+class Join(base.Tupleset):
     '''
     Corresponds to an join of two tuplesets
     Can be a inner join or right outer join, depending on joinFunc
@@ -686,7 +686,7 @@ def groupbyOrdered(tupleset, groupby, debug=False):
     if previous is not None:
         yield [previous, vals]
     
-class Union(RxPath.Tupleset):
+class Union(base.Tupleset):
     '''
     Corresponds to a nodeset containing nodes of different node types
     '''    
@@ -940,7 +940,7 @@ class SimpleQueryEngine(object):
     queryFunctions.addFunc('recurse', recurse, Tupleset, needsContext=True)
     queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
     queryFunctions.addFunc('if', ifFunc, ObjectType, lazy=True)
-    queryFunctions.addFunc('isref', lambda a: isinstance(a, RxPath.ResourceUri), BooleanType)
+    queryFunctions.addFunc('isref', lambda a: isinstance(a, base.ResourceUri), BooleanType)
     for name, func in [('count', lambda a: len(a)), 
                         ('sum', lambda a: sum(a)),
                        ('avg', lambda a: sum(a)/len(a)), 
@@ -1568,7 +1568,7 @@ class SimpleQueryEngine(object):
             return []        
         refFunc = self.queryFunctions.getOp('isref')
         isrefQ = refFunc.execFunc(context, v)    
-        isref = isinstance(v, RxPath.ResourceUri)
+        isref = isinstance(v, base.ResourceUri)
         assert isrefQ == isref, "q %s r %s" % (isrefQ,isref)
         bnodeFunc = self.queryFunctions.getOp('isbnode') 
         isbnode = bnodeFunc.execFunc(context, v)           

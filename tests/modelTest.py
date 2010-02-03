@@ -9,12 +9,13 @@ import unittest
 import subprocess, tempfile, os, signal, sys
 import string, random, shutil, time
 
-from vesper.data.RxPath import *
-from vesper.data import RxPath, RxPathGraph
+from vesper.data.base import *
+from vesper.data import base
+from vesper.data.base import graph
 from vesper.data.store.basic import *
 
-graphManagerClass = RxPathGraph.MergeableGraphManager
-#graphManagerClass = RxPathGraph.NamedGraphManager
+graphManagerClass = graph.MergeableGraphManager
+#graphManagerClass = graph.NamedGraphManager
 
 def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
@@ -370,13 +371,13 @@ class BasicModelTestCase(unittest.TestCase):
 class GraphModelTestCase(BasicModelTestCase):
 
     def _getModel(self, model):
-        modelUri = RxPath.generateBnode()
+        modelUri = base.generateBnode()
         return graphManagerClass(model, None, modelUri)
 
 class SplitGraphModelTestCase(BasicModelTestCase):
     
     def _getModel(self, model):
-        modelUri = RxPath.generateBnode()
+        modelUri = base.generateBnode()
         revmodel = TransactionMemStore()
         return graphManagerClass(model, revmodel, modelUri)
     

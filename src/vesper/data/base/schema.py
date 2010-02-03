@@ -6,9 +6,10 @@
     http://rx4rdf.sf.net    
 '''
 import StringIO, copy
-from vesper.data import RxPathUtils, RxPathModel
-from vesper.data.RxPathUtils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
-from vesper.data.RxPathUtils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
+from vesper.data import base
+from vesper.data.base.utils import _parseTriples as parseTriples
+from vesper.data.base.utils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
+from vesper.data.base.utils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
 from vesper.data.store.basic import TransactionMemStore
 
 class BaseSchema(object):
@@ -48,7 +49,7 @@ class BaseSchema(object):
         Callbacks when entailments happen.
         '''
 
-class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
+class RDFSSchema(BaseSchema, base.MultiModel):
     
     #for a given context, deduce all additional statements and place them in another context.
     #the exception is rdf:type statements entailed subclass of 
@@ -97,7 +98,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 '''
 
     rdfsSchema = [Statement(unicode(stmt[0]), unicode(stmt[1]), unicode(stmt[2]),
-       objectType=unicode(stmt[3])) for stmt in RxPathUtils._parseTriples(
+       objectType=unicode(stmt[3])) for stmt in parseTriples(
                                                StringIO.StringIO(axiomaticTriples))]
 
     autocommit = property(lambda self: self.model.autocommit,
@@ -696,7 +697,7 @@ class RDFSSchema(BaseSchema, RxPathModel.MultiModel):
 
         if changed > 1 or hints:        
             statements.sort()
-            return RxPathModel.removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
+            return base.removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
         else:
             return statements            
 

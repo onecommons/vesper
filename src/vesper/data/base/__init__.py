@@ -10,7 +10,7 @@
 '''
 from vesper.backports import *
 from vesper import utils
-from vesper.data.RxPathUtils import *
+from vesper.data.base.utils import *
 
 import os.path, sys, time
 

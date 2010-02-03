@@ -10,7 +10,7 @@
 '''
 __all__ = ['TyrantStore', 'TransactionTyrantStore']
 
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 try:
     from hashlib import md5 # python 2.5 or greater

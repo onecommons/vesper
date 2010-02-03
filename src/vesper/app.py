@@ -9,7 +9,7 @@ import os, os.path, sys, traceback, re
 
 from vesper import utils
 from vesper.utils import glock, MRUCache
-from vesper.data import RxPath, DataStore, transactions, store
+from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
 
 try:
@@ -50,7 +50,7 @@ class ActionWrapperException(utils.NestedException):
 DefaultNsMap = { 'owl': 'http://www.w3.org/2002/07/owl#',
            'rdf' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
             'rdfs' : 'http://www.w3.org/2000/01/rdf-schema#',
-           'bnode': RxPath.BNODE_BASE,
+           'bnode': base.BNODE_BASE,
         }
 
 ############################################################

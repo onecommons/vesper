@@ -19,7 +19,7 @@ If any of these attributes are set on `t` they will used as the default value fo
 from vesper import sjson
 from vesper import query as jql
 from vesper.query.jqlAST import *
-from vesper.data import RxPath
+from vesper.data import base
 import sys, pprint
 from vesper.utils import flatten
 
@@ -56,7 +56,7 @@ class Suite(object):
         defaults.update(query=query, results=results)
         model=kw.get('model')
         if model is not None:
-            if not isinstance(model, RxPath.Model):
+            if not isinstance(model, base.Model):
                 model = modelFromJson(model)            
         defaults.update(kw)
         t = Test(defaults)

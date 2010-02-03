@@ -17,7 +17,7 @@ from Ft.Rdf.Statement import Statement as FtStatement
 from Ft.Rdf.Drivers import Memory
 from Ft.Rdf import OBJECT_TYPE_UNKNOWN #"?"
 
-from vesper.data.RxPathModel import *
+from vesper.data.base import * # XXX
 
 if not hasattr(FtStatement, 'asTuple'):
     #bug fix for pre beta1 versions of 4Suite

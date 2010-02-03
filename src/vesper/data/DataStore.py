@@ -8,17 +8,20 @@
 import StringIO, os, os.path
 import logging
 
-from vesper.data import RxPath, transactions, RxPathGraph
+from vesper.data import base, transactions
+from vesper.data.base import graph as graphmod # avoid aliasing some local vars
 from vesper.data.store.basic import MemStore, FileStore, IncrementalNTriplesFileStoreBase
 from vesper.utils import debugp, flatten
-from vesper.data.RxPathUtils import OrderedModel
+from vesper.data.base.utils import OrderedModel
+from vesper.data.base.schema import defaultSchemaClass
+
 from vesper import sjson
 
 def _toStatements(contents, **kw):
     if not contents:
         return [], None
     if isinstance(contents, (list, tuple)):
-        if isinstance(contents[0], (tuple, RxPath.BaseStatement)):
+        if isinstance(contents[0], (tuple, base.BaseStatement)):
             return contents, None #looks like a list of statements
     #assume sjson:
     return sjson.tostatements(contents, setBNodeOnObj=True, **kw), contents
@@ -69,7 +72,7 @@ class DataStore(transactions.TransactionParticipant): # XXX this base class can 
 class BasicStore(DataStore):
 
     def __init__(self, requestProcessor, modelFactory=None,
-                 schemaFactory=RxPath.defaultSchemaClass,                 
+                 schemaFactory=defaultSchemaClass,
                  STORAGE_PATH ='',
                  STORAGE_TEMPLATE='',
                  APPLICATION_MODEL='',
@@ -84,7 +87,7 @@ class BasicStore(DataStore):
                  branchId = None,                  
                  **kw):
         '''
-        modelFactory is a RxPath.Model class or factory function that takes
+        modelFactory is a base.Model class or factory function that takes
         two parameters:
           a location (usually a local file path) and iterator of Statements
           to initialize the model if it needs to be created
@@ -127,17 +130,17 @@ class BasicStore(DataStore):
         #if there's application data (data tied to the current revision
         #of your app's implementation) include that in the model
         if self.APPLICATION_MODEL:
-            stmtGen = RxPath.parseRDFFromString(self.APPLICATION_MODEL, 
-                requestProcessor.MODEL_RESOURCE_URI, scope=RxPathGraph.APPCTX) 
+            stmtGen = base.parseRDFFromString(self.APPLICATION_MODEL, 
+                requestProcessor.MODEL_RESOURCE_URI, scope=graphmod.APPCTX) 
             appmodel = MemStore(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
             #the application data in the model and update it if its difference 
             #from what's stored (this requires a context-aware store)
-            model = RxPath.MultiModel(model, appmodel)
+            model = base.MultiModel(model, appmodel)
         
         if self.saveHistory:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
-            self.model = self.graphManager = RxPathGraph.MergeableGraphManager(model, 
+            self.model = self.graphManager = graphmod.MergeableGraphManager(model, 
                 historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.trunkId, self.branchId) 
             if self._txnparticipants:
                 self._txnparticipants.insert(0, #must go first
@@ -165,7 +168,7 @@ class BasicStore(DataStore):
         self.schema = self.schemaFactory(self.model)
         #XXX need for graphManager?:
         #self.schema.setEntailmentTriggers(self._entailmentAdd, self._entailmentRemove)
-        if isinstance(self.schema, RxPath.Model):
+        if isinstance(self.schema, base.Model):
             self.model = self.schema
 
         #hack!:
@@ -177,12 +180,12 @@ class BasicStore(DataStore):
         requestProcessor = self.requestProcessor
         if self.saveHistory:
             #if we're going to be recording history we need a starting context uri
-            initCtxUri = RxPathGraph.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
+            initCtxUri = graphmod.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
         else:
             initCtxUri = ''
         
         #data used to initialize a new store
-        defaultStmts = RxPath.parseRDFFromString(self.STORAGE_TEMPLATE, 
+        defaultStmts = base.parseRDFFromString(self.STORAGE_TEMPLATE, 
                         requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri, 
                         options=self.storageTemplateOptions) 
         
@@ -230,7 +233,7 @@ class BasicStore(DataStore):
                 self.modelFactory, 'loadNtriplesIncrementally', False):
             if not revisionModel:
                 revisionModel = MemStore()
-            dmc = RxPathGraph.DeletionModelCreator(revisionModel)
+            dmc = graphmod.DeletionModelCreator(revisionModel)
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
             lastScope = dmc.lastScope
@@ -349,7 +352,7 @@ class BasicStore(DataStore):
                 #check if the statement is part of a json list, remove that list item too
                 rows = list(sjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
                 for row in rows:
-                    self.model.removeStatement(RxPath.Statement(*row[:5]))
+                    self.model.removeStatement(base.Statement(*row[:5]))
         
     def remove(self, removes):
         '''
@@ -428,13 +431,13 @@ class BasicStore(DataStore):
             #but don't assume they are present
             if skipResource == resource:
                 continue
-            if (prop == RxPath.RDF_MS_BASE+'type' and 
-                (sjson.PROPSEQTYPE, RxPath.OBJECT_TYPE_RESOURCE) in values):
+            if (prop == base.RDF_MS_BASE+'type' and 
+                (sjson.PROPSEQTYPE, base.OBJECT_TYPE_RESOURCE) in values):
                 skipResource = resource
                 newListResources.add(resource)
                 continue
-            if prop in (RxPath.RDF_SCHEMA_BASE+u'member', 
-                                RxPath.RDF_SCHEMA_BASE+u'first'):
+            if prop in (base.RDF_SCHEMA_BASE+u'member', 
+                                base.RDF_SCHEMA_BASE+u'first'):
                 #if list just replace the entire list
                 removedResources.add(resource)
                 skipResource = resource
@@ -451,7 +454,7 @@ class BasicStore(DataStore):
                     else:
                         values.remove((currentStmt.object, currentStmt.objectType))
             for value, valueType in values:                
-                newStatements.append( RxPath.Statement(resource,prop, value, valueType) )
+                newStatements.append( base.Statement(resource,prop, value, valueType) )
         
         for listRes in newListResources:            
             newStatements.extend( root.subjectDict[listRes] )
@@ -486,12 +489,12 @@ class BasicStore(DataStore):
             currentStmts = self.model.getStatements(r)
             for s in currentStmts:
                 #it's a list, we need to follow all the nodes and remove them too
-                if s.predicate == RxPath.RDF_SCHEMA_BASE+u'next':                    
+                if s.predicate == base.RDF_SCHEMA_BASE+u'next':                    
                     while s:                        
                         listNodeStmts = self.model.getStatements(c.object)
                         removals.extend(listNodeStmts)
                         s = flatten([ls for ls in listNodeStmts 
-                                    if ls.predicate == RxPath.RDF_SCHEMA_BASE+u'next'])                    
+                                    if ls.predicate == base.RDF_SCHEMA_BASE+u'next'])                    
             removals.extend(currentStmts)
 
         self.remove(removals)        
@@ -509,7 +512,7 @@ class BasicStore(DataStore):
             func = lambda: self.merge(changeset)
             return self.requestProcessor.executeTransaction(func) 
         
-        assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
+        assert isinstance(self.graphManager, graphmod.MergeableGraphManager)
         assert isinstance(self._txnparticipants[0], TwoPhaseTxnGraphManagerAdapter)
         graphTxnManager = self._txnparticipants[0]
         try:
@@ -558,7 +561,7 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
             if self.undo:
                 try:
                     for stmt in self.undo:
-                        if stmt[0] is RxPath.Removed:
+                        if stmt[0] is base.Removed:
                             #if not recover or self.model.getStatements(*stmt[1]):
                             self.model.addStatement( stmt[1] )
                         else:
@@ -575,8 +578,8 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
         changelist = self.undo
         def unmapQueue():
             for stmt in changelist:
-                if stmt[0] is RxPath.Removed:
-                    yield RxPath.Removed, stmt[1]
+                if stmt[0] is base.Removed:
+                    yield base.Removed, stmt[1]
                 else:
                     yield stmt[0]
                     
@@ -585,7 +588,7 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
             comment = comment and comment[0] or ''
             
         outputfile.write("#begin " + comment + "\n")            
-        RxPath.writeTriples( unmapQueue(), outputfile)            
+        base.writeTriples( unmapQueue(), outputfile)            
         outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
         outputfile.close()
 
@@ -603,7 +606,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
     ctxStmts = None
     
     def __init__(self, graph):
-        assert isinstance(graph, RxPathGraph.NamedGraphManager)
+        assert isinstance(graph, graphmod.NamedGraphManager)
         self.graph = graph
         self.dirty = False
 
@@ -631,7 +634,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
             assert not graph._currentTxn, 'shouldnt be inside a transaction'
            
             #set the current revision to one prior to this
-            baseRevisions = [s.object for s in ctxStmts if s[1] == RxPathGraph.CTX_NS+'baseRevision']
+            baseRevisions = [s.object for s in ctxStmts if s[1] == graphmod.CTX_NS+'baseRevision']
             assert len(baseRevisions) == 1
             baseRevision = baseRevisions[0]
             #note: call _markLatest makes db changes so this abort needs to be 
@@ -645,7 +648,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
         self.ctxStmts = None
         self.dirty = False
 
-class ModelWrapper(RxPath.Model):
+class ModelWrapper(base.Model):
 
     def __init__(self, model, adapter):
         self.model = model
@@ -671,12 +674,12 @@ class ModelWrapper(RxPath.Model):
         '''removes the statement'''
         removed = self.model.removeStatement(statement)
         if removed:
-            self.adapter.undo.append((RxPath.Removed, statement))
+            self.adapter.undo.append((base.Removed, statement))
         return removed
         
     #disable optimized paths
     def addStatements(self, stmts):
-        return RxPath.Model.addStatements(self, stmts)
+        return base.Model.addStatements(self, stmts)
 
     def removeStatements(self, stmts):
-        return RxPath.Model.removeStatements(self, stmts)
+        return base.Model.removeStatements(self, stmts)

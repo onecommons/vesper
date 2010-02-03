@@ -116,14 +116,14 @@ Txn.prototype = {
 Add a jquery plugin that adds methods for serializing forms and HTML5-style microdata annotated elements.
 
 //This example saves immediately, and invokes a callback on successs on each element.
-$('.elem').save(function(data) { $(this); });
+$('.elem').dbSave(function(data) { $(this); });
 
 //This example atomically commits multiple changes
-$('.elems').startTxn().save().dbadd({ id : '@this', anotherprop : 1}).commit();
+$('.elems').dbBegin().dbSave().dbAdd({ id : '@this', anotherprop : 1}).dbCommit();
 
 var txn = new Txn()
-$(.objs).save(txn);
-$(.objs).save(txn, function(data){ $(this); });
+$(.objs).dbSave(txn);
+$(.objs).dbSave(txn, function(data){ $(this); });
 txn.commit();
 */
 
@@ -204,10 +204,10 @@ txn.commit();
         this.removeData('currentTxn');
         return this;
      },
-    dbRollback : function() {     
+     dbRollback : function() {     
         this.removeData('currentTxn');
         return this;        
-    }
+     }
    })
 })(jQuery);
 
