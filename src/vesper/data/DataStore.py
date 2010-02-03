@@ -12,8 +12,8 @@ from vesper.data import base, transactions
 from vesper.data.base import graph as graphmod # avoid aliasing some local vars
 from vesper.data.store.basic import MemStore, FileStore, IncrementalNTriplesFileStoreBase
 from vesper.utils import debugp, flatten
-from vesper.data.RxPathUtils import OrderedModel
-from vesper.data.RxPathSchema import defaultSchemaClass
+from vesper.data.base.utils import OrderedModel
+from vesper.data.base.schema import defaultSchemaClass
 
 from vesper import sjson
 

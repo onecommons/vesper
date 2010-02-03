@@ -154,7 +154,7 @@ from vesper.backports import *
 from vesper.data import base
 from vesper.data.store.basic import MemStore
 from vesper.data.base import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
-from vesper.data.RxPathUtils import encodeStmtObject, OrderedModel, peekpair
+from vesper.data.base.utils import encodeStmtObject, OrderedModel, peekpair
 from vesper import multipartjson
 
 try:

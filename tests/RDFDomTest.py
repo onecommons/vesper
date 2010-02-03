@@ -15,7 +15,7 @@ from vesper.data.store.basic import *
 from vesper.data.base import graph
 
 import time
-from vesper.data.RxPathUtils import _parseTriples as parseTriples
+from vesper.data.base.utils import _parseTriples as parseTriples
 from vesper.utils import pprintdiff
     
 class RDFDomTestCase(unittest.TestCase):

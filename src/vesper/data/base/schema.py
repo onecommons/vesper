@@ -6,9 +6,10 @@
     http://rx4rdf.sf.net    
 '''
 import StringIO, copy
-from vesper.data import RxPathUtils, base
-from vesper.data.RxPathUtils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
-from vesper.data.RxPathUtils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
+from vesper.data import base
+from vesper.data.base.utils import _parseTriples as parseTriples
+from vesper.data.base.utils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
+from vesper.data.base.utils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
 from vesper.data.store.basic import TransactionMemStore
 
 class BaseSchema(object):
@@ -97,7 +98,7 @@ class RDFSSchema(BaseSchema, base.MultiModel):
 '''
 
     rdfsSchema = [Statement(unicode(stmt[0]), unicode(stmt[1]), unicode(stmt[2]),
-       objectType=unicode(stmt[3])) for stmt in RxPathUtils._parseTriples(
+       objectType=unicode(stmt[3])) for stmt in parseTriples(
                                                StringIO.StringIO(axiomaticTriples))]
 
     autocommit = property(lambda self: self.model.autocommit,
