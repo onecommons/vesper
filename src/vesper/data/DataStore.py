@@ -8,7 +8,8 @@
 import StringIO, os, os.path
 import logging
 
-from vesper.data import base, transactions, RxPathGraph
+from vesper.data import base, transactions
+from vesper.data.base import graph as graphmod # avoid aliasing some local vars
 from vesper.data.store.basic import MemStore, FileStore, IncrementalNTriplesFileStoreBase
 from vesper.utils import debugp, flatten
 from vesper.data.RxPathUtils import OrderedModel
@@ -130,7 +131,7 @@ class BasicStore(DataStore):
         #of your app's implementation) include that in the model
         if self.APPLICATION_MODEL:
             stmtGen = base.parseRDFFromString(self.APPLICATION_MODEL, 
-                requestProcessor.MODEL_RESOURCE_URI, scope=RxPathGraph.APPCTX) 
+                requestProcessor.MODEL_RESOURCE_URI, scope=graphmod.APPCTX) 
             appmodel = MemStore(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
             #the application data in the model and update it if its difference 
@@ -139,7 +140,7 @@ class BasicStore(DataStore):
         
         if self.saveHistory:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
-            self.model = self.graphManager = RxPathGraph.MergeableGraphManager(model, 
+            self.model = self.graphManager = graphmod.MergeableGraphManager(model, 
                 historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.trunkId, self.branchId) 
             if self._txnparticipants:
                 self._txnparticipants.insert(0, #must go first
@@ -179,7 +180,7 @@ class BasicStore(DataStore):
         requestProcessor = self.requestProcessor
         if self.saveHistory:
             #if we're going to be recording history we need a starting context uri
-            initCtxUri = RxPathGraph.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
+            initCtxUri = graphmod.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
         else:
             initCtxUri = ''
         
@@ -232,7 +233,7 @@ class BasicStore(DataStore):
                 self.modelFactory, 'loadNtriplesIncrementally', False):
             if not revisionModel:
                 revisionModel = MemStore()
-            dmc = RxPathGraph.DeletionModelCreator(revisionModel)
+            dmc = graphmod.DeletionModelCreator(revisionModel)
             model = self.modelFactory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
             lastScope = dmc.lastScope
@@ -511,7 +512,7 @@ class BasicStore(DataStore):
             func = lambda: self.merge(changeset)
             return self.requestProcessor.executeTransaction(func) 
         
-        assert isinstance(self.graphManager, RxPathGraph.MergeableGraphManager)
+        assert isinstance(self.graphManager, graphmod.MergeableGraphManager)
         assert isinstance(self._txnparticipants[0], TwoPhaseTxnGraphManagerAdapter)
         graphTxnManager = self._txnparticipants[0]
         try:
@@ -605,7 +606,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
     ctxStmts = None
     
     def __init__(self, graph):
-        assert isinstance(graph, RxPathGraph.NamedGraphManager)
+        assert isinstance(graph, graphmod.NamedGraphManager)
         self.graph = graph
         self.dirty = False
 
@@ -633,7 +634,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
             assert not graph._currentTxn, 'shouldnt be inside a transaction'
            
             #set the current revision to one prior to this
-            baseRevisions = [s.object for s in ctxStmts if s[1] == RxPathGraph.CTX_NS+'baseRevision']
+            baseRevisions = [s.object for s in ctxStmts if s[1] == graphmod.CTX_NS+'baseRevision']
             assert len(baseRevisions) == 1
             baseRevision = baseRevisions[0]
             #note: call _markLatest makes db changes so this abort needs to be 

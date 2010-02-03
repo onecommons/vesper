@@ -264,7 +264,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals([], store1.model.isModifiedAfter(
             store1.model.getCurrentContextUri(), ['a_resource', '1'], True))
         
-        from vesper.data.RxPathGraph import MergeableGraphManager
+        from vesper.data.base.graph import MergeableGraphManager
         self.assertEquals(-1, MergeableGraphManager.comparecontextversion(
                 'context:txn:test:;0A00001,0B00003', 'context:txn:test:;0B00002'))
 
@@ -448,7 +448,7 @@ class RaccoonTestCase(unittest.TestCase):
         self._test2PhaseTxn('combined')
 
     def testGraphManagerSerialize(self):
-        import os, vesper.data.RxPath
+        import os
         import warnings
         warnings.simplefilter("ignore", RuntimeWarning) #suppress tempnam is insecure warning
         tmppath = os.tempnam(None, 'raccoontest')+'.json'

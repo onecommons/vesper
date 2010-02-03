@@ -12,7 +12,7 @@ from pprint import *
 from vesper.data.base import *
 from vesper.data.store.basic import *
 
-from vesper.data import RxPathGraph
+from vesper.data.base import graph
 
 import time
 from vesper.data.RxPathUtils import _parseTriples as parseTriples
@@ -31,8 +31,8 @@ class RDFDomTestCase(unittest.TestCase):
     '''
 
     testHistory = ''#split' #'single', 'split' or '' (for no graph manager)
-    graphManagerClass = RxPathGraph.MergeableGraphManager
-    graphManagerClass = RxPathGraph.NamedGraphManager
+    graphManagerClass = graph.MergeableGraphManager
+    graphManagerClass = graph.NamedGraphManager
 
     model1 = r'''#test
 <http://4suite.org/rdf/banonymous/5c79e155-5688-4059-9627-7fee524b7bdf> <http://rx4rdf.sf.net/ns/archive#created-on> "1057790527.921" .
@@ -299,7 +299,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         startmodel = model = self.getModel(cStringIO.StringIO(model) )
         #we're testing the model directly so set this True:
         model.findCompatibleStatements = True               
-        if isinstance(model.models[0], RxPathGraph.NamedGraphManager):
+        if isinstance(model.models[0], graph.NamedGraphManager):
             model = model.models[0].managedModel
         else:
             model = model.models[0]
@@ -475,19 +475,19 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#A> "".
 
 class GraphRDFDomTestCase(RDFDomTestCase):
     testHistory = 'single'#, 'split' or '' (for no graph manager)
-    graphManagerClass = RxPathGraph.NamedGraphManager
+    graphManagerClass = graph.NamedGraphManager
 
 class MergeableGraphRDFDomTestCase(RDFDomTestCase):
     testHistory = 'single'#, 'split' or '' (for no graph manager)
-    graphManagerClass = RxPathGraph.MergeableGraphManager
+    graphManagerClass = graph.MergeableGraphManager
 
 class SplitGraphRDFDomTestCase(RDFDomTestCase):
     testHistory = 'split' #'single', 'split' or '' (for no graph manager)
-    graphManagerClass = RxPathGraph.NamedGraphManager
+    graphManagerClass = graph.NamedGraphManager
 
 class MergeableSplitGraphRDFDomTestCase(RDFDomTestCase):
     testHistory = 'split' #'single', 'split' or '' (for no graph manager)
-    graphManagerClass = RxPathGraph.MergeableGraphManager
+    graphManagerClass = graph.MergeableGraphManager
                         
 DRIVER = 'Mem'
 
