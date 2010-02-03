@@ -1039,15 +1039,14 @@ t('''
  {'id': '2', 'tags': {'id': 'tag1'}, 'type': 'post'}]
 )
 
-#XXX"maybe" parsed wrong, not doing outer join
-skip('''
+t('''
 {   *, 
     'tags' : [id where (id=?tag)]
     where (maybe tags = ?tag and type='post')
 }
 ''',
 [{'id': '3', 'tags': None, 'type': 'post'},
- {'id': '2', 'tags': {'id': 'tag1'}, 'type': 'post'}]
+ {'id': '2', 'tags': ['tag1'], 'type': 'post'}]
 , unordered=True)
 
 t('''
@@ -1060,17 +1059,13 @@ t('''
  {'id': '2', 'tags': {'id': 'tag1', 'label': 'tag 1'}, 'type': 'post'}]
 )
 
-#syntax error, need to fix maybe parse rules   
-skip('''
+t('''
 {   ?post, id, 
     'tags' : [id where (id=?tag)]
     where ((maybe tags = ?tag) and type='post')
 }
 ''',
-[{'id': '3', 'tags': None},
- {'id': 'tag1', 'tags': None},
- {'id': '_:1', 'tags': None},
- {'id': '2', 'tags': ['tag1']}]
+[{'id': '3', 'tags': None}, {'id': '2', 'tags': ['tag1']}]
 , unordered=True)
 
 

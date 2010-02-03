@@ -13,7 +13,9 @@ model=None Execute the query with this model
 name=None name this test 
 group=None add this test to the given group
 
-If any of these attributes are set on `t` they will used as the default value for subsequent calls to `t`. For example, setting `t.model` will apply that model to any test added if the test doesn't specify a model.
+If any of these attributes are set on `t` they will used as the default value 
+for subsequent calls to `t`. For example, setting `t.model` will apply that 
+model to any test added if the test doesn't specify a model.
 '''
 
 from vesper import sjson
@@ -266,7 +268,8 @@ def main(t, cmdargs=None):
             if not resultsMatch and test.unordered:                
                 assert sorted(test.results) == sorted(testresults),  (
                             'unexpected (unordered) results for test %d' % i)
-                print "warning: order doesn't match in debug mode for test %d" % i
+                if not options.quiet:
+                    print "warning: unexpected order for (unordered) test %d" % i
             else:
                 assert resultsMatch,  ('unexpected results for test %d' % i)
 

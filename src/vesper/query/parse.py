@@ -281,6 +281,7 @@ precedence = (
     ('left', 'ASSIGN'),
     ('left', 'OR'),
     ('left', 'AND'),
+    ('right','MAYBE'),
     ('right','NOT'),
     ("left", "IN"), 
     ("nonassoc", 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE'),
@@ -335,10 +336,10 @@ def p_expression_uminus(p):
     else:
         p[0] = p[2]
 
-def p_expression_andmaybe(p):
-    'expression : expression AND MAYBE expression'    
-    p[4].maybe = True
-    p[0] = And(p[1], p[4])
+def p_expression_maybe(p):
+    'expression : MAYBE expression'
+    p[2].maybe = True
+    p[0] = p[2]
 
 def p_expression_notop(p):
     'expression : NOT expression'
@@ -602,13 +603,6 @@ def p_constructop2(p):
                 | DEPTH INT
     '''
     p[0] = T.constructop(p[1], p[2])
-
-def p_constructop3(p):
-    '''
-    constructop : WHERE LPAREN MAYBE expression RPAREN
-    '''
-    p[4].maybe = True
-    p[0] = T.constructop(p[1], p[4])
 
 def p_constructop4(p):
     '''
