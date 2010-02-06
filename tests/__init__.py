@@ -5,7 +5,7 @@
 """
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
-  'sjsonTest', 'jqlTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
+  'pjsonTest', 'jqlTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
 import sys
 if sys.version_info[:2] >= (2,5):
     __all__.append('python25Test')

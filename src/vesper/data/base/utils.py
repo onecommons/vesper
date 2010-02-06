@@ -335,7 +335,7 @@ def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
     returns an iterator of Statements
     
     type can be anyone of the following:
-        "rdfxml", "ntriples", "sjson", "yaml", and "unknown"
+        "rdfxml", "ntriples", "pjson", "yaml", and "unknown"
     If Redland is installed "turtle" and "rss-tag-soup" will also work.
 
     baseuri is the base URI to be used for relative URIs in the RDF source
@@ -365,11 +365,11 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                     return contents, 'statements'
                 if isinstance(contents[0], (tuple, BaseStatement)):
                     return contents, 'statements' #looks like already a list of statements
-                #otherwise assume sjson
-                type='sjson' 
+                #otherwise assume pjson
+                type='pjson' 
                 break
             elif isinstance(contents, dict):
-                type='sjson' #assume sjson
+                type='pjson' #assume pjson
                 break
             
             startcontents = contents[:256].lstrip()
@@ -377,7 +377,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 return [], 'statements'
                 
             if startcontents[0] in '{[':
-                type='sjson' #assume sjson
+                type='pjson' #assume pjson
                 break
             else:
                 from vesper import multipartjson
@@ -463,8 +463,8 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                         raise ParseException("no RDF/XML parser installed")
         elif type == 'json':            
             return _parseRDFJSON(contents, scope), type
-        elif type == 'sjson' or type == 'yaml' or type == 'mjson':
-            from vesper import sjson
+        elif type == 'pjson' or type == 'yaml' or type == 'mjson':
+            from vesper import pjson
             if isinstance(contents, str):
                 if type == 'yaml':
                     import yaml
@@ -483,7 +483,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 options['useDefaultRefPattern']=False
             if not contents:
                 return [], type
-            stmts = sjson.tostatements(contents, **options), type
+            stmts = pjson.tostatements(contents, **options), type
             return stmts
         else:
             raise ParseException('unsupported type: ' + type)
@@ -517,7 +517,7 @@ def serializeRDF(statements, type, uri2prefixMap=None, options=None):
 def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     '''    
     type can be one of the following:
-        "rdfxml", "ntriples", "ntjson", "yaml", "mjson", or "sjson"
+        "rdfxml", "ntriples", "ntjson", "yaml", "mjson", or "pjson"
     '''
     from vesper.data import base
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
@@ -568,29 +568,29 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         writeTriples(statements, stream)
     elif type == 'ntjson':
         writeTriples(statements, stream, writejson=True)
-    elif type == 'sjson' or type == 'mjson':
+    elif type == 'pjson' or type == 'mjson':
         isMjson = type == 'mjson'
-        from vesper import sjson, multipartjson
+        from vesper import pjson, multipartjson
         #XXX use uri2prefixMap
         options = options or {}
-        objs = sjson.tojson(statements, preserveTypeInfo=True, asList=isMjson)
+        objs = pjson.tojson(statements, preserveTypeInfo=True, asList=isMjson)
         if isMjson:
             return multipartjson.dump(objs, stream, **options)
         else:
             return json.dump(objs, stream, **options)
     elif type == 'yaml':
         import yaml
-        from vesper import sjson
+        from vesper import pjson
         #for yaml options see http://pyyaml.org/wiki/PyYAMLDocumentation#Theyamlpackage
         #also note default_style=" ' | >  for escaped " unescaped ' literal | folded >        
         #use default_flow_style: True always flow (json-style output), False always block    
         # default_flow_style=None block if nested collections other flow
         defaultoptions = dict(default_style="'")
         if options: defaultoptions.update(options)
-        return yaml.safe_dump( sjson.tojson(statements, preserveTypeInfo=True), stream, **defaultoptions)
+        return yaml.safe_dump( pjson.tojson(statements, preserveTypeInfo=True), stream, **defaultoptions)
 
 def canWriteFormat(format):
-    if format in ('ntriples', 'ntjson', 'json', 'sjson', 'mjson'):
+    if format in ('ntriples', 'ntjson', 'json', 'pjson', 'mjson'):
         return True
     elif format == 'yaml':
         try:

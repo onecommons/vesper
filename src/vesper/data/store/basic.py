@@ -238,7 +238,7 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None):
     extmap = { '.nt' : 'ntriples',
       '.nj' : 'ntjson', 
       '.rdf' : 'rdfxml',
-      '.json' : 'sjson',
+      '.json' : 'pjson',
       '.mjson' : 'mjson',
       '.yaml' : 'yaml',
     }

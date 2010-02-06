@@ -1,7 +1,7 @@
 import unittest
 from pprint import pprint,pformat
 
-from vesper.sjson import *
+from vesper.pjson import *
 from vesper.utils import pprintdiff
 from vesper.data import base
 
@@ -29,7 +29,7 @@ def assert_stmts_match(expected_stmts, result_stmts):
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False, intermediateJson=None, serializerNameMap=None):
     if isinstance(src, (str,unicode)):
         test_json = json.loads(src)
-        if not test_json.get('sjson'):
+        if not test_json.get('pjson'):
             test_json = [test_json]
     else:
         test_json = src
@@ -39,7 +39,7 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includes
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = Serializer(nameMap=serializerNameMap).to_sjson( result_stmts)
+    result_json = Serializer(nameMap=serializerNameMap).to_pjson( result_stmts)
     if serializerNameMap is None:
         result_json = result_json['data']
     #pprint( result_json )
@@ -50,7 +50,7 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includes
         assert_stmts_and_back_match(result_stmts,serializerNameMap=serializerNameMap)
 
 def assert_stmts_and_back_match(stmts, expectedobj = None, serializerNameMap=None, addOrderInfo=True):
-    result = Serializer(nameMap=serializerNameMap).to_sjson( stmts )
+    result = Serializer(nameMap=serializerNameMap).to_pjson( stmts )
     #print 'serialized', result
     if expectedobj is not None:
         if serializerNameMap is None:
@@ -172,7 +172,7 @@ def test():
     #and then serialize with the same pattern
     #they should match
     src = r'''
-    { "sjson" : "%s",
+    { "pjson" : "%s",
     "namemap" : { "refs" : "ref:(\\w+)"},
     "data" :[{ "id" : "test",
      "circular" : "ref:test",
@@ -228,7 +228,18 @@ def test():
       "prop1": 1,
       "prop2": ["@a_ref", "a value"]
     }]
-    stmts = [('1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'context1'), StatementWithOrder('1', 'prop2', 'a value', 'L', 'context1', (1,)), StatementWithOrder('1', 'prop2', 'a_ref', 'R', 'context1', (0,)), ('1', 'sjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_1', 'a_ref', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_2', 'a value', 'L', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', 'context1'), ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'sjson:schema#propseqtype', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqprop', 'prop2', 'R', 'context1'), ('bnode:j:proplist:1;prop2', 'sjson:schema#propseqsubject', '1', 'R', 'context1')]    
+    
+    stmts = [('1', 'pjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'),
+    ('1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'context1'),
+    StatementWithOrder('1', 'prop2', 'a value', 'L', 'context1', (1,)),
+    StatementWithOrder('1', 'prop2', 'a_ref', 'R', 'context1', (0,)),
+    ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_1', 'a_ref', 'R', 'context1'),
+    ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#_2', 'a value', 'L', 'context1'),
+    ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', 'context1'),
+    ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'pjson:schema#propseqtype', 'R', 'context1'),
+    ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqprop', 'prop2', 'R', 'context1'),
+    ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqsubject', '1', 'R', 'context1')]
+    
     assert Parser().to_rdf(src) == stmts
     assert_json_and_back_match(src)
 
@@ -243,7 +254,7 @@ def test():
     assert_json_and_back_match(src)
 
     src = [{
-      "sjson": "0.9", 
+      "pjson": "0.9", 
       "namemap": {
         "refs": "@(URIREF)"
       },
@@ -255,7 +266,7 @@ def test():
       'prop2': "@ref"
     },
     {
-      "sjson": "0.9", 
+      "pjson": "0.9", 
       'context' : ''
     },    
     {

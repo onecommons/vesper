@@ -11,7 +11,7 @@ import time
 import os, os.path
 import logging
 
-from vesper import sjson, utils
+from vesper import pjson, utils
 
 class TransactionError(Exception):
     '''Base transaction error'''
@@ -305,7 +305,7 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
             state.additions.extend(stmts)
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
-                    jsorep = sjson.tojson(stmts)
+                    jsorep = pjson.tojson(stmts)
                 kw = {'_added' : jsorep }
                 #new resource detection is optional since it can be expensive
                 if self.server.dataStore.newResourceTrigger:
@@ -321,7 +321,7 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
             state.removals.extend(stmts)
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
-                    jsorep = sjson.tojson(stmts)
+                    jsorep = pjson.tojson(stmts)
                 kw = {'_removed' : jsorep }
                 #new resource detection is optional since it can be expensive
                 if self.server.dataStore.newResourceTrigger:
@@ -337,8 +337,8 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
                 morekw = { 
                 '_addedStatements' : state.additions,
                 '_removedStatements' : state.removals,         
-                '_added' : sjson.tojson(state.additions),
-                '_removed' : sjson.tojson(state.removals)
+                '_added' : pjson.tojson(state.additions),
+                '_removed' : pjson.tojson(state.removals)
                          }
                 #new resource detection is optional since it can be expensive
                 if self.server.dataStore.newResourceTrigger:

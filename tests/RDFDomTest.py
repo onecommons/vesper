@@ -260,13 +260,13 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
 '''
         model = self.loadModel(cStringIO.StringIO(model), 'nt')
         stmts = model.getStatements()
-        for stype in ['ntriples', 'ntjson', 'sjson', 'mjson']:
+        for stype in ['ntriples', 'ntjson', 'pjson', 'mjson']:
             #print 'stype', stype
             options = {}
             if stype == 'mjson':
                 options = dict(blobmax=30)
             json = serializeRDF(stmts, stype, options=options)
-            if stype in ['sjson', 'mjson']:
+            if stype in ['pjson', 'mjson']:
                 #print stype
                 #print json
                 options = dict(addOrderInfo=False)

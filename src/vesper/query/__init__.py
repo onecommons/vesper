@@ -10,7 +10,7 @@ First let's create a store with some JSON. For readability, we'll use native Pyt
  ...    "foo" : "bar"
  ... })
 
-The sjson module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default ``createStore`` will use a simple in-memory store.
+The pjson module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default ``createStore`` will use a simple in-memory store.
  
 Now we can start querying the database. Let's start with query that retrieves all records from the store: 
 
@@ -106,11 +106,11 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     if ast != None:        
         try:
             results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate))
-            #XXX: if forUpdate add a sjson header including namemap
+            #XXX: if forUpdate add a pjson header including namemap
             #this we have a enough info to reconstruct refs and datatypes without guessing
             #if forUpdate: 
             #   #need a context.datamap
-            #   sjson.addHeader(context.datamap, response)
+            #   pjson.addHeader(context.datamap, response)
             response['results'] = results
         except QueryException, qe:
             if captureErrors:

@@ -18,7 +18,7 @@ for subsequent calls to `t`. For example, setting `t.model` will apply that
 model to any test added if the test doesn't specify a model.
 '''
 
-from vesper import sjson
+from vesper import pjson
 from vesper import query as jql
 from vesper.query.jqlAST import *
 from vesper.data import base
@@ -86,7 +86,7 @@ def cp(name, *args, **kw):
 
 _models = {}
 def modelFromJson(modelsrc, modelname=None):
-    model = sjson.Parser(generateBnode='counter', nameMap={'refs':'(URIREF)'}).to_rdf(modelsrc)
+    model = pjson.Parser(generateBnode='counter', nameMap={'refs':'(URIREF)'}).to_rdf(modelsrc)
     model = vesper.data.store.basic.MemStore(model)
     model.bnodePrefix = '_:'
     if not modelname:

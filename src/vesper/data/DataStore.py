@@ -15,7 +15,7 @@ from vesper.utils import debugp, flatten
 from vesper.data.base.utils import OrderedModel
 from vesper.data.base.schema import defaultSchemaClass
 
-from vesper import sjson
+from vesper import pjson
 
 def _toStatements(contents, **kw):
     if not contents:
@@ -23,8 +23,8 @@ def _toStatements(contents, **kw):
     if isinstance(contents, (list, tuple)):
         if isinstance(contents[0], (tuple, base.BaseStatement)):
             return contents, None #looks like a list of statements
-    #assume sjson:
-    return sjson.tostatements(contents, setBNodeOnObj=True, **kw), contents
+    #assume pjson:
+    return pjson.tostatements(contents, setBNodeOnObj=True, **kw), contents
 
 class DataStore(transactions.TransactionParticipant): # XXX this base class can go away
     '''
@@ -313,14 +313,14 @@ class BasicStore(DataStore):
             return model, historyModel
     
     def _toStatements(self, json):
-        #if we parse sjson, make sure we generate the same kind of bnodes as the model
+        #if we parse pjson, make sure we generate the same kind of bnodes as the model
         return _toStatements(json, generateBnode=self.storageTemplateOptions.get('generateBnode'))
         
     def add(self, adds):
         '''
         Adds data to the store.
 
-        `adds`: A list of either statements or sjson conforming dicts
+        `adds`: A list of either statements or pjson conforming dicts
         '''
         if not self.join(self.requestProcessor.txnSvc):
             #not in a transaction, so call this inside one
@@ -350,14 +350,14 @@ class BasicStore(DataStore):
         if not self.model.canHandleStatementWithOrder:
             for stmt in stmts:
                 #check if the statement is part of a json list, remove that list item too
-                rows = list(sjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
+                rows = list(pjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
                 for row in rows:
                     self.model.removeStatement(base.Statement(*row[:5]))
         
     def remove(self, removes):
         '''
         Removes data from the store.
-        `removes`: A list of either statements or sjson conforming dicts
+        `removes`: A list of either statements or pjson conforming dicts
         '''
         if not self.join(self.requestProcessor.txnSvc):
             #not in a transaction, so call this inside one
@@ -382,7 +382,7 @@ class BasicStore(DataStore):
 
         See also `replace`.
 
-        `updates`: A list of either statements or sjson conforming dicts
+        `updates`: A list of either statements or pjson conforming dicts
         '''
         return self.updateAll(updates, [])
 
@@ -395,7 +395,7 @@ class BasicStore(DataStore):
 
         See also `update` and `updateAll`.
 
-        `replacements`: A list of either statements or sjson conforming dicts
+        `replacements`: A list of either statements or pjson conforming dicts
         '''
         return self.updateAll([], replacements)
 
@@ -403,10 +403,10 @@ class BasicStore(DataStore):
         '''
         Add, remove, update, or replace resources in the store.
 
-        `update`: A list of either statements or sjson conforming dicts that will
+        `update`: A list of either statements or pjson conforming dicts that will
         be processed with the same semantics as the `update` method.
         
-        `replace`: A list of either statements or sjson conforming dicts that will
+        `replace`: A list of either statements or pjson conforming dicts that will
         be processed with the same semantics as the `replace` method.
         
         `removedResources`: A list of ids of resources that will be removed 
@@ -432,7 +432,7 @@ class BasicStore(DataStore):
             if skipResource == resource:
                 continue
             if (prop == base.RDF_MS_BASE+'type' and 
-                (sjson.PROPSEQTYPE, base.OBJECT_TYPE_RESOURCE) in values):
+                (pjson.PROPSEQTYPE, base.OBJECT_TYPE_RESOURCE) in values):
                 skipResource = resource
                 newListResources.add(resource)
                 continue
@@ -465,7 +465,7 @@ class BasicStore(DataStore):
                 #the object is empty so make it for removal
                 #we need to do this here because empty objects won't show up in
                 #replaceStmts
-                if len(o) == 1 and 'id' in o: #XXX what about namemapped sjson?
+                if len(o) == 1 and 'id' in o: #XXX what about namemapped pjson?
                     removeid = o['id']
                     removedResources.add(removeid)
 

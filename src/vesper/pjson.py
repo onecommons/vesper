@@ -4,7 +4,7 @@
     http://rx4rdf.sf.net 
     
     
-    = sjson redux =
+    = pjson redux =
 
     * objects are resources (except for ref objects)
           * if it has an 'id' property it is treated as resource, where the value of 'id' is the resource URI
@@ -164,7 +164,7 @@ except ImportError:
     use_yaml = False
 
 VERSION = '0.9'
-JSON_BASE = 'sjson:schema#' #XXX
+JSON_BASE = 'pjson:schema#' #XXX
 PROPSEQ  = JSON_BASE+'propseq'
 PROPSEQTYPE = JSON_BASE+'propseqtype'
 STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
@@ -444,13 +444,13 @@ class Serializer(object):
                 #XXX pass on options like includesharedrefs
                 #XXX pass in idrefs
                 #XXX add depth option
-                results = self.to_sjson(model.getStatements(id)) 
+                results = self.to_pjson(model.getStatements(id)) 
                 objs = results.get('data')
                 if objs:
                     return objs[0]                    
         return id
 
-    def to_sjson(self, stmts=None, model=None, scope=''):
+    def to_pjson(self, stmts=None, model=None, scope=''):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
         #3. iterate through id map, if number of refs == 1 set in object, otherwise add to shared
@@ -599,7 +599,7 @@ class Serializer(object):
                         parent[key] = ref
 
         if self.asList:
-            header = dict(sjson=VERSION)
+            header = dict(pjson=VERSION)
             if self.nameMap:
                 header['namemap'] = self.nameMap            
             return [header] + roots.values()
@@ -609,7 +609,7 @@ class Serializer(object):
             retval['objects'] = results
         if self.nameMap:
             retval['namemap'] = self.nameMap
-        retval['sjson'] = VERSION
+        retval['pjson'] = VERSION
         return retval
 
 class ParseContext(object):
@@ -757,7 +757,7 @@ class Parser(object):
             json = loads(json) 
         
         if isinstance(json, dict):
-            if 'sjson' in json:
+            if 'pjson' in json:
                 start = json.get('data', [])
                 parseContext = ParseContext.initParseContext(json, parseContext)
             else:
@@ -767,7 +767,7 @@ class Parser(object):
         
         todo = []
         for x in start:
-            if 'sjson' in x:
+            if 'pjson' in x:
                 #not an object, just reset parseContext (for next call to getorsetid())
                 parseContext = ParseContext.initParseContext(x, parseContext)
             else:
@@ -1005,7 +1005,7 @@ class Parser(object):
                 m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(pos+1), item, objecttype, scope) )
 
 def tojson(statements, **options):
-    results = Serializer(**options).to_sjson(statements)
+    results = Serializer(**options).to_pjson(statements)
     return results#['results']
 
 def tostatements(contents, **options):

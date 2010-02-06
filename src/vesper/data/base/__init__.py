@@ -107,7 +107,7 @@ class Model(Tupleset):
           enumerate(('subject', 'predicate','object', 'objecttype','context', 'listpos')))
 
     def filter(self,conditions=None, hints=None):
-        from vesper import sjson
+        from vesper import pjson
         kw = {}
         if conditions:
             labels = ('subject', 'predicate','object', 'objecttype','context')
@@ -119,7 +119,7 @@ class Model(Tupleset):
             if objectType == OBJECT_TYPE_RESOURCE:
                 value = ResourceUri.new(stmt[2])
             else:
-                value = sjson.toJsonValue(stmt[2], objectType)
+                value = pjson.toJsonValue(stmt[2], objectType)
             yield (stmt[0], stmt[1], value, stmt[3], stmt[4], stmt.listpos)
 
     def update(self, rows):

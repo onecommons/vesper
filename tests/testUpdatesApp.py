@@ -3,11 +3,11 @@ def updateAction(kw, retval):
     '''
     Run this action every request but should only add content the first time
     '''
-    sjson = [{ 'id' : 'a_resource',
+    pjson = [{ 'id' : 'a_resource',
        'label' : 'foo',
       'comment' : 'page content.'
     }]
-    kw['__server__'].dataStore.update(sjson)
+    kw['__server__'].dataStore.update(pjson)
     return retval
 
 @Action

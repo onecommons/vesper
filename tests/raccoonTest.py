@@ -195,8 +195,8 @@ class RaccoonTestCase(unittest.TestCase):
         #print 'hello', store.model.by_s.get('hello')
         store.remove({"id":"hello","tags":"@tag2"})
         #utils.debugp('hello', store.model.by_s.get('hello'))
-        from vesper import sjson
-        self.assertEquals(sjson.tojson(store.model.getStatements())['data'],
+        from vesper import pjson
+        self.assertEquals(pjson.tojson(store.model.getStatements())['data'],
             [{"id": "hello", 
                "tags": ["@tag1"]
             }])            

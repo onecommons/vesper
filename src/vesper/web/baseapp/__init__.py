@@ -20,7 +20,7 @@ vesper.utils.defaultattrdict.UNDEFINED = mako.runtime.UNDEFINED
 
 @Route('datarequest')#, REQUEST_METHOD='POST')
 def datarequest(kw, retval): 
-    from vesper import sjson
+    from vesper import pjson
     if kw._environ.REQUEST_METHOD != 'POST':
         raise RuntimeError('POST expected')
 
@@ -32,11 +32,11 @@ def datarequest(kw, retval):
         #the whole request transaction to be aborted
         if action == 'update':
             addStmts, removeStmts = dataStore.update(data)
-            addJson = sjson.tojson(addStmts)
+            addJson = pjson.tojson(addStmts)
             results = dict(results=addJson)
         elif action == 'add':
             addJson = dataStore.add(data)
-            results = dict(results=addJson)#sjson.tojson(addStmts))
+            results = dict(results=addJson)#pjson.tojson(addStmts))
         elif action == 'query':
             #returns { errors, results }
             if isinstance(data, (str, unicode)):
