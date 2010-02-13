@@ -42,7 +42,7 @@ def datarequest(kw, retval):
             if isinstance(data, (str, unicode)):
                 results = dataStore.query(data) 
             else:
-                results = dataStore.query(data['query'], data.get('bindvars',{})) 
+                results = dataStore.query(**data) 
         elif action == 'remove':
             #returns None
             results = dataStore.remove(data)
@@ -57,12 +57,13 @@ def datarequest(kw, retval):
 
     dataStore = kw.__server__.dataStore
     postdata = kw._params.requests
-    requests = json.loads(postdata)
+    # some json libs return unicode keys, which causes problems with **dict usages
+    requests = json.loads(postdata, object_hook=lambda x: dict([(str(k),v) for (k,v) in x.items()]))
     #XXX raccoon needs default content-type 
     kw._responseHeaders['Content-Type'] = 'application/json'
     response = dict(responses = [handleRequest(**x) for x in requests])
     #may add an "errors" field in the future instead of just raising exception
-    return json.dumps(response)
+    return json.dumps(response, indent=4) # XXX
 
 @Route('static/{file:.+}')
 def servefile(kw, retval):

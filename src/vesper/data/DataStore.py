@@ -502,7 +502,7 @@ class BasicStore(DataStore):
 
         return addStmts, removals
 
-    def query(self, query, bindvars=None, explain=None, debug=False, forUpdate=False, captureErrors=False):
+    def query(self, query=None, bindvars=None, explain=None, debug=False, forUpdate=False, captureErrors=False):
         import vesper.query
         return vesper.query.getResults(query, self.model,bindvars,explain,debug,forUpdate,captureErrors)
 
