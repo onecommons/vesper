@@ -61,7 +61,10 @@ t("(id)",['3', '2', '_:2', '_:1'])
 
 t("('constant')", ['constant'])
 
-#XXX AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+#XXX not treating as constant
+#raises File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 614, in groupbyUnordered
+#    vals = resources.get(key)
+#TypeError: list objects are unhashable
 skip('''
 { "staticprop" : ["foo"] }
 ''',[{ "staticprop" : ["foo"] }])
@@ -112,7 +115,7 @@ t(
 results = [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'derivedprop': 2.0,
   }],
-ast=Select(Construct([     
+skipast=Select(Construct([   #XXX
     cp('derivedprop',  qF.getOp('mul', Project(0), Constant(2))),
     cp('children', Select(Construct([            
             cp(Project('*')),
@@ -120,18 +123,19 @@ ast=Select(Construct([
         ]))),
     cs('id', 'parentid'),
     ]),
-    Join(
+Join(
  jc(
     Join(
-    jc(
-    Join(
-    Filter(Eq('parent',Project(PROPERTY)), objectlabel='parent'),
-    Filter(Eq('child',Project(PROPERTY)), objectlabel='child'),
-    name='@1'
+      jc(
+        Join(
+           Filter(Eq('parent',Project(PROPERTY)), objectlabel='parent'),
+           Filter(Eq('child',Project(PROPERTY)), objectlabel='child'),
+        name='@1'
+        ),
+        Eq(Project('child'), Project(SUBJECT)) 
+       ), name='childid'
     ),
-    Eq(Project('child'), Project(SUBJECT)) ), name='childid'
-    ),
- Eq(Project('parent'), Project(SUBJECT)) ), name='parentid'
+    Eq(Project('parent'), Project(SUBJECT)) ), name='parentid'
  )
 ),
 #expected rows: id, (child, parent)
@@ -284,6 +288,10 @@ GROUPBY(foo)
 ''',
 #jql.QueryException: only equijoin supported for now:
 "{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'}) }",
+# = is non-associative so this is illegal -- at least have better error msg
+"""
+{ * where (?a = b = ?c)}
+"""
 ]
 
 for s in syntaxtests:
@@ -299,12 +307,12 @@ ast = Select( Construct([
 )
 
 #expect equivalent asts:
-t('{*,}', ast=jql.buildAST('{*}')[0])
+t('{*,}', ast='{*}')
 
 #XXX this ast looks wrong:
 skip('''{ *, 
     where(type=bar OR foo=*)
-    }''', ast=jql.buildAST("{ * where(type=bar or foo=*) }")[0]) 
+    }''', ast="{ * where(type=bar or foo=*) }")
 
 #expect parse errors:
 t("{*/1}", ast='error')  
@@ -462,7 +470,7 @@ t('''{
 #expression needs to be evaluated on each item
 #XXX consolidate filters -- multiple references to the same property create 
 #duplicate filters and joins
-skip('''
+t('''
 {
 key,
 'valTimesTypeDoubled' : val*type*2, #(-2*1, -4*1, 2*2, 4*2)*2
@@ -540,10 +548,10 @@ t('''
  [{'inner': {'id': 'commons'}},
   {'inner': {'id': 'commons'}},
   {'inner': {'id': 'rhizome'}}]
- , name='labeled but no where'
+ #, name='labeled but no where'
  )
 
-#throws: jql.QueryException: unlabeled joins not yet supported "tag"
+#XXX throws: vesper.query.QueryException: only equijoins currently supported
 skip('''
     {
     *
@@ -672,8 +680,7 @@ skip( '''
     }
     ''',[])
 
-#XXX error:   AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
-# in JoinConditionOp.__init__
+#XXX creating bad AST
 skip('''
 { ?a
     where (
@@ -1089,7 +1096,12 @@ t.model = modelFromJson([
         { "id" : "3", "type" : "post"}
     ])
 
-t.skip = True #XXX these need to be fixed!
+t('''
+{   ?post, id, 
+    'tags' : [id where (id=?tag)]
+    where (tags = ?tag and type='post')
+}''',
+[{'id': '2', 'tags': [['tag1'], ['tag2']]}])
 
 t('''
 {   ?post, id, 
@@ -1097,18 +1109,113 @@ t('''
     where (type='post' and maybe tags = ?tag)
 }
 ''',
-[{'id': '3', 'tags': None},
- {'id': 'tag1', 'tags': None},
- {'id': '_:1', 'tags': None},
- {'id': '2', 'tags': ['tag1']}]
-, unordered=True)
-
+[{'id': '3', 'tags': None}, {'id': '2', 'tags': [['tag1'], ['tag2']]}]
+)
 
 t('''
 {   ?post, id, 
-    'tags' : [id where (id=?tag)]
+    'tags' : {* where (id=?tag)}
     where (tags = ?tag and type='post')
-}''',[])
+}''',
+[{'id': '2',
+  'tags': [{'id': 'tag1', 'label': 'tag 1'},
+           {'id': 'tag2', 'label': 'tag 2'}]}]
+)
+
+t('''
+{   ?post, id, 
+    'tags' : {* where (id=?tag and label="tag 1")}
+    where (tags = ?tag and type='post')
+}''',
+[{'id': '2',
+  'tags': {'id': 'tag1', 'label': 'tag 1'}
+  }
+])
+
+#XXX turn these into tests:
+'''
+    this:
+    {
+    id : ?owner,
+    'mypets' : {
+          'dogs' : { * where(owner=?owner and type='dog') },
+          'cats' : { * where(owner=?owner and type='cat') }
+        }
+    }
+
+    is equivalent to:
+    {
+    id : ?owner,
+
+    'mypets' : {
+          'dogs' : { * where(id = ?pet and type='dog') },
+          'cats' : { * where(id = ?pet and type='cat') }
+        }
+
+    where ( {id = ?pet and owner=?owner} )
+    }
+
+     
+    what about where ( { not id = ?foo or id = ?bar and id = ?baz } )
+
+    also, this:
+    {
+    'foo' : ?baz.foo
+    'bar' : ?baz.bar
+    }
+    results in joining ?baz together
+
+    here we do not join but use the label to select a value
+    { 
+      'guardian' : ?guardian,
+      'pets' : { * where(owner=?guardian) },
+    }
+
+this is similar but does trigger a join on an unlabeled object:
+    {
+      'guardian' : ?guardian,
+      'dogs' : { * where(owner=?guardian and type='dog') },
+      'cats' : { * where(owner=?guardian and type='cat') }
+    }
+
+join( filter(eq(project('type'), 'dog')),
+     filter(eq(project('owner'),objectlabel='guardian')
+  jc(
+     join( filter(eq(project('type'), 'cat')),
+          filter(eq(project('owner'),objectlabel='guardian')
+     ),
+     Eq(Project('guardian'), Project('guardian'))
+)
+
+XXX test multiple labels in one filter, e.g.: { a : ?foo, b : ?bar where (?foo = ?bar) }
+XXX test self-joins e.g. this nonsensical example: { * where(?foo = 'a' and ?foo = 'b') }
+    '''
+
+'''
+#join on non-primary key:
+{ 
+where (date = ?foo.date and {id=?foo and type= 'events'})
+}
+
+#join on two non-primary keys:
+{ 
+where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'events'})
+}
+'''
+
+#XXX test:
+# { * where (1=2) }
+# { * where (1=1) }
+#test that constant evals first and just once and doesn't join on the id
+# { * where (foo = 1 and 1=2) } 
+# { * where (foo = 1 and 1=1) }
+# { * where (foo = 1 and {1=1}) } 
+# { * where (foo = 1 and {bar=1 and 1=1}) } 
+# { * where (foo = 1 and {bar=1 and {1=1} } )} 
+# { * where (foo = 1 or 1=1) }  
+#test that ?bar = 1 doesn't join with foo = 1
+# {* where (?bar = 1 and foo = 1)}
+
 
 import unittest
 class JQLTestCase(unittest.TestCase):
