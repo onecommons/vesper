@@ -111,7 +111,7 @@ def printdocs(test):
         _printedmodels.append(id(test.model))
         modelformatted = pprint.pformat(modelsrc).replace('\n', '\n ... ')  
         createmodel = Template("""
- >>> $modelname = raccoon.createStore('''$modelformatted''')
+ >>> $modelname = app.createStore('''$modelformatted''')
 """).substitute(locals())
     doc = test.doc
     result = pprint.pformat(test.results).replace('\n', '\n ')     
@@ -280,4 +280,7 @@ def main(t, cmdargs=None):
             else:
                 assert resultsMatch,  ('unexpected results for test %d' % i)
 
-    print '***** %d tests passed, %d skipped' % (count, skipped)
+    if not options.printdocs:
+        print '***** %d tests passed, %d skipped' % (count, skipped)
+    elif t._nextdoc:
+        print '\n'.join(t._nextdoc)
