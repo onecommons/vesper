@@ -5,6 +5,15 @@ from vesper.query.jqlAST import *
 import logging, logging.handlers
 #errorlog = logging.getLogger('parser')
 
+#XXX: better error reporting:
+#set p.linenum(n) and p.lexpos(n) on queryop
+#associate op with queryexception when raising
+#handler prints: "error near line x, pos y: "+exception message
+#if op doesn't have line/pos info find the nearest parent that does
+#even better:
+#use p.linespan(n) and p.lexspan(n) to recreate the substring in the query
+#that op is a translation of
+
 class LogCaptureHandler(logging.handlers.BufferingHandler):
     "Simple logging handler that captures and retains log messages"
     def shouldFlush(self, record):
@@ -204,27 +213,12 @@ def p_root(p):
     root : topconstruct
     '''
     p[0] = p[1]
-    resolveQNames({}, p[0])
-    
-    #we're when done parsing, now join together joins that share labels,
-    #removing any joined joins if their parent is a dependant (non-root) Select op
-    labeledjoins = {}
-    for label, joins in sorted(p.parser.jqlState.labeledjoins.items()):
-        if not joins:
-            continue
-        #construct that only have id labels will not have a join
-        #we only want to add the join if there are no another joins for the label
-        firstjoin = joins.pop()
-        for join in joins:
-            join.parent.removeArg(join) #XXX better support for removeArg
-            firstjoin.appendArg(join)
-
-        labeledjoins[label] = firstjoin
-        firstjoin.name = label 
-    #print 'labeledjoins', labeledjoins
-    #print 'refs', p.jqlState.labelreferences
-    p.parser.jqlState._buildJoinsFromReferences(labeledjoins)
     select = p[0]
+    resolveQNames({}, select)
+    #we're done parsing, now join together joins that share labels,
+    #removing any joined joins if their parent is a dependant (non-root) Select op
+    p.parser.jqlState.buildJoins(select)
+
     if not select.where or not select.where.args:
         #top level queries without a filter (e.g. {*}) 
         #should not include anyonmous objects that have already appeared 

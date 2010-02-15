@@ -759,6 +759,8 @@ class Parser(object):
         if isinstance(json, dict):
             if 'pjson' in json:
                 start = json.get('data', [])
+                if isinstance(start, dict):
+                    start = [start]
                 parseContext = ParseContext.initParseContext(json, parseContext)
             else:
                 start = [json]

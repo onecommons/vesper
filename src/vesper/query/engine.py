@@ -1,4 +1,4 @@
-'''
+"""
 jql query engine, including an implementation of RDF Schema.
 
     Copyright (c) 2004-5 by Adam Souzis <asouzis@users.sf.net>
@@ -215,7 +215,7 @@ Example:
 //semantically same as above since there's no need for relationship table
 construct({ child : ?obj }, filter(?subject, 'child', ?obj))
 
-'''
+"""
 
 import operator, copy, sys, pprint, itertools
 
@@ -510,7 +510,7 @@ class MergeJoin(Join):
         return 'ordered merge'
 
 def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
-    '''
+    """
     Given a row which may contain nested tuplesets as cells and a "key" cell position,
     yield (key, row) pairs where the returned rows doesn't include the key cell.
     
@@ -528,7 +528,7 @@ def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
 
     >>> list( getColumns((1,1), t, list) )
     [([('c1', 'd1')], ['a1', 'b1']), ([('c2', 'd1')], ['a1', 'b2'])]
-    '''
+    """
     keypos = list(keypos)
     pos = keypos.pop(0)
     cols = []
@@ -606,7 +606,7 @@ def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
     resources = {}
     for row in tupleset:
         #print 'gb', groupby, row
-        if debug: validateRowShape(tupleset.columns, row) 
+        if debug: validateRowShape(tupleset.columns, row)
         for key, outputrow in getColumns(groupby, row, outerjoin=outerjoin):
             vals = resources.get(key)
             if vals is None:
@@ -862,17 +862,6 @@ def getNullRows(columns):
             nullrows[i] = ColumnInfo(c.label, None)
     return nullrows
 
-#for associative ops: (a op b) op c := a op b op c
-def flattenOp(args, opType):
-    if isinstance(args, jqlAST.QueryOp):
-        args = (args,)
-    for a in args:
-        if isinstance(a, opType):
-            for i in flattenOp(a.args, opType):
-                yield i
-        else:
-            yield a
-
 def _setConstructProp(shape, pattern, prop, v, name):
     isSeq = isinstance(v, (list,tuple))
     #print '_setConstructProp', v, isSeq, prop.ifEmpty
@@ -1087,7 +1076,7 @@ class SimpleQueryEngine(object):
           count = 0
           i = 0
           assert context.currentTupleset is tupleset
-
+          #print 'construct cols', tupleset.columns
           for outerrow in tupleset:
             #print 'outerrow', subjectlabel, subjectcol, hex(id(tupleset)), outerrow
             for idvalue, row in getColumns(subjectcol, outerrow):
@@ -1114,8 +1103,8 @@ class SimpleQueryEngine(object):
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
                     print >> context.debug, 'valid outerrow'
-                #XXX: re-enable validation-- currently right outer join break this 
-                #if context.debug: validateRowShape(rowcolumns, context.currentRow)
+                #note: right outer joins break the following validateRowShape
+                if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 
                 pattern = self.getShape(context, shape)
                 allpropsOp = None
@@ -1153,8 +1142,7 @@ class SimpleQueryEngine(object):
                             #if id label is set use that 
                             label = prop.value.construct.id.getLabel()
                             assert label
-                            col = tupleset.findColumnPos(label, True)
-                            #print row
+                            col = tupleset.findColumnPos(label, True)                            
                             if not col:
                                 #assume we're doing a cross join:
                                 ccontext.currentTupleset = ccontext.initialModel
@@ -1268,7 +1256,7 @@ class SimpleQueryEngine(object):
 
     def evalGroupBy(self, op, context):
         tupleset = context.currentTupleset
-        label = op.name         
+        label = op.name
         position = tupleset.findColumnPos(label)
         assert position is not None, 'cant find %s in %s %s' % (label, tupleset, tupleset.columns)
         coltype = object        
@@ -1289,14 +1277,16 @@ class SimpleQueryEngine(object):
     def _groupby(self, tupleset, joincond, msg='group by ',debug=False):
         #XXX use groupbyOrdered if we know tupleset is ordered by groupby key
         position = tupleset.findColumnPos(joincond.position)
-        assert position is not None, '%s %s' % (tupleset, tupleset.columns)
-        coltype = object        
+        assert position is not None, 'could find %r in %s %s' % (
+                    joincond.position, tupleset, tupleset.columns)
+        coltype = object
+        #print 'groupby', joincond.parent.name, joincond.parent        
         columns = [
             ColumnInfo(joincond.parent.name or '', coltype),
             ColumnInfo(joincond.getPositionLabel(),
                                     chooseColumns(position,tupleset.columns) )
         ]
-        outerjoin = joincond.join in ('i', 'r')
+        outerjoin = joincond.join in ('r')
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
                 debug=debug and columns, outerjoin=outerjoin),
@@ -1379,6 +1369,7 @@ class SimpleQueryEngine(object):
                 #put non-inner joins last
                 (arg.join != 'i', arg.op.cost(self, context)) )
         
+        tmpop = None
         if not args or args[0].join != 'i':
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
             #tmpop = jqlAST.JoinConditionOp(
@@ -1386,6 +1377,7 @@ class SimpleQueryEngine(object):
             #        self.queryFunctions.getOp('isbnode', jqlAST.Project(0)))))
             tmpop.parent = op
             args.insert(0, tmpop)
+
         
         #else:
         #   combine separate filters into one filter
@@ -1405,12 +1397,16 @@ class SimpleQueryEngine(object):
         #rslice = slice( 0, 1) #curent tupleset is a
         #current = MergeJoin(result, current, lslice,rslice)
         previous = None
+        #print 'evaljoin', args
         while args:
             joincond = args.pop(0)
-
             assert isinstance(joincond, jqlAST.JoinConditionOp)
+            #if isinstance(joincond.op, jqlAST.Filter) and not joincond.op.args and args:
+                #skipping empty filter but this break stuff
+                #joincond = args.pop(0)
             result = joincond.op.evaluate(self, context)
-            assert isinstance(result, Tupleset)
+            assert isinstance(result, Tupleset), repr(result) + repr(joincond.op)
+            #print 'results', joincond.op, result
 
             current = self._groupby(result, joincond,debug=context.debug)
             if previous:
@@ -1424,7 +1420,7 @@ class SimpleQueryEngine(object):
                         nullrows = [] #no match, so include leftRow
                     else:
                         nullrows = None
-                    
+
                     def joinFunc(leftRow, rightTable, lastRow):
                         match = False
                         for row in rightTable.filter({0 : leftRow[0]},
@@ -1523,7 +1519,7 @@ class SimpleQueryEngine(object):
         #now create a tupleset that applies the complex predicates to each row
         def getArgs():
             for i, pred in enumerate(complexargs):
-                for arg in flattenOp(pred, jqlAST.And):
+                for arg in jqlAST.flattenOp(pred, jqlAST.And):
                      yield (arg.cost(self, context), i, arg)
 
         fcontext = copy.copy( context )
@@ -1669,6 +1665,15 @@ class SimpleQueryEngine(object):
     def costProject(self, op, context):
         #if op.name == "*": 
         return 1.0 #XXX
+
+    def evalLabel(self, op, context):
+        position = context.currentTupleset.findColumnPos(op.name)
+        if position is None:
+            return None
+        return flatten( (c[0] for c in getColumn(pos, context.currentRow)) )        
+
+    def costLabel(self, op, context):
+        return 1.0
 
     def costFilter(self, op, context):
         return 1.0 #XXX
