@@ -36,3 +36,17 @@ Current Status
 --------------
 
 Currently proof-of-concept stage with subset of functionality production-ready.
+
+Architecture
+------------
+
+vesper.app provides 
+
+- vesper.data
+- vesper.app
+- vesper.data.base
+- vesper.data.store
+- vesper.web
+
+- vesper.pjson
+- vesper.query
