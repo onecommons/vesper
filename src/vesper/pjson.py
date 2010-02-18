@@ -1,120 +1,13 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 '''
-    Copyright (c) 2009 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net 
-    
-    
-    = pjson redux =
+ pjson (`persistent json`)
+ ~~~~~
 
-    * objects are resources (except for ref objects)
-          * if it has an 'id' property it is treated as resource, where the value of 'id' is the resource URI
-          * otherwise, assign a bnode
-          * statement for empty object add this statement bnode rdf:type rdfs:Resource. 
-    * each object property maps to a RDF property
-          * by default, for updates, assume an RDF model where owl:maxCardinality = 1 for every property 
-    * strings that match this regex: URI|jname are assumed to be a reference to resource, unless the jname matches "string value namespace"
-    * prop : [] are represented in RDF as
-      prop : value, 
-      prop : value
-      prop : prop_seq-bnode      
-      //prop-seq:
-      {
-      id : prop_seq-bnode,      
-      type: propseqclass //subclass of RDF$seq,
-      #prop-bag : prop, //domain propseqclass, range: Propery
-      _1: value,  _2: value //note: can contain duplicate values      
-      }
-   * nested list:
-    {
-    prop : [ ['value1' ] ]
-    }
-    prop : outer-prop_seq-bnode
-    prop : inner-seq-bnode //cuz its a value
-      {
-      id : outer-prop_seq-bnode,      
-      type: propseqclass, //subclass of RDF$seq,
-      _1: inner-seq-bnode      
-      }
-      
-      {
-      id : inner-seq-bnode,      
-      type: standalone-seqclass, //subclass of RDF$seq,
-      _1: value1      
-      }
-    
-Note: RDF collection and containers will appears as objects look like:
-{
-rdfs:member : [...]
-rdf:first : [...]
-}
-
-    
-    * for comparison: shindig/canonicaldb.json's pattern:
-{ 
-    type : [ resources ],
-    prop : {
-     'idref' : [ values ]
-    }
-}
-    to conform to pattern, could rewrite as:
-{  
-   { id : type, type-members : [ resources] },
-   { subject : idref,
-     property : prop
-     object : [ values ]
-   }
-}
-  more naturally:
-{
- { resource }, //include type property
- { id : idref,
-   prop : [ values] 
- }
-}
-to avoid prop naming redundancy without special-case semantics:
-{
-  id : prop
-  distribute-prop : [
-    ['id', [ values ]],
-    ['id', [ values ]] 
-  ]
-}
-slightly special case (add reserved word 'propertymap') (top-level only):
-{
-  'propertymap' : prop,
-  'id1' : value,
-  'id2' : value
-}
-{ id : idref, prop: values} for each idref
-thus the shindig schema could look like:
-{  
-   { id : type, type-members : [ resources] },
-   { 'propertymap' : prop,
-     'idref' : values
-    }
-}
- how about: (top-level only)
-{ 'idmap' : { /*defaults e.g. type : foo */ }
-   'id' : {}
-}
-constructs items 
-{ id : idref
-  prop : values 
-}
-//$ is delimiter 
-{ 
-  nsmap : {  } 
-}
-
-    * depending on the schema, lists can represent either duplicate properties of the same name, rdf containers or rdf collections.
-          o default, treat as blank node of type rdf:Seq (to perserve order, more efficient then rdf:List 
-    * string, numbers and null are treated as literals (define json datatypes for number and null? or use xsd?)
-    * references to resources are spelled like this: { $ref : id }
-    * if "root" of the json maps to a literal:
-          o construct a statement like: <somerootURI> hasJson "literal". 
-    * when to use $ref and when to inline the object? If the resource occurs once, inline.
-    * when to include id : _bnode and when to omit? By default, include them.
-          o we can omit as long as those objects don't need to updated or if the implementation has a way to figure out what bnode is.    
+ pjson is a set of rules used to persist JSON
+ 
+ * A JSON_ object containing a property named `id` will be mapped to a persistent object with a key whose value is the value of the `id` property. 
+ * A JSON_ object without an `id` will be associated with the closest ancestor (containing) JSON object that has an id. If the object is at the top level it will be assigned an anonymous id.
 
 == references ==
 * two components of the language: namemaps and explicit values

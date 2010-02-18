@@ -1,52 +1,59 @@
 basic configuration variables 
 =============================
 
-.. glossary::
+.. confval:: dataStoreFactory
 
-  dataStoreFactory 
-    The class or factory function the Raccoon will call to instantiate the application's primary data store
-    It is passed as keyword arguments the dictionary of the variables contained in the config file
-    note that this is a callable object which may need to be imported into the config file
-  
-    Default: ``vesper.DataStore.BasicDataStore``
-      
-  appName
-    A short name for this application, must be unique within the current ``vesper.app`` process
-    
-    Default: `"root"`
-    Example: ``appName = 'root'``
+  The class or factory function the Raccoon will call to instantiate the application's primary data store
+  It is passed as keyword arguments the dictionary of the variables contained in the config file
+  note that this is a callable object which may need to be imported into the config file
 
-  static_path 
+  Default: ``vesper.DataStore.BasicDataStore``
+
+.. confval:: appName
+
+  A short name for this application, must be unique within the current ``vesper.app`` process
+
+  Default: `"root"`
+  Example: ``appName = 'root'``
+
+
+.. confval:: static_path
+
     A string or list specifying the directories that will be searched when resolving static URLs
     
     Default: the current working directory of the process running the app
     Example: ``static_path = 'static'``
 
-  template_path
+.. confval:: template_path
+
     A string or list specifying the directories that will be searched when resolving static URLs
     
     Default: the current working directory of the process running the app
     Example: ``template_path = 'templates'``
 
-  model_uri 
+.. confval:: model_uri
+
     The base URI reference to be used when creating RDF resources    
     
     Default: 'http://' + socket.getfqdn() + '/'
     BASE_MODEL_URI='http://example.com/'
 
-  STORAGE_PATH
+.. confval:: STORAGE_PATH
+
     The location of the RDF model. Usually a file path but the appropriate value depends on 'modelFactory'
     default is '' 
     STORAGE_PATH = 'mywebsite.nt'
 
-  transactionLog 
+.. confval:: transactionLog
+ 
     The path of the transactionLog. The transactionLog records in NTriples format a log 
     of the statements added and removed from the model along with comments on when and by whom.
     Note: the default file store uses this format so there is not much reason to use this if you are using the default
     default is '' (no transactionLog)
     ``transactionLog='/logs/auditTrail.nt'``
 
-  STORAGE_TEMPLATE
+.. confval:: STORAGE_TEMPLATE
+
     A string containing NTriples that is used when 
     the file specified by STORAGE_PATH is not found
     STORAGE_TEMPLATE='''
@@ -54,35 +61,41 @@ basic configuration variables
     _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#revisions> _:itemdispositionhandlertemplate1List .
     _:itemdispositionhandlertemplate <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#NamedContent> .
     '''
-  APPLICATION_MODEL 
+.. confval:: APPLICATION_MODEL 
+
     A string containing NTriples that are added to the RDF model
     but are read-only and not saved to disc. Use for structural components such as the schema.
     APPLICATION_MODEL='''<http://rx4rdf.sf.net/ns/wiki#item-format-zml'> <http://www.w3.org/2000/01/rdf-schema#label> "ZML" .'''
 
-  modelFactory
+.. confval:: modelFactory
+
     The class or factory function used by RxPathDomStore to load or create a new RDF document or database
     note that this is a callable object which may need to be imported into the config file
     default is RxPath.IncrementalNTriplesFileModel
     modelFactory=RxPath.RedlandHashBdbModel
 
-  VERSION_STORAGE_PATH
+.. confval:: VERSION_STORAGE_PATH
+
     The location of a separate RDF model for storing the history of changes to the database.
     Usually a file path but the appropriate value depends on 'versionModelFactory'
     default is '' (history not stored separately)
     VERSION_STORAGE_PATH = 'mywebsite.history.nt'
 
-  versionModelFactory
+.. confval:: versionModelFactory
+
     The class or factory function used by RxPathDomStore to load or create the version history RDF database
     #note that this is a callable object which may need to be imported into the config file
     #default is whatever 'modelFactory' is set to
     versionModelFactory=RxPath.RedlandHashBdbModel
  
-  SECURE_FILE_ACCESS
+.. confval:: SECURE_FILE_ACCESS
+
     Limits URLs access to only the directories reachable through the PATH  
     default is True
     SECURE_FILE_ACCESS = True
  
-  nsMap 
+.. confval:: nsMap
+
     A dictionary of namespace prefixes that may appear in RxPath expressions
     default is {} but Raccoon will always add 'rdf', 'rdfs', 'owl', 'bnode', 'wf' (for Raccoon XPath Extension functions)::
     
@@ -90,30 +103,35 @@ basic configuration variables
           'myNs' : 'http://www.example.com/#'
          }         
  
-  ACTION_CACHE_SIZE 
+.. confval:: ACTION_CACHE_SIZE
+
     Sets the maximum number of items to be stored in the Action cache. Set to 0 to disable.
     default is 1000
     ACTION_CACHE_SIZE=1000
  
-  defaultPageName
+.. confval:: defaultPageName
+
     The name of the page to be invoke if the request URL doesn't include a path 
     e.g. http://www.example.org/ is equivalent to http://www.example.org/index 
     default is 'index'
     `defaultPageName='home.html'`
 
-  DEFAULT_MIME_TYPE
+.. confval:: DEFAULT_MIME_TYPE
+
     The MIME type sent on any request that doesn't set its own mimetype 
     and Raccoon can't guess its MIME type
     default is '' (not set)
     DEFAULT_MIME_TYPE='text/plain'
 
-  MODEL_RESOURCE_URI
+.. confval:: MODEL_RESOURCE_URI
+
     The resource that represents the model this instance of the application is running
     it can be used to assertions about the model itself, e.g its location or which application created it
     default is the value of BASE_MODEL_URI
     MODEL_RESOURCE_URI = 'http://example.org/rhizomeapp/2/20/2004'
 
-  defaultExpiresIn
+.. confval:: defaultExpiresIn
+
     What to do about Expires HTTP response header if it 
     hasn't already set by the application. If it's value is 0 or None the header 
     will not be sent, otherwise the value is the number of seconds in the future 
@@ -122,14 +140,16 @@ basic configuration variables
     default is 3600 (1 hour)
     defaultExpiresIn = 0 #disable setting the Expires header by default
 
-  useEtags 
+.. confval:: useEtags 
+
     If True, If-None-Match request headers are honors and an etag based 
     on a MD5 hash of the response content will be set with every response
     
     default is True
     useEtags = False #disable
 
-  useFileLock 
+.. confval:: useFileLock 
+
     If True `vesper.app` will use interprocess file lock when committing 
     a transaction. Alternately useFileLock can be a reference to a class or factory
     function that conforms to the glock.LockFile interface.
@@ -142,15 +162,15 @@ advanced configuration variables
 
 These setting variables are only necessary when developing a new Raccoon application
 
-.. glossary::
+.. confval:: cmd_usage
 
-    cmd_usage
       A string used to display the command-line usage help::
       
          cmd_usage = '''--import [dir] [--recurse] [--format format] [--disposition disposition]
                 --export dir [--static]'''
 
-    actions
+.. confval:: actions
+
       A dictionary that is the heart of an application running on Raccoon 
       The key is the name of the trigger and the value is list of Actions that are invoked in that order
       Raccoon currently uses these triggers:
@@ -175,12 +195,14 @@ These setting variables are only necessary when developing a new Raccoon applica
                   'load-model' : [ FunctorAction(rhizome.initIndex) ],
                 }
 
-    DEFAULT_TRIGGER 
+.. confval:: DEFAULT_TRIGGER 
+
       Used by Requestor objects and the "site:" URL resolver as the trigger to use to invoke a request
       default is 'http-request'
       DEFAULT_TRIGGER='http-request'
 
-    globalRequestVars
+.. confval:: globalRequestVars
+
       A list of request metadata variables that should be preserved 
       when invoking callActions() (e.g. to invoke templates or an error handler)
       default is [] (but `vesper.app`  will always adds the following: 
@@ -188,7 +210,8 @@ These setting variables are only necessary when developing a new Raccoon applica
 
       globalRequestVars = [ '__account', '_static'] 
 
-    getPrincipleFunc
+.. confval:: getPrincipleFunc
+
       A function that is called to retrieve the 
       application-specific Principal (in the security sense) object 
       for the current request context.
@@ -196,7 +219,8 @@ These setting variables are only necessary when developing a new Raccoon applica
       default: lambda kw: '' 
       getPrincipleFunc = lambda kw: kw.get('__account','')
 
-    validateExternalRequest
+.. confval:: validateExternalRequest
+
       A function that is called when receiving an external request (e.g. an http request)
       It is called before invoking runActions(). Use it to make sure the request 
       doesn't contain metadata that could dangerously confuse request processing.
