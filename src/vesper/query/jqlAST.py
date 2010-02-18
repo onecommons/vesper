@@ -1,18 +1,18 @@
 from vesper.query import *
-from vesper.utils import flattenSeq, flatten
+from vesper.utils import flattenSeq, flatten,debugp,debugp
 
 #############################################################
 ########################   AST   ############################
 #############################################################
 
-def depthfirstsearch(root, descendPredicate = None, visited = None):
+
+def depthfirstsearch(root, descendPredicate = None):
     """
     Given a starting vertex, root, do a depth-first search.
     """
     import collections
-    to_visit = collections.deque()
-    if visited is None:
-        visited = set()
+    to_visit = collections.deque()    
+    visited = set()
 
     to_visit.append(root) # Start with root
     while len(to_visit) != 0:
@@ -22,7 +22,6 @@ def depthfirstsearch(root, descendPredicate = None, visited = None):
             yield v
             if not descendPredicate or descendPredicate(v):                
                 to_visit.extend(v.args)
-
 
 def findfirstdiff(op1, op2):
     import itertools
@@ -40,6 +39,27 @@ def findfirstdiff(op1, op2):
     else:
         return (None, None)
 
+def validateTree(*roots):
+    for root in roots:
+        if root.parent:
+            assert root in root.parent.args, root
+        root._validateArgs()
+        for a in root.args:
+            validateTree(a)
+
+def flattenOp(args, opType):
+    """
+    use with associative ops: (a op b) op c := a op b op c
+    """
+    if isinstance(args, QueryOp):
+        args = (args,)
+    for a in args:
+        if isinstance(a, opType):
+            for i in flattenOp(a.args, opType):
+                yield i
+        else:
+            yield a
+            
 class QueryOp(object):
     '''
     Base class for the AST.
@@ -61,7 +81,8 @@ class QueryOp(object):
  % (type(parent), id(parent), type(self), id(self), type(parent_), id(parent_)))
             parents.append(id(parent))
             parent = parent.parent
-
+        if self._parent:
+            self._parent.removeArg(self)
         self._parent = parent_
     
     parent = property(lambda self: self._parent, _setparent)
@@ -130,9 +151,15 @@ class QueryOp(object):
                 + argsrepr)
 
     def _validateArgs(self):
-        assert all(a.parent is self for a in self.args), ('self:'+repr((self.__class__, self.name))
+        if not all(a.parent is self for a in self.args):
+            print self.__class__, self.name, id(self), 'has child(ren) with wrong parent:'
+            debugp([a for a in self.args if a.parent is not self])
+            print 'wrong parent:'
+            debugp([(id(a.parent), a.parent) for a in self.args if a.parent is not self])
+        assert all(a.parent is self for a in self.args), (
+                ('self:'+repr((self.__class__, self.name))
             + repr(['wrong parent:'+str((a.parent))+'for:'+repr(a)
-                    for a in self.args if a.parent is not self]))
+                    for a in self.args if a.parent is not self])))
 
     def _siblings(self):
         if not self.parent:
@@ -175,8 +202,36 @@ class QueryOp(object):
         self.args.append(arg)
         arg.parent = self
 
+    def replaceArg(self, child, with_):
+        if not isinstance(self.args, list):
+            raise QueryException('invalid operation replaceArg for %s', type(self))
+        for i, a in enumerate(self.args):
+            if a is child:
+                self.args[i] = with_                
+                if with_.parent and with_.parent is not self:
+                    with_.parent.removeArg(with_)
+                with_.parent = self
+                child._parent = None
+                return
+        raise QueryException('invalid operation for %s', type(self))
+
     def removeArg(self, child):
-        raise QueryException('invalid operation: removeArg')
+        try:
+            self.args.remove(child)
+            child._parent = None
+        except ValueError:
+            raise QueryException(
+            'removeArg failed on %r: could not find child %c'
+            % (type(self), type(child)))
+        except:
+            print 'self', type(self), self
+            raise QueryException('invalid operation: removeArg on %r' % type(self))
+
+    def getLabel(self, label):
+        for (name, p) in self.labels:
+            if name == label:
+                return p
+        return None
 
     def _resolveQNames(self, nsmap):
         pass #no op by default
@@ -224,10 +279,18 @@ class ResourceSetOp(QueryOp):
             op = JoinConditionOp(op)
         elif not isinstance(op, JoinConditionOp):
             raise QueryException('bad ast')
-        QueryOp.appendArg(self, op)
+        return QueryOp.appendArg(self, op)
 
     def getType(self):
         return Resourceset
+
+    def addLabel(self, label, position=SUBJECT):
+        for child in self.breadthfirst():
+            if isinstance(child, Filter):
+                child.addLabel(label, position)
+                return True
+        return False
+        #raise QueryException('unable to add label ' + label + ' to empty join: %s' % self)
 
 class Join(ResourceSetOp):
     '''
@@ -257,29 +320,40 @@ class JoinConditionOp(QueryOp):
 
     def __init__(self, op, position=SUBJECT, join=INNER):
         self.op = op
-        self.args = []
-        self.appendArg(op)
+        op.parent = self
         self.setJoinPredicate(position)
         self.join = join
         if isinstance(self.position, int):
-            assert isinstance(op, Filter), 'pos %i but not a Filter: %s' % (self.position, type(op))
+            #assert isinstance(op, Filter), 'pos %i but not a Filter: %s' % (self.position, type(op))
             label = "#%d" % self.position
             op.addLabel(label, self.position)
             self.position = label
 
     name = property(lambda self: '%s:%s' % (str(self.position),self.join) )
-
+    args = property(lambda self: (self.op,))
+    
     def setJoinPredicate(self, position):
         if isinstance(position, QueryOp):
             if isinstance(position, Eq):
-                if position.left == Project(SUBJECT):
-                    pred = position.right
-                elif position.right == Project(SUBJECT):
-                    pred = position.left
-                else:
-                    pred = None
-                if pred and isinstance(pred, Project):
-                    self.position = pred.name #position or label
+                def getPosition(op, other):
+                    if op == Project(SUBJECT):
+                        if isinstance(other, Project):
+                           return other.name #will be a position or label
+                    elif isinstance(op, Label):
+                        if isinstance(other, Project):
+                            if other.isPosition():
+                                for name, pos in position.parent.labels:
+                                    if other.name == pos:
+                                        return name
+                            else:
+                                return other.name
+                    return None
+
+                pos = getPosition(position.left, position.right)
+                if pos is None:
+                    pos = getPosition(position.right, position.left)
+                if pos is not None:
+                    self.position = pos
                     #self.appendArg(pred)
                     return
             raise QueryException('only equijoin supported for now')
@@ -316,6 +390,26 @@ class JoinConditionOp(QueryOp):
                 return None
         else:
             return self.position
+
+    def removeArg(self, child):
+        if self.op is child:
+            if self.parent:
+                self.parent.removeArg(self)
+            else:
+                self.op = None
+            
+    def replaceArg(self, child, with_):
+        if child is with_:
+            return
+        if self.op is child:
+            self.op = with_
+            if with_.parent and with_.parent is not self:
+                with_.parent.removeArg(with_)
+            with_.parent = self
+            child._parent = None
+            return
+        print 'op', self.op, 'replace',child, 'with', with_
+        raise QueryException('invalid operation for %s', type(self))
 
 class Filter(QueryOp):
     '''
@@ -500,28 +594,9 @@ class CommunitiveBinaryOp(BooleanOp):
                     right = Constant(right)
                 self.appendArg(right)
 
-    def replaceArg(self, child, with_):
-        for i, a in enumerate(self.args):
-            if a is child:
-                self.args[i] = with_
-                return
-        raise QueryException('invalid operation')
-        
-    def removeArg(self, child):
-        if child is self.left:
-            other = self.right
-        elif child is self.right:
-            other = self.left
-        else:
-            raise QueryException('removeArg failed: not a child')
-
-        if self.parent:
-            assert other
-            self.parent.replaceArg(self, other)        
-
     def __eq__(self, other):
         '''
-        Order of args don't matter because op is communitive
+        Order of args do not matter because op is communitive
         '''
         if type(self) != type(other):
             return False
@@ -610,16 +685,6 @@ class Project(QueryOp):
 
         self.fields = [resolve(name) for name in self.fields]
 
-    def _mutateOpToThis(self, label):
-        '''
-        yes, a terrible hack
-        '''
-        assert isinstance(label, QueryOp)
-        label.__class__ = Project        
-        label.fields = self.fields
-        label.varref = self.varref
-        label.constructRefs = self.constructRefs
-
     def isIndependent(self):
         return False
 
@@ -669,6 +734,13 @@ class ConstructProp(QueryOp):
                 value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self
+
+    def removeArg(self, child):
+        if self.value is child:
+            self.value = None
+            child._parent = None
+        else:
+            raise QueryException('removeArg failed: not a child')
 
     def __eq__(self, other):
         return (super(ConstructProp,self).__eq__(other)
@@ -791,17 +863,15 @@ class Select(QueryOp):
             raise QueryException('bad ast: Select doesnt take %s' % type(op))
         op.parent = self
 
-    args = property(lambda self: [a for a in [self.construct, self.where, self.groupby, self.orderby] if a])
+    args = property(lambda self: tuple([a for a in [self.construct, self.where,
+                                             self.groupby, self.orderby] if a]))
 
     def removeArg(self, child):
         if self.where is child:
             self.where = None
+            child._parent = None
         else:
             raise QueryException('removeArg failed: not a child')
 
     def replaceArg(self, child, with_):
-        if isinstance(child, Join):
-            self.construct.id.appendArg(with_)
-            self.where = None
-            return
         raise QueryException('invalid operation')

@@ -218,17 +218,17 @@ class RequestProcessor(TransactionProcessor):
             ]
 
     def __init__(self, appVars):
+
+        self.baseDir = os.getcwd() #XXX make configurable
+        self.loadConfig(appVars)
                  
         # XXX copy and paste from
         self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
-        self.BASE_MODEL_URI = appVars.get('model_uri') #XXX clean up model_uri and BASE_MODEL_URI
         self.requestContext = [{}] #stack of dicts
         self.lock = None
         self.log = log
         #######################
                 
-        self.baseDir = os.getcwd() #XXX make configurable
-        self.loadConfig(appVars)
         if self.template_path:
             from mako.lookup import TemplateLookup
             self.template_loader = TemplateLookup(directories=self.template_path, 
@@ -239,21 +239,23 @@ class RequestProcessor(TransactionProcessor):
         self.handleCommandLine(self.argsForConfig)
 
     def handleCommandLine(self, argv):
-        '''  the command line is translated into XPath variables
-        as follows:
+        '''  the command line is translated into the `_params`
+        request variable as follows:
 
         * arguments beginning with a '-' are treated as a variable
         name with its value being the next argument unless that
         argument also starts with a '-'
 
-        * the entire command line is assigned to the variable '_cmdline'
+        * the entire command line is assigned to the variable 'cmdline'
         '''
-        kw = argsToKw(argv)
+        kw = utils.attrdict()
+        kw._params = utils.defaultattrdict(argsToKw(argv))        
         #XXX use self.cmd_usage
-        kw['_cmdline'] = '"' + '" "'.join(argv) + '"'
+        kw['cmdline'] = '"' + '" "'.join(argv) + '"'
         self.runActions('run-cmds', kw)
 
     def loadConfig(self, appVars):
+        self.BASE_MODEL_URI = appVars.get('model_uri')
         if not self.BASE_MODEL_URI:
             import socket
             self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
@@ -268,16 +270,14 @@ class RequestProcessor(TransactionProcessor):
             #on this RequestProcessor
             return assignAttrs(self, appVars, varlist, default)
 
-        initConstants( [ 'nsMap', 'extFunctions', 'actions',
-                         'authorizationDigests',
-                         'NOT_CACHEABLE_FUNCTIONS', ], {} )
+        initConstants( [ 'nsMap', 'actions'], {})
         initConstants( ['DEFAULT_MIME_TYPE'], '')
         initConstants( ['BASE_MODEL_URI'], self.BASE_MODEL_URI)
         initConstants( ['appName'], 'root')
         #appName is a unique name for this request processor instance
         if not self.appName:
             self.appName = re.sub(r'\W','_', self.BASE_MODEL_URI)
-        self.log = logging.getLogger("raccoon." + self.appName)
+        self.log = logging.getLogger("app." + self.appName)
 
         useFileLock = appVars.get('useFileLock')
         if useFileLock:
@@ -295,11 +295,9 @@ class RequestProcessor(TransactionProcessor):
         self.globalRequestVars.extend( self.defaultGlobalVars )
         self.defaultPageName = appVars.get('defaultPageName', 'index')
         #cache settings:
-        initConstants( ['LIVE_ENVIRONMENT', 'SECURE_FILE_ACCESS', 'useEtags'], 1)
+        initConstants( ['SECURE_FILE_ACCESS', 'useEtags'], True)
         self.defaultExpiresIn = appVars.get('defaultExpiresIn', 0)
         initConstants( ['ACTION_CACHE_SIZE'], 1000)
-        #disable by default(default cache size used to be 10000000 (~10mb))
-        initConstants( ['maxCacheableStream','FILE_CACHE_SIZE'], 0)        
         self.validateExternalRequest = appVars.get('validateExternalRequest',
                                         lambda *args: True)
         self.getPrincipleFunc = appVars.get('getPrincipleFunc', lambda kw: '')
@@ -485,7 +483,9 @@ class RequestProcessor(TransactionProcessor):
 ##command line handling
 #################################################
 def argsToKw(argv):
-    kw = { }
+    '''
+    '''
+    kw = {}
 
     i = iter(argv)
     try:

@@ -33,8 +33,9 @@ class Test(object):
         self.__dict__.update(attrs)
 
 class Suite(object):    
-    defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None, printdebug=False,
-        skipParse=False, model=None, name=None, query=None, group=None, unordered=False, forUpdate=False)
+    defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None,
+        printdebug=False, skipParse=False, model=None, name=None, query=None,
+        group=None, unordered=False, forUpdate=False)
 
     def __init__(self):
         self.tests = []
@@ -59,7 +60,7 @@ class Suite(object):
         model=kw.get('model')
         if model is not None:
             if not isinstance(model, base.Model):
-                model = modelFromJson(model)            
+                kw['model'] = modelFromJson(model)
         defaults.update(kw)
         t = Test(defaults)
         t.doc = '\n'.join(self._nextdoc)
@@ -74,7 +75,7 @@ class Suite(object):
 #aliases for convenience
 jc = JoinConditionOp
 cs = ConstructSubject
-qF = jql.engine.SimpleQueryEngine.queryFunctions
+qF = vesper.query.engine.SimpleQueryEngine.queryFunctions
 def cp(name, *args, **kw):
     #print 'cp', name, args
     if not args:
@@ -110,7 +111,7 @@ def printdocs(test):
         _printedmodels.append(id(test.model))
         modelformatted = pprint.pformat(modelsrc).replace('\n', '\n ... ')  
         createmodel = Template("""
- >>> $modelname = raccoon.createStore('''$modelformatted''')
+ >>> $modelname = app.createStore('''$modelformatted''')
 """).substitute(locals())
     doc = test.doc
     result = pprint.pformat(test.results).replace('\n', '\n ')     
@@ -121,7 +122,7 @@ $doc$createmodel
 $result
 """).substitute(locals())
 
-def listgroups():
+def listgroups(t):
     currentgroup = None
     count = 0
     for test in flatten(t):
@@ -130,6 +131,7 @@ def listgroups():
             if currentgroup: print currentgroup, count
             currentgroup = test.group
             count = 0
+    if currentgroup: print currentgroup, count
 
 def main(t, cmdargs=None):
     from optparse import OptionParser
@@ -137,12 +139,13 @@ def main(t, cmdargs=None):
     usage = "usage: %prog [options] [group name] [number]"
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
-        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0), ('printdocs',0)]:
+        ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0),
+        ('printdocs',0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
     if options.listgroups:
-        listgroups()
+        listgroups(t)
         return
     options.num = -1
     options.group = None
@@ -214,10 +217,14 @@ def main(t, cmdargs=None):
                 if test.ast == 'error': #expect an error
                     assert testast is None, (
                         'not expecting an ast for test %d: %s' % (i,testast))
-                else: 
-                    assert testast == test.ast, (
+                else:
+                    if isinstance(test.ast, (str,unicode)):
+                        ast = jql.buildAST(test.ast)[0]
+                    else:
+                        ast = test.ast
+                    assert testast == ast, (
                             'unexpected ast for test %d: %s \n %s'
-                            % (i, findfirstdiff(testast, test.ast), testast))
+                            % (i, findfirstdiff(testast, ast), testast))
                 ast = testast
             else:
                 ast = test.ast
@@ -273,4 +280,7 @@ def main(t, cmdargs=None):
             else:
                 assert resultsMatch,  ('unexpected results for test %d' % i)
 
-    print '***** %d tests passed, %d skipped' % (count, skipped)
+    if not options.printdocs:
+        print '***** %d tests passed, %d skipped' % (count, skipped)
+    elif t._nextdoc:
+        print '\n'.join(t._nextdoc)

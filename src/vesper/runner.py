@@ -9,7 +9,6 @@ cmd_usage = '''
 -r record requests (ctrl-c to stop recording) 
 -d [debug.pkl]: debug mode (replay the requests saved in debug.pkl)
 -x exit after executing config specific cmd arguments
--p specify the path (overrides RACCOONPATH env. variable)
 -m [store.nt] load the RDF model
    (default model supports .json, .mjson, .rdf, .nt)
 '''
