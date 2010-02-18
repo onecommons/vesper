@@ -218,7 +218,6 @@ class RequestProcessor(TransactionProcessor):
             ]
 
     def __init__(self, appVars):
-
         self.baseDir = os.getcwd() #XXX make configurable
         self.loadConfig(appVars)
                  
@@ -534,6 +533,9 @@ class AppConfig(utils.attrdict):
             self['modelFactory'] = store.get_factory(proto)
             self['STORAGE_PATH'] = path
         #XXX if modelFactory is set should override STORAGE_URL
+        # print self['modelFactory']
+        # print self['STORAGE_PATH']
+        
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
 
@@ -622,30 +624,22 @@ def _importApp(baseapp):
         __import__(baseapp, baseglobals)
     _current_configpath.pop()
 
-
-def createApp(**config):
-    """
-    Return an 'AppConfig' initialized with keyword arguments.
-    """
-    global _current_config
-    _current_config = AppConfig()
-    loadApp(None, **config)
-    
-    return _current_config
-    
 def getCurrentApp():
     return _current_config
 
-# XXX should this be called createApp now?
-def loadApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), actions=None, **config):
+# XXX special case for __name__=='__main__' for derivedapp?
+def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), actions=None, **config):
     '''
-    Return an 'AppConfig' by loading an existing app (a file with a call to createApp)
+    Create a new `AppConfig`.
+
+    :param derivedapp: is the name of the module that is extending the app.  (Usually just __name__)
+    :param baseapp: is a path to the file of the app to load.  This file should have a call to createApp() in it
     
-    'baseapp' is a path to the file of the app to load
-    'static_path', 'template_path', and 'actions' are appended to the variables
-    of the same name defined in the base app
+    :param static_path: added to the static resource path of the app, will override the base app.
+    :param template_path: added to the template resource path of the app, will override the base app.
+    :param actions: added to the actions map of the app, will override the base app.
     
-    Any other keyword arguments will override values in the base app
+    :param config: Any other keyword arguments will override values in the base app
     '''
     global _current_config
     
@@ -660,6 +654,8 @@ def loadApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), act
         assert isinstance(baseapp, (str, unicode))
         #sets _current_config if the baseapp calls createApp
         _importApp(baseapp)
+    else:
+        _current_config = AppConfig()        
     
     #config variables that shouldn't be simply overwritten should be specified 
     #as an explicit function args
@@ -674,13 +670,15 @@ def loadApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), act
     basedir = _current_configpath[-1] or derived_path
     if basedir is not None:
         if isinstance(static_path, (str, unicode)):
-            static_path = [static_path]     
+            static_path = [static_path]
         static_path = list(static_path) + _current_config.get('static_path',[])
         _current_config.static_path = _normpath(basedir, static_path)
+        assert all([os.path.isdir(x) for x in _current_config.static_path]), "invalid directory in:" + str(_current_config.static_path)
 
         if isinstance(template_path, (str, unicode)):
-            template_path = [template_path]    
+            template_path = [template_path]
         template_path = list(template_path) + _current_config.get('template_path',[])
         _current_config.template_path = _normpath(basedir, template_path)
+        assert all([os.path.isdir(x) for x in _current_config.template_path]), "invalid directory in:" + str(_current_config.template_path)
     
     return _current_config

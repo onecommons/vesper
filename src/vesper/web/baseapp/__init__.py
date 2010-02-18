@@ -2,7 +2,7 @@ from vesper.app import createApp, Action
 from vesper.web.route import Route
 import vesper.web.route
 from vesper.utils import attrdict
-from vesper.app import loadApp, getCurrentApp
+from vesper.app import getCurrentApp
 from vesper.backports import json
 import mako.runtime
 #contrary to http://www.makotemplates.org/docs/runtime.html#runtime_context_variables

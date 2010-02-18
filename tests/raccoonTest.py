@@ -51,7 +51,8 @@ class RaccoonTestCase(unittest.TestCase):
         logging.root.removeHandler( self.logHandler )
     
     def testMinimalApp(self):
-        app = vesper.app.loadApp(baseapp='testMinimalApp.py', model_uri='test:')
+        app = vesper.app.createApp(baseapp='testMinimalApp.py', model_uri='test:')
+        app.load()
         root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
@@ -68,14 +69,16 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals( '<html><body>not found!</body></html>', result)
 
     def testSequencerApp(self):
-        app = vesper.app.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app = vesper.app.createApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app.load()
         root = app._server
         result = root.runActions('http-request', dict(_name='foo'))
         self.assertEquals("<html><body>page content.</body></html>", result)
 
-        app = vesper.app.loadApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app = vesper.app.createApp(baseapp='testSequencerApp.py', model_uri='test:')
+        app.load()
         root = app._server
-        # XXX loadApp doesn't specify whether to create a RequestProcessor or HTTPRequestProcessor
+        # XXX createApp doesn't specify whether to create a RequestProcessor or HTTPRequestProcessor
         # root = web.HTTPRequestProcessor(a='testSequencerApp.py',model_uri = 'test:')
         kw = dict(_name='no such page', _responseHeaders={}, _environ={})
         result = root.handleHTTPRequest(kw)
@@ -88,7 +91,8 @@ class RaccoonTestCase(unittest.TestCase):
         
 
     def _testErrorHandling(self, appVars=None):
-        app = vesper.app.loadApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
+        app = vesper.app.createApp(baseapp='testErrorHandling-config.py', model_uri='test:', **(appVars or {}))
+        app.load()
         root = app._server
         #make sure the error handler is run and sets the status code to 404 instead of the default 200
         kw = dict(_name='foo', 
@@ -121,7 +125,8 @@ class RaccoonTestCase(unittest.TestCase):
         
     def testUpdatesApp(self):
         # root = app.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
-        app = vesper.app.loadApp(baseapp='testUpdatesApp.py', model_uri='test:')
+        app = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:')
+        app.load()
         root = app._server                
         #set timestamp to 0 so tests are reproducible:
         root.dataStore.model.createTxnTimestamp = lambda *args: 0
@@ -176,7 +181,8 @@ class RaccoonTestCase(unittest.TestCase):
         else:
             self.fail('should have raised an error')
         
-        app2 = vesper.app.loadApp(baseapp='testUpdatesApp.py', model_uri='test:', trunkId='0A', branchId='0B')
+        app2 = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:', trunkId='0A', branchId='0B')
+        app2.load()
         root2 = app2._server
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
                 

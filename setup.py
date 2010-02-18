@@ -63,7 +63,7 @@ setup(
 
    entry_points = {
         'console_scripts': [
-            'vesper-admin = vesper.web.admin:parseCmdLine',
+            'vesper-admin = vesper.web.admin:console_main',
         ],
     },
 
