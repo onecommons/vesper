@@ -629,7 +629,7 @@ def createApp(**config):
     """
     global _current_config
     _current_config = AppConfig()
-    loadApp(__name__, **config)
+    loadApp(None, **config)
     
     return _current_config
     
@@ -637,7 +637,7 @@ def getCurrentApp():
     return _current_config
 
 # XXX should this be called createApp now?
-def loadApp(derivedapp, baseapp=None, static_path=(), template_path=(), actions=None, **config):
+def loadApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), actions=None, **config):
     '''
     Return an 'AppConfig' by loading an existing app (a file with a call to createApp)
     
@@ -649,9 +649,12 @@ def loadApp(derivedapp, baseapp=None, static_path=(), template_path=(), actions=
     '''
     global _current_config
     
-    (derived_path, isdir) = _get_module_path(derivedapp)
-    if not isdir:
-        derived_path = os.path.dirname(derived_path)
+    if derivedapp:
+        (derived_path, isdir) = _get_module_path(derivedapp)
+        if not isdir:
+            derived_path = os.path.dirname(derived_path)
+    else:
+        derived_path = None
     
     if baseapp:
         assert isinstance(baseapp, (str, unicode))
@@ -669,15 +672,15 @@ def loadApp(derivedapp, baseapp=None, static_path=(), template_path=(), actions=
         _current_config.actions = actions or {}
     
     basedir = _current_configpath[-1] or derived_path
-    if isinstance(static_path, (str, unicode)):
-        static_path = [static_path]     
-    static_path = list(static_path) + _current_config.get('static_path',[])
-    _current_config.static_path = _normpath(basedir, static_path)
+    if basedir is not None:
+        if isinstance(static_path, (str, unicode)):
+            static_path = [static_path]     
+        static_path = list(static_path) + _current_config.get('static_path',[])
+        _current_config.static_path = _normpath(basedir, static_path)
 
-    if isinstance(template_path, (str, unicode)):
-        template_path = [template_path]    
-    template_path = list(template_path) + _current_config.get('template_path',[])
-    _current_config.template_path = _normpath(basedir, template_path)
+        if isinstance(template_path, (str, unicode)):
+            template_path = [template_path]    
+        template_path = list(template_path) + _current_config.get('template_path',[])
+        _current_config.template_path = _normpath(basedir, template_path)
     
-    _current_config.load()
     return _current_config
