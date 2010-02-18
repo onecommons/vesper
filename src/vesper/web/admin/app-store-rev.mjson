@@ -1,0 +1,32 @@
+=multipart-json
+{
+  "pjson": "0.9", 
+  "namemap": {
+    "refs": "@(URIREF)"
+  }
+}
+{
+  "type": "@post", 
+  "content-Type": "text/plain", 
+  "id": "bnode:j:t:object:xb1512102e80e48f99f45fe82aab418ae2", 
+  "contents": "{ \"foo\":123,  \"bar\" : 777, \"baz\": 999 }", 
+  "created": 1265743729614
+}
+{
+  "type": "@post", 
+  "content-Type": "text/plain", 
+  "id": "bnode:j:t:object:xb1512102e80e48f99f45fe82aab418ae1", 
+  "contents": {"multipartjsonref":"1"}, 
+  "created": 1265743632070
+}
+= 1 ===
+bla bha ljfa;lsdjfa;lsdjfa;sldfjas
+
+===
+{
+  "type": "@post", 
+  "content-Type": "text/plain", 
+  "id": "bnode:j:t:object:xb9fad7e4717e4641877a80a0482192851", 
+  "contents": "blah", 
+  "created": 1265674646941
+}
