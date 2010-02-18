@@ -1,0 +1,75 @@
+/* http://augeas.net/styles/generic.css */
+body {
+  margin: 0em;
+  padding: 0px;
+  color: rgb(0,0,0);
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+}
+
+p, ul, ol, dl {
+  padding: 0px;
+  margin: 0px;
+}
+
+ol,ul {
+  margin-left: 2em;
+}
+
+ol,ul,dl,p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+/*
+p:first-line {
+  margin-right: 1em;
+}
+
+div.body p:first-letter {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+*/
+
+h1,h2,h3,h4,h5,h6 {
+  font-weight: bold;
+  margin: 0px;
+  padding: 0px;
+  margin-top: 0.5em;
+}
+
+div.footer {
+  margin-top: 1em;
+}
+
+h1 {
+  font-size: 1.2em;
+}
+h2 {
+  font-size: 1.1em;
+}
+h3 {
+  font-size: 1.0em;
+}
+h4 {
+  font-size: 0.9em;
+}
+h5 {
+  font-size: 0.8em;
+}
+h6 {
+  font-size: 0.6em;
+}
+
+dl dt {
+  margin-left: 1em;
+  margin-right: 2em;
+  font-weight: bold;
+  font-size: larger;
+}
+
+dl dd {
+  margin-left: 2em;
+  margin-right: 2em;
+  margin-bottom: 0.5em;
+}

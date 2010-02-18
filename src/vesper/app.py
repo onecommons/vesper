@@ -521,6 +521,12 @@ def initLogConfig(logConfig):
 class AppConfig(utils.attrdict):
     _server = None
     
+    def updateFromConfigFile(self, filepath):
+        # XXX check to see if we've already started running
+        config = {}
+        execfile(filepath, config, config)
+        self.update(config)
+    
     def load(self):
         if self.get('STORAGE_URL'):        
             (proto, path) = self['STORAGE_URL'].split('://')
@@ -532,7 +538,7 @@ class AppConfig(utils.attrdict):
             initLogConfig(self['logconfig'])
 
         from web import HTTPRequestProcessor
-        root = HTTPRequestProcessor(appVars=self)
+        root = HTTPRequestProcessor(appVars=self.copy())
         dict.__setattr__(self, '_server', root)
         return self._server
         
@@ -579,6 +585,21 @@ def _normpath(basedir, path):
     return [os.path.isabs(dir) and dir or os.path.normpath(
                         os.path.join(basedir, dir)) for dir in path]
 
+def _get_module_path(modulename):
+    "for a modulename like 'vesper.web.admin' return a tuple (modulepath, is_directory)"
+    import sys, imp
+    parts = modulename.split('.')
+    parts.reverse()
+    path = None
+    while parts:
+        part = parts.pop()
+        f = None
+        try:
+            f, path, descr = imp.find_module(part, path and [path] or None)
+        finally:
+            if f: f.close()
+    return (path, descr[-1] == imp.PKG_DIRECTORY)
+
 def _importApp(baseapp):
     '''
     Executes the given app config file. If `createApp()` was 
@@ -593,17 +614,7 @@ def _importApp(baseapp):
         _current_configpath.append( os.path.dirname(os.path.abspath(baseapp)) )
         execfile(baseapp, baseglobals)
     else:
-        import imp
-        parts = baseapp.split('.')
-        parts.reverse()
-        path = None
-        while parts:
-            part = parts.pop()
-            f = None
-            try:
-                f, path, descr = imp.find_module(part, path and [path] or None)
-            finally:
-                if f: f.close()
+        (path, isdir) = _get_module_path(baseapp)
         assert path
         #set this global so we can resolve relative paths against the location
         #of the config file they appear in
@@ -612,21 +623,21 @@ def _importApp(baseapp):
     _current_configpath.pop()
 
 
-def createApp(fromFile=None, **config):
+def createApp(**config):
     """
-    Return an 'AppConfig' initialized with keyword arguments.  If a path to a 
-    file containing config variables is given, they will be merged with the
-    config args
+    Return an 'AppConfig' initialized with keyword arguments.
     """
-    if fromFile:
-        execfile(fromFile, config, config)
     global _current_config
     _current_config = AppConfig()
-    loadApp(None, **config)
+    loadApp(__name__, **config)
     
     return _current_config
+    
+def getCurrentApp():
+    return _current_config
 
-def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
+# XXX should this be called createApp now?
+def loadApp(derivedapp, baseapp=None, static_path=(), template_path=(), actions=None, **config):
     '''
     Return an 'AppConfig' by loading an existing app (a file with a call to createApp)
     
@@ -638,10 +649,14 @@ def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
     '''
     global _current_config
     
+    (derived_path, isdir) = _get_module_path(derivedapp)
+    if not isdir:
+        derived_path = os.path.dirname(derived_path)
+    
     if baseapp:
         assert isinstance(baseapp, (str, unicode))
         #sets _current_config if the baseapp calls createApp
-        _importApp(baseapp)                    
+        _importApp(baseapp)
     
     #config variables that shouldn't be simply overwritten should be specified 
     #as an explicit function args
@@ -653,7 +668,7 @@ def loadApp(baseapp, static_path=(), template_path=(), actions=None, **config):
     else:
         _current_config.actions = actions or {}
     
-    basedir = _current_configpath[-1] or os.getcwd()
+    basedir = _current_configpath[-1] or derived_path
     if isinstance(static_path, (str, unicode)):
         static_path = [static_path]     
     static_path = list(static_path) + _current_config.get('static_path',[])

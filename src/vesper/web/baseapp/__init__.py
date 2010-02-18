@@ -2,7 +2,7 @@ from vesper.app import createApp, Action
 from vesper.web.route import Route
 import vesper.web.route
 from vesper.utils import attrdict
-from vesper.app import loadApp
+from vesper.app import loadApp, getCurrentApp
 from vesper.backports import json
 import mako.runtime
 #contrary to http://www.makotemplates.org/docs/runtime.html#runtime_context_variables
@@ -103,6 +103,58 @@ app = createApp(
     defaultPageName = 'index.html',
     actions = actions
 )
+
+def parseCmdLine():
+    # XXX
+    import os, sys, logging
+    from optparse import OptionParser
+    app = getCurrentApp()
+    
+    parser = OptionParser() # XXX usage string here!
+    parser.add_option("-l", "--log-config", dest="log_config", help="path to logging configuration file")
+    parser.add_option("-s", "--storage", dest="storage", help="storage url")
+    parser.add_option("-p", "--port", dest="port", help="server listener port")
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False)
+    (options, args) = parser.parse_args()
+    
+    if len(args) > 0: # XXX
+        print "loading config file from:", args[0]
+        app.updateFromConfigFile(args[0])
+    
+    CONF={}
+    
+    if options.log_config:
+        logpath = options.log_config
+    else:
+        serverdir = os.path.dirname(os.path.abspath(__file__))
+        logpath = os.path.join(serverdir, "log.conf")
+    
+    if os.path.exists(logpath) and os.path.isfile(logpath):
+        print "loading log config file:" + logpath
+        CONF['logconfig'] = logpath
+    else:
+        if options.verbose:
+            loglevel = logging.DEBUG
+        else:
+            loglevel = logging.INFO
+        log = logging.getLogger()
+        log.setLevel(loglevel)
+        format="%(asctime)s %(levelname)s %(name)s %(message)s"
+        datefmt="%d %b %H:%M:%S"    
+        stream = logging.StreamHandler(sys.stdout)
+        stream.setFormatter(logging.Formatter(format, datefmt))
+        log.addHandler(stream)
+        
+    if options.storage:
+        CONF['STORAGE_URL'] = options.storage
+    if options.port:
+        CONF['PORT'] = int(options.port)
+    
+    # apply these last since they must override anything from the config file
+    if len(CONF) > 0:
+        app.update(CONF)
+        
+    return app # ??
 
 if __name__ == "__main__":
     app.run()

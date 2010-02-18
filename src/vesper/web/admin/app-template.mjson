@@ -1,0 +1,70 @@
+=multipart-json
+{
+  "sjson": "0.9", 
+  "namemap": {
+    "refs": "@(URIREF)"
+  }
+}
+{
+  "created": 1262711505580, 
+  "content-Type": "text/plain", 
+  "tags": [
+    "@scrapple"
+  ], 
+  "type": "@post", 
+  "id": "bnode:j:t:object:x4b153b5543d0499b8d8c03b4627b92d21", 
+  "contents": {"multipartjsonref":"1"}
+}
+= 1 ===
+= What is it? -- The big picture
+
+Scrapple is the software that runs the onecommons project, whose goal is to provide a web service that: 
+ * allows anyone to collaborate to create a shared knowledge map of the web by selecting and organizing content into related topics
+ * topics are collections of links and structured content (e.g. facts, questions and answers, structured conversations)
+ * open, free, decentralized, and non-commercial.
+===
+{
+  "created": 1263695483260, 
+  "content-Type": "text/plain", 
+  "tags": [
+    {
+      "subsumedby": "@scrapple", 
+      "type": "@tag", 
+      "id": "bnode:j:e:object:bnode:j:t:object:xfe3e96c18dbc4cf19480025e75e8046c1:xb186691ec033417dbd269fe858b8d4e21", 
+      "label": "help"
+    }
+  ], 
+  "type": "@post", 
+  "id": "bnode:j:t:object:xfe3e96c18dbc4cf19480025e75e8046c1", 
+  "contents": {"multipartjsonref":"2"}
+}
+= 2 ===
+= Getting Started 
+
+This page demonstrates the core functionality of the scrapple topic editor (don't worry, scrapple is just a placeholder name ;). Scrapple let's you easily organize your content from many different perspectives yet maintain a simple view of the contents. It does this by organizing the content into topics and letting you categorize your topics into higher-level topics. 
+
+== Things to try
+
+ * Entries 
+ ** Click on an entry to edit
+ ** Use the text box on the right to tag an entry with a topics, use a comma to enter more than one.
+ ** The rich text editor isn't implemented yet; text you enter is interpreted as [[http://www.wikicreole.org|wikicreole]]
+ * Topic Tree (in the right column)
+ ** Right-click or Ctrl-Click to create a new topic or rename or delete an existing one
+ ** Topics can have more than one parent: hold down the Ctrl key while dragging a topic to copy it to a new parent.  
+ * Panels (the UI elements with the orange header)
+ ** You can reorder any of the panels by dragging the header. You can even move them between the left and right columns
+ ** You can resize a panel by dragging the grippy icon at bottom of each panel or collapse it by clicking on the twisty icon on the upper left.
+
+== Known issues
+ * search doesn't work 
+ * many UI glitches and usability issues
+ * colors scheme is ugly
+ * no way to scroll or page panels
+ * only has been tested with the latest versions of Firefox, Chrome and Safari
+===
+{
+  "type": "@tag", 
+  "id": "scrapple", 
+  "label": "scrapple"
+}
