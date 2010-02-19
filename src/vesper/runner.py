@@ -1,6 +1,6 @@
 import os, sys
 
-from vesper.app import argsToKw, loadApp
+from vesper.app import argsToKw, createApp
 
 DEFAULT_cmd_usage = 'python raccoon.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.nt -a config.py '
 cmd_usage = '''
@@ -100,7 +100,7 @@ def main(argv=sys.argv[1:], out=sys.stdout):
     appPath, vars = parse_args(argv, out)
     if not appPath:
         return -1
-    loadApp(appPath, **vars).run(out=out)
+    createApp(baseapp=appPath, **vars).run(out=out)
     return 0
 
 
