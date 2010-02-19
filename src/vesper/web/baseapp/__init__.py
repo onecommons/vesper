@@ -157,5 +157,5 @@ def parseCmdLine():
     return app # ??
 
 if __name__ == "__main__":
+    parseCmdLine()
     app.run()
-    

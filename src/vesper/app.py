@@ -9,6 +9,7 @@ import os, os.path, sys, traceback, re
 
 from vesper import utils
 from vesper.utils import glock, MRUCache
+from vesper.utils.Uri import UriToOsPath
 from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
 
@@ -527,14 +528,15 @@ class AppConfig(utils.attrdict):
         self.update(config)
     
     def load(self):
-        if self.get('STORAGE_URL'):        
-            (proto, path) = self['STORAGE_URL'].split('://')
+        if self.get('STORAGE_URL'):
+            (proto, path) = self['STORAGE_URL'].split(':',1)
 
             self['modelFactory'] = store.get_factory(proto)
+            if proto == 'file':
+                path = UriToOsPath(path)
             self['STORAGE_PATH'] = path
         #XXX if modelFactory is set should override STORAGE_URL
-        # print self['modelFactory']
-        # print self['STORAGE_PATH']
+        print "Using %s at %s" % (self['modelFactory'].__name__, self['STORAGE_PATH'])
         
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
