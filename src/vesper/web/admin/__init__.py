@@ -9,7 +9,7 @@ import logging
 logging.basicConfig()
 
 app = createApp(__name__, 'vesper.web.baseapp'
-              ,static_path=['static','']
+              ,static_path=['static']
               ,template_path=['templates']
               ,STORAGE_PATH="app-store-rev.mjson"
               ,modelOptions=dict(serializeOptions=dict(indent=2))

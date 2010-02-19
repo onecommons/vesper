@@ -584,23 +584,37 @@ _current_config = AppConfig()
 _current_configpath = [None]
 
 def _normpath(basedir, path):
-    return [os.path.isabs(dir) and dir or os.path.normpath(
-                        os.path.join(basedir, dir)) for dir in path]
+    """
+    return an absolute path given a basedir and a path fragment.  If `path` is already absolute
+    it will be returned unchanged.
+    """
+    if os.path.isabs(path):
+        return path
+    else:
+        tmp = os.path.normpath(os.path.join(basedir, path))
+        if os.path.isabs(tmp):
+            return tmp
 
 def _get_module_path(modulename):
-    "for a modulename like 'vesper.web.admin' return a tuple (modulepath, is_directory)"
+    "for a modulename like 'vesper.web.admin' return a tuple (absolute_module_path, is_directory)"
     import sys, imp
-    parts = modulename.split('.')
-    parts.reverse()
-    path = None
-    while parts:
-        part = parts.pop()
-        f = None
-        try:
-            f, path, descr = imp.find_module(part, path and [path] or None)
-        finally:
-            if f: f.close()
-    return (path, descr[-1] == imp.PKG_DIRECTORY)
+    if modulename == "__main__":
+        m = sys.modules[modulename]
+        assert hasattr(m, '__file__'), "__main__ module missing __file__ attribute"
+        path = _normpath(os.getcwd(), m.__file__)
+        return (path, False)
+    else:
+        parts = modulename.split('.')
+        parts.reverse()
+        path = None
+        while parts:
+            part = parts.pop()
+            f = None
+            try:
+                f, path, descr = imp.find_module(part, path and [path] or None)
+            finally:
+                if f: f.close()
+        return (path, descr[-1] == imp.PKG_DIRECTORY)
 
 def _importApp(baseapp):
     '''
@@ -617,6 +631,7 @@ def _importApp(baseapp):
         execfile(baseapp, baseglobals)
     else:
         (path, isdir) = _get_module_path(baseapp)
+        # print "_get_module_path for:" + str(baseapp) + " --> path:" + str(path) + " isdir:" + str(isdir)
         assert path
         #set this global so we can resolve relative paths against the location
         #of the config file they appear in
@@ -627,7 +642,6 @@ def _importApp(baseapp):
 def getCurrentApp():
     return _current_config
 
-# XXX special case for __name__=='__main__' for derivedapp?
 def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), actions=None, **config):
     '''
     Create a new `AppConfig`.
@@ -649,7 +663,7 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
             derived_path = os.path.dirname(derived_path)
     else:
         derived_path = None
-    
+        
     if baseapp:
         assert isinstance(baseapp, (str, unicode))
         #sets _current_config if the baseapp calls createApp
@@ -672,13 +686,15 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
         if isinstance(static_path, (str, unicode)):
             static_path = [static_path]
         static_path = list(static_path) + _current_config.get('static_path',[])
-        _current_config.static_path = _normpath(basedir, static_path)
+        _current_config.static_path = [_normpath(basedir, x) for x in static_path]
+        # print "static path:" + str(_current_config.static_path)
         assert all([os.path.isdir(x) for x in _current_config.static_path]), "invalid directory in:" + str(_current_config.static_path)
 
         if isinstance(template_path, (str, unicode)):
             template_path = [template_path]
         template_path = list(template_path) + _current_config.get('template_path',[])
-        _current_config.template_path = _normpath(basedir, template_path)
+        _current_config.template_path = [_normpath(basedir, x) for x in template_path]
+        # print "template path:" + str(_current_config.template_path)
         assert all([os.path.isdir(x) for x in _current_config.template_path]), "invalid directory in:" + str(_current_config.template_path)
     
     return _current_config
