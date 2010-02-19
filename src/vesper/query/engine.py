@@ -862,6 +862,15 @@ def getNullRows(columns):
             nullrows[i] = ColumnInfo(c.label, None)
     return nullrows
 
+# def serializeValue(context, v):
+#     scope = None
+#     if isinstance(v, ResourceURI):
+#         objectType = RESOURCE
+#     elif not isinstance(v, (str,unicode)) and scope is None:
+#         return v
+#     else:
+#         return context.serializer.serializeValue(v, objectType, scope)
+        
 def _setConstructProp(shape, pattern, prop, v, name):
     isSeq = isinstance(v, (list,tuple))
     #print '_setConstructProp', v, isSeq, prop.ifEmpty

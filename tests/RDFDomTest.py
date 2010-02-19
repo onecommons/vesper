@@ -280,7 +280,8 @@ _:1 <http://rx4rdf.sf.net/ns/wiki#name> _:2 .
             #print 'newstmts'
             #print newstmts
             #print 'lenght', len(stmts), len(newstmts)
-            self.failUnless(stmts == newstmts, pprintdiff(stmts, newstmts ))
+            self.failUnless(stmts == newstmts, 
+                        stype+' failed: '+ pprintdiff(stmts, newstmts ))
 
     def XXXtestSubtype(self):        
         model = '''_:C <http://www.w3.org/2000/01/rdf-schema#subClassOf> _:D.

@@ -1,45 +1,99 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 '''
- pjson (`persistent json`)
- ~~~~~
+pjson (`persistent json`)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
- pjson is a set of rules used to persist JSON
- 
- * A JSON_ object containing a property named `id` will be mapped to a persistent object with a key whose value is the value of the `id` property. 
- * A JSON_ object without an `id` will be associated with the closest ancestor (containing) JSON object that has an id. If the object is at the top level it will be assigned an anonymous id.
+pjson is a set of property names and value patterns designed to make it easy 
+to persist JSON. Its basic elements can be summarized as:
 
-== references ==
-* two components of the language: namemaps and explicit values
-* when reading, if idrefpattern is present, then it will be used to deduce whether or not value is a reference, even if unambiguousRefs is specified
-** idrefpattern : '' removes the patten in the current scope, all values will be treated as literals
-* when writing, may specify a match pattern and an output pattern, add to output and any reference that does not match the pattern will be serialized explicitly, as will any literal that does match the pattern
+  `id` property 
+     Indicates the id (or key) of the JSON object
+   A JSON object like `{'$ref' : 'ref'}` or a value that matches `@ref` pattern.
+      Parses as an object reference
+   A JSON object like `{'datatype': 'datatype_name', value : 'value' }` 
+      Parses the value is a non-JSON datatype
+  
+`pjson` also defines a header object that can be used to specify alternative 
+names or patterns for those predefined -- the aim is allow the use of 
+existing JSON without having to modify it other than supply a pjson header.
 
-namemap : {
-namemap : 'nsmap',
-id : 'itemid',
-context : 'scope',
-ids : [ '/foo:(/w+)/http://www#$1' ],
-props : ['/foo:(/w+)/http://foo$1' ],
-refs : [/foo/],
-'date' : '/$3/foo'
-}
+The header object must contain a property is name is *"pjson"* and value is *"0.9"*.
+It may also contain any of the reserved `pjson` property names 
+(i.e. `id`, `$ref`, `namemap`, `id`, `datatype` and `context`) 
+If present the value of the property is used as the reserved name.
+For example, ``{ "psjon": "0.9", "id" : "itemid" }`` will instruct the parser 
+to treat "itemid" as the `id`; properties named "id" will be treated as standard properties.
 
-* reading from store: needs to write out a namemap so that it can be read back in
-  * internal-refpattern: distingish ref from values: round-trip OK
-  * output ref differently: could prevent internal-refpattern from matching refs
-  * limit to augmenting: /foo/@$1 => @(foo)/$1
-  * datatypes:  
-  * property names, ids, references
+The header object can also contain a property named `refs`, which can be either a string or a JSON object. 
+If it is a string, it must either be empty or match the following pattern:
+  
+*literal?*'('*regex*')'*literal?*
 
-user can specify a namemap:
-ref : ref || { '@(ref)' : '$1'} 
-ref : {'ref' : '(regex)'}
+Where *regex* is a string that will be treated as a regular expression and 
+*literal* are optional strings [1]_. When parsing JSON will treat any property
+value that matches the *regex* as an object reference.
+The *literal*s at the begin or end of the pattern also have to match if specified
+but they are ignored as part of the object reference. Note that the parentheses
+around the *regex* are required to delimitate the regex (even if no *literal* 
+is specified) but ignored when pattern matching the value.
+The regex follows the Javascript regular expressions (but without the leading 
+and trailing "/") except two special values can be included in the regex:
+*ABSURI* and *URIREF*. The former will expand into regular expression matching
+an absolute URL, the latter expands to regular expression that matches 
+relative URLs, which includes most strings that don't contain spaces or most
+punctuation characters.  
 
-'datatype' : 'pattern'+'replace'
+As an example, the default `refs` pattern is *@(URIREF)*.
 
-datatypemap, datatype map is only converting internal datatype to json datatypes. 
-The other direction is needs to be specified in the datatype.
+If `refs` is an empty string, pattern matching will be disabled.
+
+If `refs` is an JSON object it must contain only one property. 
+The property name will be treated as a ref pattern as described above,
+and the property value will be used to generate the object reference.
+The sequence "@@" will be replaced with the value of the regex match.
+For example:
+
+``{"<([-_a-zA-Z0-9])>" : "http://example.com/@@"}``
+
+will treat values with like "<id1>" as an object reference with the value
+"http://example.com/id1".
+
+When serializing to JSON, any object reference that doesn't match the `refs` 
+pattern will be serialized as an explicit ref object.
+Likewise, any value that is not an object reference but *does* match the `refs` 
+pattern will be serialized as an explicit data value.
+
+Advance properties:
+
+ `namemap`  
+    The value of the `namemap` property must be a `pjson` header object as 
+    described above. That header will be applied to all properties and descendent objects 
+    contained within the JSON object that contains the `namemap` property.
+    
+ `context`
+    The presence of a `context` property will assign that context to all 
+    properties and descendent objects contained within the JSON object.
+    The `context` property can also appear inside a `datatype` or `$ref` object.
+    In that case, the context will be applied to only that value.
+    
+Additional semantics:
+
+ * A JSON object without an `id` will be associated with the closest ancestor 
+   (containing) JSON object that has an id. 
+   If the object is at the top level it will be assigned an anonymous id.
+ * `datatype` property can be either 'json', 'lang:' + *language code*, or a URI reference.
+    If "json", the value is treated as is. If it begins with "lang:", it labels the value
+    (which should be a string) with the given language code. 
+    Any other value will be treated as non-JSON datatype whose interpretation 
+    is dependent on the data store.
+
+.. [1] Design note: This pattern was chosen because it always reversible 
+ -- so that the same `namemap` can be used when serializing `pjson` to generate 
+ references from the object ids.
+
+
+Parse and serialize psjon to and from Vesper tuplesets.
 '''
 import re
 
@@ -47,7 +101,7 @@ from vesper.backports import *
 from vesper.data import base
 from vesper.data.store.basic import MemStore
 from vesper.data.base import Statement, StatementWithOrder, OBJECT_TYPE_RESOURCE, RDF_MS_BASE, RDF_SCHEMA_BASE, OBJECT_TYPE_LITERAL
-from vesper.data.base.utils import encodeStmtObject, OrderedModel, peekpair
+from vesper.data.base.utils import isBnode, OrderedModel, peekpair
 from vesper import multipartjson
 
 try:
@@ -160,18 +214,35 @@ True
 
 _defaultBNodeGenerator = 'uuid'
 
-def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, valueName='value'):
+def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, 
+                                            datatypePropName = 'datatype'):
+    assert objectType != OBJECT_TYPE_RESOURCE
     if len(objectType) > 1:
-        encode = scope is not None
-        if not encode:
-            valueparse = _xsdmap.get(objectType)
-            if valueparse:
-                return valueparse(data)
-            if not preserveRdfTypeInfo:
-                valueparse = _xsdExtendedMap.get(objectType)
-                if valueparse:
-                    return valueparse(data)
-        return encodeStmtObject(data, objectType, scope=scope, valueName=valueName)
+        valueparse = _xsdmap.get(objectType)
+        if not preserveRdfTypeInfo and not valueparse:
+            valueparse = _xsdExtendedMap.get(objectType)
+        
+        if scope is None and valueparse:
+            return valueparse(data)
+        elif valueparse:            
+            literalObj = {datatypePropName:'json', 'value':valueparse(data)}
+        else:
+            if objectType.find(':') > -1:
+                #must be a language tag
+                dataType = 'lang:' + objectType 
+            else: #otherwise its a datatype URI
+                if objectType.startswith('pjson:'): 
+                    #this was tacked on while parsing to make type look like 
+                    #an URI, so strip it out now
+                    dataType = objectType[len('pjson:'):]
+                else:
+                    dataType = objectType
+            literalObj = {datatypePropName : dataType, 'value': data }
+    
+        if scope is not None:
+            literalObj['context'] = scope
+            
+        return literalObj
     else:
         return data
 
@@ -235,16 +306,27 @@ class Serializer(object):
             regexes = (None, None, None)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = regexes
 
-    def _value(self, stmt, context=None):
-        #XXX use valueName
-        objectType = stmt.objectType            
-        v = toJsonValue(stmt.object, objectType, self.preserveRdfTypeInfo, context)
+    def serializeObjectValue(self, objectValue, objectType, scope):
+        if objectType != OBJECT_TYPE_RESOURCE:
+            return self._value(objectValue, objectType, scope), False
+        elif objectValue == RDF_MS_BASE + 'nil' and scope is None:
+            return [], False
+        else: #otherwise it's a resource
+            return self.serializeRef(objectValue, scope), True
+        
+    def _value(self, objectValue, objectType, context=None):
+        #XXX use objectTypeName
+        v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo, context)
 
         if isinstance(v, (str, unicode)):                
             if context is not None or (self.outputRefPattern 
                             and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
-                return encodeStmtObject(v, objectType, scope=context)
+                datatypePropName = 'datatype' #XXX
+                literalObj = { datatypePropName : 'json', 'value' : v }
+                if context is not None:
+                    literalObj['context'] = context
+                return literalObj
         else:
             assert context is None or isinstance(v, dict), 'context should have been handled by toJsonValue'
 
@@ -265,7 +347,7 @@ class Serializer(object):
                     return suffix
         return prop
 
-    def serializeRef(self, prop, uri, context):
+    def serializeRef(self, uri, context):
         if not self.explicitRefObjects:
             assert self.inputRefPattern
             #check if the ref looks like our inputRefPattern
@@ -276,9 +358,13 @@ class Serializer(object):
                 match = False
         
         if self.explicitRefObjects or not match or context is not None:
-            #XXX use valueName
+            #XXX get refName
+            propName = '$ref'                
             assert isinstance(uri, (str, unicode))
-            return encodeStmtObject(uri, OBJECT_TYPE_RESOURCE, scope=context)
+            ref =  { propName : uri }
+            if context is not None:
+                ref['context'] = context
+            return ref
         else:
             assert self.refTemplate
             return match.expand(self.refTemplate)
@@ -306,12 +392,9 @@ class Serializer(object):
             scope = stmt.scope
             if scope == resScope:
                 scope = None #only include scope if its different
-            if stmt.objectType != OBJECT_TYPE_RESOURCE:
-                childlist[i]  = self._value(stmt, scope)
-            elif stmt.object == RDF_MS_BASE + 'nil' and scope is None:
-                childlist[i] = []
-            else: #otherwise it's a resource
-                childlist[i] = self.serializeRef(prop, stmt.object, scope)
+            childlist[i], isRes = self.serializeObjectValue(stmt.object, 
+                                                stmt.objectType, scope)
+            if isRes:                
                 if scope is None:
                     #only add ref if we don't have to serialize the pScope
                     idrefs.setdefault(stmt.object, []).append(
@@ -440,18 +523,16 @@ class Serializer(object):
                     pScope = stmt.scope
                 else:
                     pScope = None
-                
-                if stmt.objectType != OBJECT_TYPE_RESOURCE:
-                    parent[ key ] = self._value(stmt, pScope)
-                elif stmt.object == RDF_MS_BASE + 'nil' and pScope is None:
-                    parent[ key ] = []
-                else: #otherwise it's a resource
+
+                parent[ key ], isRes = self.serializeObjectValue(stmt.object, 
+                                                stmt.objectType, pScope)
+                if isRes:                
                     #print 'prop key', key, prop, type(parent)
-                    parent[ key ] = self.serializeRef(key, stmt.object, pScope)
                     if stmt.object != res and pScope is None:
                         #add ref if object isn't same as subject
                         #and we don't have to serialize the pScope
-                        idrefs.setdefault(stmt.object, []).append( (parent, resScope, key) )
+                        idrefs.setdefault(stmt.object, []).append( 
+                                            (parent, resScope, key) )
 
                 if currentlist and not nextMatches:
                     #done with this list
@@ -578,7 +659,11 @@ class ParseContext(object):
         return value
 
     def getName(self, name):
-        return getattr(self, name+'Name')
+        if name == '$ref':
+            attrName = 'refName'
+        else:
+            attrName = name + 'Name'
+        return getattr(self, attrName, name)
     
     def isReservedPropertyName(self, prop):
         return prop in self.reservedNames
@@ -827,40 +912,45 @@ class Parser(object):
             return item, None, parseContext.context
         if isinstance(item, multipartjson.BlobRef):
             item = item.resolve()
+            context = parseContext.context
+            res = self.lookslikeUriOrQname(item, parseContext)
         elif isinstance(item, dict):
             size = len(item)
-            valueName = parseContext.getName('value')            
-            maxsize = 3 + int('context' in item)
-            if valueName not in item or size<2 or size>maxsize:
+            hasContext = int('context' in item)
+            refName = parseContext.getName('$ref')
+            context = item.get('context', parseContext.context)
+            if refName in item:
+                ref = item[refName]                
+                #if isBnode(ref): #XXX ensure bnode is serialized consistently
+                #   value = ref[bnode_len]
+                #   return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
+                return ref, OBJECT_TYPE_RESOURCE, context
+            dataTypeName = parseContext.getName('datatype')
+            if dataTypeName not in item or size < 2 or size > 2+hasContext:
                 #not an explicit value object, just return it
                 return item, None, parseContext.context
-            value = item[valueName]
+                        
+            value = item['value']
             if isinstance(value, multipartjson.BlobRef):
                 value = value.resolve()
-            context = item.get('context', parseContext.context)
-            if isinstance(context, multipartjson.BlobRef):
-                context = context.resolve()
-            objectType = item.get('datatype')
-            if not objectType:
-                objectType = item.get('xml:lang')
+            objectType = item.get(dataTypeName)
             if isinstance(objectType, multipartjson.BlobRef):
                 objectType = objectType.resolve()
-            itemtype = item.get('type')
-            if itemtype == 'uri':                
-                objectType = OBJECT_TYPE_RESOURCE
-            elif itemtype == 'bnode':
-                return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
-            if not objectType:
-                if itemtype == 'literal':
-                    return value, OBJECT_TYPE_LITERAL, context
-                else:
-                    #looks like it wasn't an explicit value
-                    return item, None, parseContext.context
-            else:
-                return value, objectType, context
 
-        context = parseContext.context
-        res = self.lookslikeUriOrQname(item, parseContext)
+            if objectType == 'json':
+                item = value
+                res = None
+            else:
+                if objectType.startswith('lang:'):
+                    objectType = objectType[len('lang:'):]
+                elif ':' not in objectType:
+                    #make the type look like an URL
+                    objectType = 'psjon:' + objectType
+                return value, objectType, context
+        else:
+            res = self.lookslikeUriOrQname(item, parseContext)                        
+            context = parseContext.context
+        
         if res:
             return res, OBJECT_TYPE_RESOURCE, context
         elif item is None:

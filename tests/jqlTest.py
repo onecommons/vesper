@@ -1132,6 +1132,45 @@ t('''
   }
 ])
 
+t.group = 'ref'
+
+from vesper.data.store.basic import MemStore
+from vesper.data.base import Statement, OBJECT_TYPE_LITERAL, OBJECT_TYPE_RESOURCE
+
+t.model = MemStore([
+    Statement("subject", 'prop' , 'value', OBJECT_TYPE_LITERAL,''),
+    Statement("subject", 'prop' , 'value', 'en-US',''),
+    Statement("subject", 'prop' , 'value', 'tag:mydatatype.com:mydatatype',''),
+    Statement("subject", 'prop' , 'value', OBJECT_TYPE_RESOURCE,''),    
+])
+
+#XXX handle refs
+t("""
+{ *
+where (prop = 'value')
+}
+""")
+
+t.model=modelFromJson([{'id': '1', 'foo' : "1"}, {'id': '2', 'foo' : 1},
+                                                 { 'bar' : ["a", "b"]}])
+
+#XXX handle types
+#XXX plus how to query for non-json types and lang tags?
+t("""
+{ id, foo where (foo = 1)}
+""")
+
+t("""
+{ id, foo where (foo = '1')}
+""")
+
+#this is correct but it'd be nice if there was some way to have the results 
+#filter the values in bar's list
+t("""
+{ bar where (bar = 'a')}
+""",
+[{'bar': ['a', 'b']}])
+
 #XXX turn these into tests:
 '''
     this:

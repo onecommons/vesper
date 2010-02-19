@@ -212,9 +212,9 @@ def test():
     intermediateJson = [{"id": "1", "shouldBeARef": "@hello", 
             "value": {"id": "2", 
                 "innerobj": {"id": "3", 
-                            "shouldBeALiteral": {"type": "literal", "value": "@hello2"}
+                            "shouldBeALiteral": {"datatype": "json", "value": "@hello2"}
                             }, 
-                "shouldBeALiteral": {"type": "literal", "value": "@hello"}
+                "shouldBeALiteral": {"datatype": "json", "value": "@hello"}
                 }
             }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
@@ -249,7 +249,7 @@ def test():
       "prop2": ["a_ref", 
                 { 'context' : 'context2', 'prop3' : None, "id": "_:j:e:object:1:1"}
                ],
-     'prop4' : { 'type' : 'literal', 'value' : 'hello', 'context' : 'context3'}
+     'prop4' : { 'datatype' : 'json', 'value' : 'hello', 'context' : 'context3'}
     }]
     assert_json_and_back_match(src)
 
@@ -282,10 +282,9 @@ def test():
       ('id1', 'prop2', 'ref', 'R', '')     
      ],    
     intermediateJson=[{"id": "id1", "prop1": [1, {"context": "scope1", 
-        "datatype": "http://www.w3.org/2001/XMLSchema#integer", 
-        "type": "typed-literal", 
-        "value": "1"}], 
-      "prop2": [ "@ref", {"context": "scope1", "type": "uri", "value": "ref"}]
+        "datatype": "json",         
+        "value": 1}], 
+      "prop2": [ "@ref", {"context": "scope1", "$ref": "ref"}]
       }]
     )
 
@@ -293,15 +292,14 @@ def test():
        'id' : 'resource1',
        "value" : "not in a scope",
       "type":         
-        {
-          "type": "uri", 
+        {          
           "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
-          "value": "post"
+          "$ref": "post"
         }
       , 
       "content-Type":         
         {
-          "type": "literal", 
+          "datatype": "json", 
           "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
           "value": "text/plain"
         }      
@@ -312,7 +310,7 @@ def test():
     "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
     "id": "resource1", 
     "type": "@post", 
-    "value": {"context": "", "type": "literal", "value": "not in a scope"}}]) 
+    "value": {"context": "", "datatype": "json", "value": "not in a scope"}}]) 
 
     #test duplicate statements but in different scopes
     src = [{ 'id' : 'id1', 
@@ -320,15 +318,14 @@ def test():
       "type": [
         "@post", 
         {
-          "type": "uri", 
           "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
-          "value": "post"
+          "$ref": "post"
         }
       ], 
       "content-Type": [
         "text/plain", 
         {
-          "type": "literal", 
+          "datatype": "json", 
           "context": "context:add:context:txn:http://pow2.local/;0A00001;;", 
           "value": "text/plain"
         }
