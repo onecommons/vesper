@@ -3,7 +3,7 @@ import os
 
 from vesper.backports import *
 from vesper.web.route import Route
-from vesper.app import Action
+from vesper.app import Action, createApp
 
 def load_data(data):
     try:
@@ -67,6 +67,7 @@ def api_handler(kw, retval):
     # print out
     return json.dumps(out,sort_keys=True, indent=4)
 
+createApp(__name__)
 # STORAGE_URL="mem://"
 # actions = {
 #     'http-request' : rx.route.gensequence

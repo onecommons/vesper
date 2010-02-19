@@ -227,7 +227,7 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None,
         elif valueparse:            
             literalObj = {datatypePropName:'json', 'value':valueparse(data)}
         else:
-            if objectType.find(':') > -1:
+            if ':' not in objectType:
                 #must be a language tag
                 dataType = 'lang:' + objectType 
             else: #otherwise its a datatype URI
@@ -945,7 +945,7 @@ class Parser(object):
                     objectType = objectType[len('lang:'):]
                 elif ':' not in objectType:
                     #make the type look like an URL
-                    objectType = 'psjon:' + objectType
+                    objectType = 'pjson:' + objectType
                 return value, objectType, context
         else:
             res = self.lookslikeUriOrQname(item, parseContext)                        

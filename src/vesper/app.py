@@ -26,7 +26,7 @@ DEFAULT_LOGLEVEL = logging.INFO
 #logging.root.setLevel(DEFAULT_LOGLEVEL)
 #logging.basicConfig()
 
-log = logging.getLogger("raccoon")
+log = logging.getLogger("app")
 _defexception = utils.DynaExceptionFactory(__name__)
 
 _defexception('CmdArgError')
@@ -528,22 +528,26 @@ class AppConfig(utils.attrdict):
         self.update(config)
     
     def load(self):
+        if self.get('logconfig'):
+            initLogConfig(self['logconfig'])
+
         if self.get('STORAGE_URL'):
-            (proto, path) = self['STORAGE_URL'].split(':',1)
+            (proto, path) = re.split(r':(?://)?', self['STORAGE_URL'],1)
 
             self['modelFactory'] = store.get_factory(proto)
             if proto == 'file':
-                path = UriToOsPath(path)
+                path = UriToOsPath(path)            
             self['STORAGE_PATH'] = path
-        #XXX if modelFactory is set should override STORAGE_URL
-        print "Using %s at %s" % (self['modelFactory'].__name__, self['STORAGE_PATH'])
-        
-        if self.get('logconfig'):
-            initLogConfig(self['logconfig'])
+            #XXX if modelFactory is set should override STORAGE_URL            
+            log.info("Using %s at %s" % (self['modelFactory'].__name__, self['STORAGE_PATH']))
 
         from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(appVars=self.copy())
         dict.__setattr__(self, '_server', root)
+        global _current_config
+        if self is _current_config:
+            #import traceback; traceback.print_stack()
+            _current_config = None
         return self._server
         
     def run(self, startserver=True, out=sys.stdout):
@@ -648,14 +652,15 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
     '''
     Create a new `AppConfig`.
 
-    :param derivedapp: is the name of the module that is extending the app.  (Usually just __name__)
-    :param baseapp: is a path to the file of the app to load.  This file should have a call to createApp() in it
+    :param derivedapp: is the name of the module that is extending the app. (Usually just pass `__name__`)
+    :param baseapp: is either a module name or a file path to the Python script that defines an app. 
+    This file should have a call to `createApp()` in it
     
-    :param static_path: added to the static resource path of the app, will override the base app.
-    :param template_path: added to the template resource path of the app, will override the base app.
-    :param actions: added to the actions map of the app, will override the base app.
+    :param static_path: list or string prepended to the static resource path of the app.
+    :param template_path: list or string prepended to the template resource path of the app.
+    :param actions: actions map of the app, will updates the base app's `action` dictionary.
     
-    :param config: Any other keyword arguments will override values in the base app
+    :param config: Any other keyword arguments will override config values set by the base app
     '''
     global _current_config
     
@@ -690,13 +695,15 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
         static_path = list(static_path) + _current_config.get('static_path',[])
         _current_config.static_path = [_normpath(basedir, x) for x in static_path]
         # print "static path:" + str(_current_config.static_path)
-        assert all([os.path.isdir(x) for x in _current_config.static_path]), "invalid directory in:" + str(_current_config.static_path)
+        assert all([os.path.isdir(x) for x in _current_config.static_path]
+                    ), "invalid directory in:" + str(_current_config.static_path)
 
         if isinstance(template_path, (str, unicode)):
             template_path = [template_path]
         template_path = list(template_path) + _current_config.get('template_path',[])
         _current_config.template_path = [_normpath(basedir, x) for x in template_path]
         # print "template path:" + str(_current_config.template_path)
-        assert all([os.path.isdir(x) for x in _current_config.template_path]), "invalid directory in:" + str(_current_config.template_path)
+        assert all([os.path.isdir(x) for x in _current_config.template_path]
+                    ), "invalid directory in:" + str(_current_config.template_path)
     
     return _current_config
