@@ -215,7 +215,7 @@ True
 _defaultBNodeGenerator = 'uuid'
 
 def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, 
-                                            datatypePropName = 'datatype'):
+                    datatypePropName = 'datatype', contextPropName='context'):
     assert objectType != OBJECT_TYPE_RESOURCE
     if len(objectType) > 1:
         valueparse = _xsdmap.get(objectType)
@@ -240,7 +240,7 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None,
             literalObj = {datatypePropName : dataType, 'value': data }
     
         if scope is not None:
-            literalObj['context'] = scope
+            literalObj[contextPropName] = scope
             
         return literalObj
     else:
@@ -277,28 +277,36 @@ class Serializer(object):
     #XXX need separate output nsmap for serializing
     #this nsmap shouldn't be the default for that
     nsmap=[(JSON_BASE,'')] 
-        
-    ID = property(lambda self: self.QName(JSON_BASE+'id'))
-    PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
+            
+    #PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
     
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False):
         '''
+        { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
+        or if `asList == True`: 
+        [{"pjson" : "0.9"}, ...]
+        
+        :param preserveTypeInfo: If True, avoid loss of precision by serializing
+        a `datatype` object instead of the JSON type if the data store maps 
+        multiple data types to a JSON type (e.g. different types of numbers).
+        :param explicitRefObjects: Always serialize object references as a `$ref` object
         '''
         #XXX add replaceRefWithObject option: always, ifShared, never (default: ifShared (current behahavior))
+        #also, includeObjectMap == True default replaceRefWithObject to never
         self.includeObjectMap = includeObjectMap
         self.preserveRdfTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
         self.asList = asList
         
-        self.nameMap = nameMap and nameMap.copy() or {}
+        self.nameMap = nameMap and nameMap.copy() or {}        
         if explicitRefObjects:
             if 'refs' in self.nameMap:
                 del self.nameMap['refs']
         else:
             if 'refs' not in self.nameMap:            
                 self.nameMap['refs'] = defaultSerializeRefPattern
-                        
+        self.parseContext = ParseContext(self.nameMap)
         idrefpattern = self.nameMap.get('refs')
         if idrefpattern:
             regexes = _parseIdRefPattern(idrefpattern, True)
@@ -315,20 +323,22 @@ class Serializer(object):
             return self.serializeRef(objectValue, scope), True
         
     def _value(self, objectValue, objectType, context=None):
-        #XXX use objectTypeName
-        v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo, context)
+        datatypeName = self.parseContext.datatypeName
+        contextName = self.parseContext.contextName
+        v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo, 
+                                        context, datatypeName, contextName)
 
         if isinstance(v, (str, unicode)):                
             if context is not None or (self.outputRefPattern 
                             and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
-                datatypePropName = 'datatype' #XXX
-                literalObj = { datatypePropName : 'json', 'value' : v }
+                literalObj = { datatypeName : 'json', 'value' : v }
                 if context is not None:
-                    literalObj['context'] = context
+                    literalObj[ contextName ] = context
                 return literalObj
         else:
-            assert context is None or isinstance(v, dict), 'context should have been handled by toJsonValue'
+            assert context is None or isinstance(v, dict), (
+                    'context should have been handled by toJsonValue')
 
         return v
                 
@@ -358,17 +368,14 @@ class Serializer(object):
                 match = False
         
         if self.explicitRefObjects or not match or context is not None:
-            #XXX get refName
-            propName = '$ref'                
             assert isinstance(uri, (str, unicode))
-            ref =  { propName : uri }
+            ref =  { self.parseContext.refName : uri }
             if context is not None:
-                ref['context'] = context
+                ref[self.parseContext.contextName] = context
             return ref
         else:
             assert self.refTemplate
             return match.expand(self.refTemplate)
-            #return self.QName(uri) 
     
     def _setPropSeq(self, orderedmodel, propseq):
         childlist = []
@@ -406,7 +413,7 @@ class Serializer(object):
                     self._finishPropList(prop, nestedlist, idrefs, resScope, nestedLists)
         assert all(not isinstance(node, Statement) for node in childlist)
 
-    def createObjectRef(self, id, obj, includeObject, model):
+    def createObjectRef(self, id, obj, includeObject, model, scope):
         '''
         obj: The object referenced by the id, if None, the object was not encountered
         '''
@@ -417,10 +424,10 @@ class Serializer(object):
                 return obj
             if model:
                 #look up and serialize the resource
-                #XXX pass on options like includesharedrefs
-                #XXX pass in idrefs
+                #XXX add unittests
+                #XXX pass in idrefs and results
                 #XXX add depth option
-                results = self.to_pjson(model.getStatements(id)) 
+                results = self.to_pjson(model.getStatements(id), model, scope) 
                 objs = results.get('data')
                 if objs:
                     return objs[0]                    
@@ -461,12 +468,15 @@ class Serializer(object):
             seqprop, childlist = self._setPropSeq(root, listnode)
             lists[listnode] = (seqprop, childlist)
 
+        idName = self.parseContext.idName 
+        contextName = self.parseContext.contextName 
+        reservedNames = self.parseContext.reservedNames
         for res in nodes: 
             childNodes = root.getProperties(res)           
             if not childNodes:
                 #no properties
                 continue            
-            currentobj = { self.ID : res }
+            currentobj = { idName : res }
             currentlist = []
             #print 'adding to results', res.uri
             results[res] = currentobj
@@ -494,7 +504,7 @@ class Serializer(object):
             
             if resScope != defaultScope:
                 #add context prop if different from default context
-                currentobj['context'] = resScope
+                currentobj[ contextName ] = resScope
                                         
             for stmt, next in peekpair(childNodes):
                 prop = stmt.predicate
@@ -504,8 +514,8 @@ class Serializer(object):
                 key = self.QName(prop)
                 if key in currentobj:
                     #XXX create namemap that remaps ID if conflict
-                    assert key not in ('context', self.ID), (
-                                    'property with reserved name %s' % key)
+                    if key in reservedNames:
+                        raise RuntimeError('property with reserved name %s' % key)
                     #must have be already handled by _setPropSeq
                     self._finishPropList(key, currentobj[key], idrefs, resScope, lists)
                     continue 
@@ -551,25 +561,26 @@ class Serializer(object):
                 #print 'nestedlist', id, lists[id] 
             #else:
             #    print id, 'not found in', results, 'or', lists
-            ref = self.createObjectRef(id, obj, includeObject, model)
-            #print 'includeObject', includeObject, id, ref
+            ref = self.createObjectRef(id, obj, includeObject, model, defaultScope)            
             if ref != id:
                 if obj is None:
-                    #createObjectRef created an obj from an unreferenced obj,
+                    #createObjectRef loaded a new obj from the model
                     #so add it to the result
                     results[id] = ref
                 else:
-                    #remove since the obj is referenced
+                    #remove from roots since the obj is being included as a child
                     roots.pop(id, None) 
-                for parent, parentScope, key in refs:                    
-                    #if ref.context is not set and parent.context is set, set
-                    #ref.context = defaultScope so ref doesn't inherit parent.context
-                    if (not isinstance(ref, dict) or 'context' not in ref
+                for parent, parentScope, key in refs:
+                    #replace the object reference with the object
+                    if (not isinstance(ref, dict) or contextName not in ref
                                             ) and parentScope != defaultScope:
+                        #if ref.context is not set and parent.context is set, 
+                        #set ref.context = defaultScope so ref doesn't inherit
+                        #parent.context
                         refcopy = ref.copy()
-                        refcopy['context'] = defaultScope
+                        refcopy[ contextName ] = defaultScope
                         parent[key] = refcopy
-                    else:
+                    else:                        
                         parent[key] = ref
 
         if self.asList:
@@ -580,6 +591,9 @@ class Serializer(object):
         
         retval = { 'data': roots.values() }
         if self.includeObjectMap:
+            #XXX results' keys are datastore's ids, not the serialized refs
+            #object map should have serialized refs so that this can be used
+            #as a look up table
             retval['objects'] = results
         if self.nameMap:
             retval['namemap'] = self.nameMap
@@ -629,16 +643,19 @@ class ParseContext(object):
             self.idName = self.nameMap.get('id', parent.idName)
             self.contextName = self.nameMap.get('context', parent.contextName)
             self.namemapName = self.nameMap.get('namemap', parent.namemapName)
-            self.valueName = self.nameMap.get('value', parent.valueName)
+            self.datatypeName = self.nameMap.get('datatype', parent.datatypeName)
+            self.refName = self.nameMap.get('ref', parent.refName)
             self.refsValue = self.nameMap.get('refs', parent.refsValue)
         else:
             self.idName = self.nameMap.get('id', 'id')
             self.contextName = self.nameMap.get('context', 'context')
             self.namemapName = self.nameMap.get('namemap', 'namemap')
-            self.valueName = self.nameMap.get('value', 'value')            
+            self.datatypeName = self.nameMap.get('datatype', 'datatype')
+            self.refName = self.nameMap.get('ref', '$ref')
             self.refsValue = self.nameMap.get('refs')
         
-        self.reservedNames = [self.idName, self.contextName, 
+        self.reservedNames = [self.idName, self.contextName, self.refName, 
+            self.datatypeName, 
             #it's the parent context's namemap propery that is in effect:
             parent and parent.namemapName or 'namemap']
                             
@@ -894,7 +911,7 @@ class Parser(object):
         return False
 
     @staticmethod
-    def lookslikeUriOrQname(s, parseContext):
+    def lookslikeIdRef(s, parseContext):
         #XXX think about case where if number were ids
         if not isinstance(s, (str,unicode)):
             return False
@@ -913,7 +930,7 @@ class Parser(object):
         if isinstance(item, multipartjson.BlobRef):
             item = item.resolve()
             context = parseContext.context
-            res = self.lookslikeUriOrQname(item, parseContext)
+            res = self.lookslikeIdRef(item, parseContext)
         elif isinstance(item, dict):
             size = len(item)
             hasContext = int('context' in item)
@@ -948,7 +965,7 @@ class Parser(object):
                     objectType = 'pjson:' + objectType
                 return value, objectType, context
         else:
-            res = self.lookslikeUriOrQname(item, parseContext)                        
+            res = self.lookslikeIdRef(item, parseContext)                        
             context = parseContext.context
         
         if res:
