@@ -539,7 +539,6 @@ class AppConfig(utils.attrdict):
                 path = UriToOsPath(path)            
             self['STORAGE_PATH'] = path
             #XXX if modelFactory is set should override STORAGE_URL            
-            log.info("Using %s at %s" % (self['modelFactory'].__name__, self['STORAGE_PATH']))
 
         from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(appVars=self.copy())

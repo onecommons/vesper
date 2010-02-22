@@ -139,11 +139,11 @@ def parseCmdLine():
             loglevel = logging.INFO
         log = logging.getLogger()
         log.setLevel(loglevel)
-        format="%(asctime)s %(levelname)s %(name)s %(message)s"
-        datefmt="%d %b %H:%M:%S"    
-        stream = logging.StreamHandler(sys.stdout)
-        stream.setFormatter(logging.Formatter(format, datefmt))
-        log.addHandler(stream)
+        # format="%(asctime)s %(levelname)s %(name)s %(message)s"
+        # datefmt="%d %b %H:%M:%S"    
+        # stream = logging.StreamHandler(sys.stdout)
+        # stream.setFormatter(logging.Formatter(format, datefmt))
+        # log.addHandler(stream)
         
     if options.storage:
         CONF['STORAGE_URL'] = options.storage
