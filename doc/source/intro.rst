@@ -56,21 +56,20 @@ Federated (multiple backends)    planned
 Architecture
 ------------
 
-vesper.pjson 
+:mod:`vesper.pjson`
   translates json to internal tuple representation
-vesper.query 
+:mod:`vesper.query`
   executes JSONql queries against model 
-vesper.data.DataStore
+:mod:`vesper.data.DataStore`
   high-level query and CRUD interface
-vesper.data.base
+:mod:`vesper.data.base`
   base data access APIs 
 vesper.data.store.*
-  a collection of backend datastore drivers that implement vesper.data.base
-vesper.app
+  a collection of backend datastore drivers that implement :mod:`vesper.app`
   provides configuration, generic request, and transaction services
-vesper.web
+:mod:`vesper.web`
   wsgi middleware translates HTTP requests into vesper requests
-vesper.web.baseapp
+:mod:`vesper.web.baseapp`
   wsgi app that provides an query and update HTTP endpoint and a Javascript library for using it.
 
 .. _JSON: http://json.org/
