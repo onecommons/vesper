@@ -1,3 +1,7 @@
+'''
+vesper.web
+==========
+'''
 from vesper import utils
 import time, sys, mimetypes
 
@@ -121,16 +125,22 @@ class HTTPRequestProcessor(RequestProcessor):
 
     def wsgi_app(self, environ, start_response):
         """
-        Converts an HTTP request into these kws:
+        A WSGI app that dispatches incoming HTTP requests to the 'http-request' action.
+        
+        Converts an HTTP requests into these Action keywords:
 
-        _environ
-        _params
-        _uri
-        _baseUri
-        _name
-        _responseheaders
-        _responsecookies
-        _requestcookies
+        :var _name: environ['PATH_INFO'] without leading or trailing '/' 
+              or :confval:`defaultPageName` if empty
+        :var _uri:  wsgiref.util.request_uri(environ),
+        :var _baseUri:  wsgiref.util.application_uri(environ),        
+        :var _params: (a utils.attrdict) A merge of URL parameters and if a POST with form variables, 
+        :var _postContent: POST requests without form variables will set this 
+              with the contents of POST, otherwise None           
+        :var _responseheaders: (a utils.attrdict) HTTP response headers plus `_status`
+           Setting these will control the HTTP response headers sent.
+        :var _responsecookies: (a Cookie.SimpleCookie)
+        :var _requestcookies: (a Cookie.SimpleCookie)
+        :var _environ: (a utils.attrdict) the WSGI `environ`
         """
         import Cookie, wsgiref.util
         _name = environ['PATH_INFO'].strip('/')

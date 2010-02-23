@@ -1,9 +1,8 @@
 """
-    DataStore classes used by Raccoon.
-
-    Copyright (c) 2004-5 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
+    vesper.data.DataStore
+    =====================
+    
+    This module defined the high-level public interface to a data store.
 """
 import StringIO, os, os.path
 import logging

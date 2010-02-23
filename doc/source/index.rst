@@ -23,10 +23,13 @@ Architecture
    intro
    
    jsonql
-   tutorial  
+   tutorial
    spec
    grammar
    pjson
+   datastore
+   vesper.app
+   vesper.web
    configvars
     
 
