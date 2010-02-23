@@ -58,7 +58,7 @@ t.model = modelFromJson([
 
 t % '''
 Overview
-===========
+~~~~~~~~~
 
 JQL is languages for querying data that can represented in JSON. A JQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A JQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 

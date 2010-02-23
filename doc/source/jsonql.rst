@@ -1,9 +1,9 @@
 
 
 Overview
-===========
+~~~~~~~~~
 
-JQL is languages for querying data that can be represented as JSON. A JQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A JQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
+JQL is languages for querying data that can represented in JSON. A JQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A JQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found [here|grammar]). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
@@ -43,7 +43,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
 Patterns
 ========
 
-There are three top level constructs depending on whether you want generate JSON objects (dictionaries), arrays (lists) or a simple value (such as a string or number).
+There are three top level constructions depending on whether you want generate JSON objects (dictionaries), arrays (lists) or simple value (such as a string or number).
 
 JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will return a list of instances of that pattern. These basic patterns are:
 
