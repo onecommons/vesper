@@ -26,7 +26,9 @@ def assert_stmts_match(expected_stmts, result_stmts):
         #print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
         assert False
 
-def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includesharedrefs=False, intermediateJson=None, serializerNameMap=None):
+def assert_json_and_back_match(src, backagain=True, expectedstmts=None, 
+    includesharedrefs=False, intermediateJson=None, serializerOptions=None):
+    serializerOptions = serializerOptions or {}
     if isinstance(src, (str,unicode)):
         test_json = json.loads(src)
         if not test_json.get('pjson'):
@@ -39,21 +41,24 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None, includes
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = Serializer(nameMap=serializerNameMap).to_pjson( result_stmts)
-    if serializerNameMap is None:
+    result_json = Serializer(**serializerOptions).to_pjson( result_stmts)
+    if 'nameMap' not in serializerOptions:
         result_json = result_json['data']
     #pprint( result_json )
     if intermediateJson:
         test_json = intermediateJson
     assert_json_match(result_json, test_json)
     if backagain:
-        assert_stmts_and_back_match(result_stmts,serializerNameMap=serializerNameMap)
+        assert_stmts_and_back_match(result_stmts,
+                        serializerOptions=serializerOptions)
 
-def assert_stmts_and_back_match(stmts, expectedobj = None, serializerNameMap=None, addOrderInfo=True):
-    result = Serializer(nameMap=serializerNameMap).to_pjson( stmts )
+def assert_stmts_and_back_match(stmts, expectedobj = None, 
+                        serializerOptions=None, addOrderInfo=True):
+    serializerOptions = serializerOptions or {}
+    result = Serializer(**serializerOptions).to_pjson( stmts )
     #print 'serialized', result
     if expectedobj is not None:
-        if serializerNameMap is None:
+        if 'nameMap' not in serializerOptions:
             compare = result['data']
         else:
             compare = result
@@ -183,7 +188,8 @@ def test():
     }
     ''' % VERSION
     serializerNameMap={ "refs" : "ref:(\\w+)"}
-    assert_json_and_back_match(src, serializerNameMap=serializerNameMap)
+    assert_json_and_back_match(src, 
+            serializerOptions= {'nameMap' : serializerNameMap})
 
     #add statements that are identical to the ones above except they have
     #different object types (they switch a resource (object reference) for literal
@@ -207,7 +213,7 @@ def test():
             innerobj = dict(anotherid = 3, shouldBeALiteral='@hello2'),
             shouldBeALiteral='@hello')
     )
-    #expect different output because we don't use the namemaps when serializing
+    #expect different output because we nested namemaps when serializing
     #and because ids are coerced to strings
     intermediateJson = [{"id": "1", "shouldBeARef": "@hello", 
             "value": {"id": "2", 
@@ -218,6 +224,18 @@ def test():
                 }
             }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
+
+    namemap = {
+            "id" : "itemid",
+            "ref" : "ref"
+    }
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,
+    "data" :[{ "itemid" : "1", "foo" : { 'ref' : "1"}
+    }]
+    } 
+    assert_json_and_back_match(src, serializerOptions= dict(nameMap=namemap,
+                                                    explicitRefObjects = True))
     
     #############################################
     ################ scope/context tests
