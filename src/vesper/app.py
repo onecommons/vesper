@@ -1,9 +1,8 @@
 """
-    Engine and helper classes for Raccoon
-
-    Copyright (c) 2003-5 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
+    vesper.app
+    ==========
+    This module defines the framework used by Vesper to bootstrap a running server from 
+    a given configuration.
 """
 import os, os.path, sys, traceback, re
 
@@ -43,16 +42,6 @@ class DoNotHandleException(Exception):
 class ActionWrapperException(utils.NestedException):
     def __init__(self):
         return utils.NestedException.__init__(self,useNested=True)
-
-############################################################
-##Raccoon defaults
-############################################################
-
-DefaultNsMap = { 'owl': 'http://www.w3.org/2002/07/owl#',
-           'rdf' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-            'rdfs' : 'http://www.w3.org/2000/01/rdf-schema#',
-           'bnode': base.BNODE_BASE,
-        }
 
 ############################################################
 ##Helper classes and functions
@@ -270,7 +259,7 @@ class RequestProcessor(TransactionProcessor):
             #on this RequestProcessor
             return assignAttrs(self, appVars, varlist, default)
 
-        initConstants( [ 'nsMap', 'actions'], {})
+        initConstants( [ 'actions'], {})
         initConstants( ['DEFAULT_MIME_TYPE'], '')
         initConstants( ['BASE_MODEL_URI'], self.BASE_MODEL_URI)
         initConstants( ['appName'], 'root')
@@ -297,7 +286,7 @@ class RequestProcessor(TransactionProcessor):
         #cache settings:
         initConstants( ['SECURE_FILE_ACCESS', 'useEtags'], True)
         self.defaultExpiresIn = appVars.get('defaultExpiresIn', 0)
-        initConstants( ['ACTION_CACHE_SIZE'], 1000)
+        initConstants( ['ACTION_CACHE_SIZE'], 0)
         self.validateExternalRequest = appVars.get('validateExternalRequest',
                                         lambda *args: True)
         self.getPrincipleFunc = appVars.get('getPrincipleFunc', lambda kw: '')
@@ -307,8 +296,6 @@ class RequestProcessor(TransactionProcessor):
         
         self.argsForConfig = appVars.get('argsForConfig', [])
         #XXX self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
-
-        self.nsMap.update(DefaultNsMap)
         
         if appVars.get('configHook'):
             appVars['configHook'](appVars)
@@ -545,7 +532,6 @@ class AppConfig(utils.attrdict):
         dict.__setattr__(self, '_server', root)
         global _current_config
         if self is _current_config:
-            #import traceback; traceback.print_stack()
             _current_config = None
         return self._server
         
@@ -563,11 +549,7 @@ class AppConfig(utils.attrdict):
 
         if not self.get('EXEC_CMD_AND_EXIT', not startserver):
             port = self.get('PORT', 8000)
-            if self.get('firepython_enabled'):
-                import firepython.middleware
-                middleware = firepython.middleware.FirePythonWSGI
-            else:
-                middleware = None
+            middleware =  self.get('wsgi_middleware')
             httpserver = self.get('httpserver')
             print>>out, "Starting HTTP on port %d..." % port
             #runs forever:
@@ -653,7 +635,7 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
 
     :param derivedapp: is the name of the module that is extending the app. (Usually just pass `__name__`)
     :param baseapp: is either a module name or a file path to the Python script that defines an app. 
-    This file should have a call to `createApp()` in it
+           This file should have a call to :func:`createApp` in it
     
     :param static_path: list or string prepended to the static resource path of the app.
     :param template_path: list or string prepended to the template resource path of the app.

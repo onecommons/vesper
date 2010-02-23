@@ -1,5 +1,8 @@
-basic configuration variables 
-=============================
+configuration variables 
+-----------------------
+
+datastore configuration variables 
+=================================
 
 .. confval:: dataStoreFactory
 
@@ -9,34 +12,13 @@ basic configuration variables
 
   Default: ``vesper.DataStore.BasicDataStore``
 
-.. confval:: appName
-
-  A short name for this application, must be unique within the current ``vesper.app`` process
-
-  Default: `"root"`
-  Example: ``appName = 'root'``
-
-
-.. confval:: static_path
-
-    A string or list specifying the directories that will be searched when resolving static URLs
-    
-    Default: the current working directory of the process running the app
-    Example: ``static_path = 'static'``
-
-.. confval:: template_path
-
-    A string or list specifying the directories that will be searched when resolving static URLs
-    
-    Default: the current working directory of the process running the app
-    Example: ``template_path = 'templates'``
-
 .. confval:: model_uri
 
     The base URI reference to be used when creating RDF resources    
     
     Default: 'http://' + socket.getfqdn() + '/'
-    BASE_MODEL_URI='http://example.com/'
+
+    Example: ``model_uri='http://example.com/'``
 
 .. confval:: STORAGE_PATH
 
@@ -49,13 +31,16 @@ basic configuration variables
     The path of the transactionLog. The transactionLog records in NTriples format a log 
     of the statements added and removed from the model along with comments on when and by whom.
     Note: the default file store uses this format so there is not much reason to use this if you are using the default
+    
     default is '' (no transactionLog)
+    
     ``transactionLog='/logs/auditTrail.nt'``
 
 .. confval:: STORAGE_TEMPLATE
 
     A string containing NTriples that is used when 
     the file specified by STORAGE_PATH is not found
+    
     STORAGE_TEMPLATE='''
     _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#name> "item-disposition-handler-template" .
     _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#revisions> _:itemdispositionhandlertemplate1List .
@@ -65,55 +50,142 @@ basic configuration variables
 
     A string containing NTriples that are added to the RDF model
     but are read-only and not saved to disc. Use for structural components such as the schema.
+    
     APPLICATION_MODEL='''<http://rx4rdf.sf.net/ns/wiki#item-format-zml'> <http://www.w3.org/2000/01/rdf-schema#label> "ZML" .'''
 
 .. confval:: modelFactory
 
     The class or factory function used by RxPathDomStore to load or create a new RDF document or database
     note that this is a callable object which may need to be imported into the config file
+    
     default is RxPath.IncrementalNTriplesFileModel
+    
     modelFactory=RxPath.RedlandHashBdbModel
 
 .. confval:: VERSION_STORAGE_PATH
 
     The location of a separate RDF model for storing the history of changes to the database.
     Usually a file path but the appropriate value depends on 'versionModelFactory'
+    
     default is '' (history not stored separately)
+    
     VERSION_STORAGE_PATH = 'mywebsite.history.nt'
 
 .. confval:: versionModelFactory
 
     The class or factory function used by RxPathDomStore to load or create the version history RDF database
     #note that this is a callable object which may need to be imported into the config file
-    #default is whatever 'modelFactory' is set to
-    versionModelFactory=RxPath.RedlandHashBdbModel
- 
-.. confval:: SECURE_FILE_ACCESS
-
-    Limits URLs access to only the directories reachable through the PATH  
-    default is True
-    SECURE_FILE_ACCESS = True
- 
-.. confval:: nsMap
-
-    A dictionary of namespace prefixes that may appear in RxPath expressions
-    default is {} but Raccoon will always add 'rdf', 'rdfs', 'owl', 'bnode', 'wf' (for Raccoon XPath Extension functions)::
     
-     nsMap = { 'dc' : 'http://purl.org/dc/elements/1.1/',
-          'myNs' : 'http://www.example.com/#'
-         }         
- 
-.. confval:: ACTION_CACHE_SIZE
+    default is whatever 'modelFactory' is set to
+    
+    ``versionModelFactory=RxPath.RedlandHashBdbModel``
 
-    Sets the maximum number of items to be stored in the Action cache. Set to 0 to disable.
-    default is 1000
-    ACTION_CACHE_SIZE=1000
+.. confval:: useFileLock 
+
+    If True `vesper.app` will use interprocess file lock when committing 
+    a transaction. Alternately useFileLock can be a reference to a class or factory
+    function that conforms to the glock.LockFile interface.
+
+    Default is False
+    
+    ``useFileLock=True #enable``
+
+.. confval:: saveHistory 
+
+    Default: ``saveHistory = False``
+
+.. confval:: storageTemplateOptions
  
+    Default: ``storageTemplateOptions=None``
+
+.. confval:: modelOptions 
+
+    Default: ``modelOptions=None``
+
+.. confval:: CHANGESET_HOOK 
+
+    Default: ``CHANGESET_HOOK=None``
+
+.. confval:: trunkId 
+
+    Default: ``trunkId = '0A'``
+
+.. confval:: branchId 
+
+    Default: ``branchId = None``                  
+
+web configuration variables 
+=================================
+
+EXEC_CMD_AND_EXIT, firepython_enabled
+httpserver , 
+.. confval:: PORT 
+
+    Default: ``PORT=8000``
+
+.. confval:: logconfig 
+
+   A string that is either a log configuration or apath to a log configuration file
+
+   Default: ``logconfig=None``
+
+.. confval:: httpserver 
+
+  A class that WSGI server
+
+  Default: ``httpserver=wsgiref.simple_server``
+
+.. confval:: STORAGE_URL 
+
+  A string that is either a log configuration or apath to a log configuration file
+
+  Default: ``STORAGE_URL='mem:``
+
+.. confval:: EXEC_CMD_AND_EXIT 
+
+  A string that is either a log configuration or apath to a log configuration file
+
+.. confval:: wsgi_middleware 
+
+   A string that is either a log configuration or apath to a log configuration file
+
+   Default: ``wsgi_middleware=None``
+   
+   Example: ``import firepython.middleware; wsgi_middleware = firepython.middleware.FirePythonWSGI
+
+.. confval:: RECORD_REQUESTS 
+
+  Any HTTP requests made are saved to a file. They can be played-back using the ``DEBUG_FILENAME``
+  option.
+
+.. confval:: DEBUG_FILENAME 
+
+   If specified, the given file containing a history of requests recorded by ``RECORD_REQUESTS``
+   is played back before starting the server.
+
+.. confval:: static_path
+
+    A string or list specifying the directories that will be searched when resolving static URLs
+
+    Default: the current working directory of the process running the app
+
+    Example: ``static_path = 'static'``
+
+.. confval:: template_path
+
+    A string or list specifying the directories that will be searched when resolving static URLs
+
+    Default: the current working directory of the process running the app
+
+    Example: ``template_path = 'templates'``
+  
 .. confval:: defaultPageName
 
     The name of the page to be invoke if the request URL doesn't include a path 
     e.g. http://www.example.org/ is equivalent to http://www.example.org/index 
-    default is 'index'
+    
+    default is: 'index.html'
+    
     `defaultPageName='home.html'`
 
 .. confval:: DEFAULT_MIME_TYPE
@@ -148,19 +220,18 @@ basic configuration variables
     default is True
     useEtags = False #disable
 
-.. confval:: useFileLock 
-
-    If True `vesper.app` will use interprocess file lock when committing 
-    a transaction. Alternately useFileLock can be a reference to a class or factory
-    function that conforms to the glock.LockFile interface.
-    
-    default is False
-    useFileLock=True #enable
-
 advanced configuration variables 
 ================================
 
 These setting variables are only necessary when developing a new Raccoon application
+
+.. confval:: appName
+
+  A short name for this application, must be unique within the current ``vesper.app`` process
+
+  Default: `"root"
+  `
+  Example: ``appName = 'root'``
 
 .. confval:: cmd_usage
 
@@ -228,5 +299,23 @@ These setting variables are only necessary when developing a new Raccoon applica
       ``def validateExternalRequest(kw)``
       where `kw` is the request metadata dictionary (which can be modified if necessary).
       It should raise raccoon.NotAuthorized if the request should not be processed.
+      
       default is lambda *args: True
+      
       ``validateExternalRequest=rhizome.validateExternalRequest``
+
+.. confval:: SECURE_FILE_ACCESS
+
+    Limits URLs access to only the directories reachable through `static_path` or `templates_path`
+
+    default is True
+
+    SECURE_FILE_ACCESS = True
+
+.. confval:: ACTION_CACHE_SIZE
+
+    Sets the maximum number of items to be stored in the Action cache. Set to 0 to disable.
+
+    default is 0
+
+    ACTION_CACHE_SIZE=1000
