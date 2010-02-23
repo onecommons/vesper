@@ -154,6 +154,9 @@ def parseCmdLine():
     if len(CONF) > 0:
         app.update(CONF)
         
+    if 'STORAGE_URL' not in app:
+        parser.error("STORAGE_URL not specified. Either use the -s option or load a config file that sets the value.")
+        
     return app # ??
 
 if __name__ == "__main__":
