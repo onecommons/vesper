@@ -28,6 +28,16 @@ def makeChangeset(branchid, rev, baserevision='0', resname='a_resource'):
 
 LogLevel = logging.CRITICAL+10
 
+class VoteForCommitException(Exception):
+    pass
+    
+# python 2.4 explodes on unregistering loghandlers which it registers through
+# atexit, so purposefully break atexit
+import sys
+if sys.version_info[:2] <= (2,5):
+    import atexit
+    sys.exitfunc = lambda: 0
+
 class RaccoonTestCase(unittest.TestCase):
     
     def setUp(self):        
@@ -349,10 +359,8 @@ class RaccoonTestCase(unittest.TestCase):
 
         try:
             root.executeTransaction(testFunc)
-        except Exception, e:
-            if e.message != "voteForCommit failed":
-                raise
-            self.assertEqual(e.message,"voteForCommit failed")
+        except VoteForCommitException:
+            pass
         else:
             self.failUnless(False, 'didnt see expected exception')
         
@@ -413,7 +421,7 @@ class RaccoonTestCase(unittest.TestCase):
             except:
                 #need to capture these so they dont get swallow by txn exception handler
                 testState.assertError =  sys.exc_info()
-            raise RuntimeError('voteForCommit failed')
+            raise VoteForCommitException()
         
         def testFail():
             if before:

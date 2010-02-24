@@ -11,6 +11,7 @@ from vesper.utils import glock, MRUCache
 from vesper.utils.Uri import UriToOsPath
 from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
+from vesper.backports import *
 
 try:
     import cStringIO
