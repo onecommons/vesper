@@ -3,10 +3,12 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
+import sys, unittest
+
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
   'pjsonTest', 'jqlTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
-import sys
+
 if sys.version_info[:2] >= (2,5):
     __all__.append('python25Test')
 
@@ -16,19 +18,17 @@ try:
     import morbid
     import twisted.internet    
 except ImportError:
-    pass
+    print "skipping replication tests"
 else:
     __all__.append('replicationTest')
     
-import unittest
-_runner = unittest.TextTestRunner()
-
-class TestProgram(unittest.TestProgram):
-    def runTests(self):            
-        result = _runner.run(self.test)
-        #sys.exit(not result.wasSuccessful()) #we don't want to exit!
-
-if __name__ == '__main__':    
-    for modname in __all__:
-        print 'testing', modname
-        TestProgram(modname)
+try:
+    import pytyrant
+except ImportError:
+    print "skipping tokyo tyrant tests"
+else:
+    __all__.append("basicTyrantTest")
+    
+if __name__ == '__main__':
+    suites = unittest.TestLoader().loadTestsFromNames(__all__)
+    unittest.TextTestRunner().run(suites)
