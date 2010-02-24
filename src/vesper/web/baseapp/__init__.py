@@ -9,7 +9,7 @@ import mako.runtime
 #for templates not throwing errors is useful
 #monkey patch so iteration over undefined properties doesn't raise an exception
 def emptygenerator(self):
-    if 0: yield
+    if 0: yield None
 #def undefinedgenerator(self):
 #    yield '<undefined>'
 mako.runtime.Undefined.__iter__ = emptygenerator
