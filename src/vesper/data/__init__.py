@@ -4,7 +4,5 @@
     http://rx4rdf.sf.net    
 """
 
-__version__ = '0.7.0'
-
 import logging
 from vesper.backports import *
