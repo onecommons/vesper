@@ -3,7 +3,7 @@
     All rights reserved, see COPYING for details.
     http://rx4rdf.sf.net    
 """
-import sys, unittest
+import sys, unittest, docTest
 
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
@@ -31,4 +31,5 @@ else:
     
 if __name__ == '__main__':
     suites = unittest.TestLoader().loadTestsFromNames(__all__)
+    suites.addTests(docTest.suite)
     unittest.TextTestRunner().run(suites)
