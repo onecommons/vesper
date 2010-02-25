@@ -7,7 +7,7 @@
 '''
 import StringIO, copy
 from vesper.data import base
-from vesper.data.base.utils import _parseTriples as parseTriples
+from vesper.data.base.utils import parseTriples
 from vesper.data.base.utils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
 from vesper.data.base.utils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
 from vesper.data.store.basic import TransactionMemStore

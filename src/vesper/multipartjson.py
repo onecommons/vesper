@@ -60,8 +60,9 @@ class BlobRef(object):
     def __repr__(self):
         return "BlobRef(%r)" % (self.id)
 
-pattern = re.compile(r'= (\w+) (\S+)\n(.*?)\n\2\n', re.S)
+pattern = re.compile(r'= (\w+) (\S+)\r?\n(.*?)\r?\n\2\r?\n', re.S)
 header = '=multipart-json\n'
+headerpattern = re.compile(r'=multipart-json\r?\n')
 
 def load_one(data):
     '''
@@ -85,7 +86,7 @@ Blob('an_id', 'blah \\n  blah ')
     return Blob(id, content), match.end()
 
 def looks_like_multipartjson(data):
-    return data.startswith(header)
+    return headerpattern.match(data)
 
 defaultblobrefname = 'multipartjsonref'
 def loads(data, doResolve=True, handleUnresolved='raise', default=None, 
@@ -137,8 +138,9 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
     objs = []    
     while data:
         if data[0] == '=':
-            if data.startswith(header):
-                pos = len(header)
+            m = headerpattern.match(data)
+            if m:
+                pos = m.end()
             else:
                 blob, pos = load_one(data)
                 blobs[blob.id] = blob.data

@@ -198,7 +198,7 @@ def NTriples2Statements(stream, defaultScope='', baseuri=None,
     charencoding='utf8', incrementHook=None):
     makebNode = lambda bNode: BNODE_BASE + bNode
     stmtset = {}
-    for stmt in _parseTriples(
+    for stmt in parseTriples(
         stream,  makebNode, charencoding=charencoding, baseuri=baseuri,
         yieldcomments=incrementHook):        
         if stmt[0] is Removed:
@@ -219,15 +219,6 @@ def NTriples2Statements(stream, defaultScope='', baseuri=None,
         yield Statement(stmt[0], stmt[1], stmt[2],stmt[3],
                                  scope or defaultScope)
                                  
-def _parseSPARQLResults(json, defaultScope=None):
-    #this currently isn't used
-    stmts = []
-    for stmt in json['results']['bindings']:
-        stmts.append( Statement(_decodeJsonRDFValue(stmt['s'])[0],
-            _decodeJsonRDFValue(stmt['p'])[0],
-            *_decodeJsonRDFValue(stmt['o'])+(defaultScope,)  ))
-    return stmts
-
 def _parseRDFJSON(jsonstring, defaultScope=None):
     '''
     Parses JSON that follows this format:
@@ -412,7 +403,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             #use our parser
             return NTriples2Statements(StringIO.StringIO(contents), scope,
                                        baseuri, **options), type
-        elif type == 'turtle' or type == 'rss-tag-soup':
+        elif type == 'rss-tag-soup':
             try: #only redland's parser supports these
                 import RDF
                 parser=RDF.Parser(type)
@@ -421,30 +412,26 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             except ImportError:
                 raise ParseException("RDF parse error: "+ type+
                     " is only supported by Redland, which isn't installed")
-        elif type == 'rdfxml':
+        elif type == 'rdfxml' or type == 'turtle':
             try:
                 #if rdflib is installed, use its RDF/XML parser because it doesn't suck            
                 import rdflib
-                try:
-                    ts = rdflib.Graph()
-                except AttributeError:
-                    #for old versions of rdflib (e.g. 2.0.6)
-                    import rdflib.TripleStore
-                    ts = rdflib.TripleStore.TripleStore()
-                
+                from vesper.data.store.rdflib_store import rdflib2Statements                
+                ts = rdflib.ConjunctiveGraph()                
                 import StringIO as pyStringIO #cStringIO can't have custom attributes
                 contentsStream = pyStringIO.StringIO(contents)
                 #xml.sax.expatreader.ExpatParser.parse() calls
                 #xml.sax.saxutils.prepare_input_source which checks for 
                 #a 'name' attribute to set the InputSource's systemId
                 contentsStream.name = baseuri 
-                ts.parse(contentsStream)
-                return base.rdflib2Statements(
-                            ts.triples( (None, None, None)),scope), type
+                ts.parse(contentsStream, preserve_bnode_ids=True)
+                return rdflib2Statements(
+                  (s,p,o, scope) for (s,p,o) in ts.triples((None, None, None))
+                ), type
             except ImportError:
                 try: #try redland's parser
                     import RDF
-                    parser=RDF.Parser('rdfxml')
+                    parser=RDF.Parser(type)
                     stream = parser.parse_string_as_stream(contents, baseuri)
                     return base.redland2Statements(stream, scope), type 
                 except ImportError:
@@ -525,15 +512,18 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
 
     if type == 'rdfxml':
         try:
-            #if rdflib is installed
-            import rdflib.TripleStore
-            ts = rdflib.TripleStore.TripleStore()
+            #if rdflib is installed            
+            import rdflib
+            from vesper.data.store.rdflib_store import statement2rdflib
+            graph = rdflib.ConjunctiveGraph()
             if uri2prefixMap:
-                ts.ns_prefix_map = uri2prefixMap
-            
+                for url, prefix in uri2prefixMap.items():
+                    graph.store.bind(prefix, url)
             for stmt in statements:
-                ts.add( base.statement2rdflib(stmt) )                    
-            ts.serialize(format='xml', stream=stream)
+                s, p, o, c = statement2rdflib(stmt)
+                graph.store.add((s, p, o), context=c, quoted=False)                    
+             
+            graph.serialize(stream, format="pretty-xml", max_depth=3)
         except ImportError:
             try: #try redland's parser
                 import RDF
@@ -615,7 +605,7 @@ class _Removed(object):
     def __repr__(self): return 'Removed' 
 Removed = _Removed()
 Comment = object()
-def _parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
+def parseTriples(lines, bNodeToURI = lambda x: x, charencoding='utf8',
                   baseuri=None, yieldcomments=False):
     remove = False
     graph = None
