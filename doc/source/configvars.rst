@@ -151,7 +151,7 @@ httpserver ,
 
    Default: ``wsgi_middleware=None``
    
-   Example: ``import firepython.middleware; wsgi_middleware = firepython.middleware.FirePythonWSGI
+   Example: ``import firepython.middleware; wsgi_middleware = firepython.middleware.FirePythonWSGI``
 
 .. confval:: RECORD_REQUESTS 
 

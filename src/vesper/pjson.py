@@ -9,9 +9,9 @@ to persist JSON. Its basic elements can be summarized as:
 
   `id` property 
      Indicates the id (or key) of the JSON object
-   A JSON object like `{'$ref' : 'ref'}` or a value that matches `@ref` pattern.
+   A JSON object like `{"$ref" : "ref"}` or a value that matches `@ref` pattern.
       Parses as an object reference
-   A JSON object like `{'datatype': 'datatype_name', value : 'value' }` 
+   A JSON object like `{"datatype": "datatype_name", value : "value" }` 
       Parses the value is a non-JSON datatype
   
 `pjson` also defines a header object that can be used to specify alternative 
