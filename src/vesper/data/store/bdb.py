@@ -13,7 +13,7 @@ try:
 except AttributeError:
     #you have an old version of bsddb
     bdbver = bsddb.db.version()
-    if bdbver < (4,6):    
+    if bdbver < (4,5):    
         bsddb.db.DB_GET_BOTH_RANGE = 12
     else:
         bsddb.db.DB_GET_BOTH_RANGE = 10
