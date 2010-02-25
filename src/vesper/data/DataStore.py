@@ -123,8 +123,7 @@ class BasicStore(DataStore):
             #modelFactory will load the store specified by `source` or create
             #new one at that location and initializing it with `defaultStmts`
             modelFactory = self.modelFactory or FileStore
-            print "Using %s at %s" % (modelFactory.__name__, source)
-            # self.log.info("Using %s at %s" % (modelFactory.__name__, source))
+            self.log.info("Using %s at '%s'" % (modelFactory.__name__, source))
             model = modelFactory(source=source, defaultStatements=defaultStmts,
                                                             **self.modelOptions)
                 

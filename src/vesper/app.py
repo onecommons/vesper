@@ -552,7 +552,7 @@ class AppConfig(utils.attrdict):
             port = self.get('PORT', 8000)
             middleware =  self.get('wsgi_middleware')
             httpserver = self.get('httpserver')
-            print>>out, "Starting HTTP on port %d..." % port
+            log.info("Starting HTTP on port %d..." % port)
             #runs forever:
             root.runWsgiServer(port, httpserver, middleware)
 
