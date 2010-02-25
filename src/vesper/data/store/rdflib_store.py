@@ -4,10 +4,11 @@ from rdflib.BNode import BNode
 from rdflib.URIRef import URIRef
 
 from vesper.data.base import * # XXX
+from vesper.data.store.basic import loadFileStore
 
 def statement2rdflib(statement):
     if statement.objectType == OBJECT_TYPE_RESOURCE:            
-        object = RDFLibStore.URI2node(statement.object)
+        object = URI2node(statement.object)
     else:
         kwargs = {}
         if statement.objectType.find(':') > -1:
@@ -15,54 +16,53 @@ def statement2rdflib(statement):
         elif len(statement.objectType) > 1: #must be a language id
             kwargs['lang'] = statement.objectType
         object = Literal(statement.object, **kwargs)            
-    return (RDFLibStore.URI2node(statement.subject),
-            RDFLibStore.URI2node(statement.predicate), object)
+    return (URI2node(statement.subject),
+            URI2node(statement.predicate), object, URI2node(statement.scope))
 
-def rdflib2Statements(rdflibStatements, defaultScope=''):
+def rdflib2Statements(rdflibStatements):
     '''RDFLib triple to Statement'''
-    for (subject, predicate, object) in rdflibStatements:
+    for (subject, predicate, object, context) in rdflibStatements:
         if isinstance(object, Literal):                
             objectType = object.language or object.datatype or OBJECT_TYPE_LITERAL
         else:
             objectType = OBJECT_TYPE_RESOURCE            
-        yield Statement(RDFLibStore.node2String(subject),
-                        RDFLibStore.node2String(predicate),
-                        RDFLibStore.node2String(object),
-                        objectType=objectType, scope=defaultScope)
+        yield Statement(node2String(subject),
+                        node2String(predicate),
+                        node2String(object),
+                        node2String(objectType), scope=node2String(context))
+
+def URI2node(uri): 
+    if uri.startswith(BNODE_BASE):
+        return BNode('_:'+uri[BNODE_BASE_LEN:])
+    else:
+        return URIRef(uri)
+
+def node2String(node):
+    if isinstance(node, BNode):
+        return BNODE_BASE + unicode(node)
+    else:
+        return unicode(node)
+
+def object2node(object, objectType):
+    if objectType == OBJECT_TYPE_RESOURCE:            
+        return URI2node(object)
+    else:
+        kwargs = {}
+        if objectType and objectType.find(':') > -1:
+            kwargs['datatype'] = objectType
+        elif objectType and len(objectType) > 1: #must be a language id
+            kwargs['lang'] = objectType
+        return Literal(object, **kwargs)                                
 
 class RDFLibStore(Model):
     '''
     wrapper around rdflib's TripleStore
     '''
-
-    def node2String(node):
-        if isinstance(node, BNode):
-            return BNODE_BASE + unicode(node[2:])
-        else:
-            return unicode(node)
-    node2String = staticmethod(node2String)
     
-    def URI2node(uri): 
-        if uri.startswith(BNODE_BASE):
-            return BNode('_:'+uri[BNODE_BASE_LEN:])
-        else:
-            return URIRef(uri)
-    URI2node = staticmethod(URI2node)
-
-    def object2node(object, objectType):
-        if objectType == OBJECT_TYPE_RESOURCE:            
-            return URI2node(object)
-        else:
-            kwargs = {}
-            if objectType.find(':') > -1:
-                kwargs['datatype'] = objectType
-            elif len(objectType) > 1: #must be a language id
-                kwargs['lang'] = objectType
-            return Literal(object, **kwargs)                                
-    object2node = staticmethod(object2node)
-    
-    def __init__(self, tripleStore):
-        self.model = tripleStore
+    def __init__(self, graph):
+        if not graph.context_aware:
+            raise RuntimeError("RDFLib Graph must be context aware") 
+        self.graph = graph
 
     def commit(self):
         pass
@@ -71,31 +71,39 @@ class RDFLibStore(Model):
         pass
                 
     def getStatements(self, subject = None, predicate = None, object=None,
-                      objecttype=None, asQuad=True, hints=None):
+                      objecttype=None, context=None, asQuad=True, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.'''
         if subject:
-            subject = self.URI2node(subject)
+            subject = URI2node(subject)
         if predicate:
-            predicate = self.URI2node(predicate)
+            predicate = URI2node(predicate)
         if object is not None:
-            object = object2node(object, objectType)
-        statements = list( rdflib2Statements( self.model.triples((subject, predicate, object)) ) )
+            object = object2node(object, objecttype)
+
+        def _getRdfLibStatements(s, p, o, context):
+            for (s, p, o), cg in self.graph.store.triples((s, p, o), context=context):
+                for ctx in cg:
+                    yield s, p, o, ctx
+            
+        statements = list( rdflib2Statements( _getRdfLibStatements(subject, predicate, object, context) ) )
         statements.sort()
         return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
                      
     def addStatement(self, statement ):
-        '''add the specified statement to the model'''            
-        self.model.add( statement2rdflib(statement) )
+        '''add the specified statement to the model'''
+        s, p, o, c = statement2rdflib(statement)
+        self.graph.store.add((s, p, o), context=c, quoted=False)
 
     def removeStatement(self, statement ):
         '''removes the statement'''
-        self.model.remove( statement2rdflib(statement))
+        s, p, o, c = statement2rdflib(statement)
+        self.graph.store.remove((s, p, o), context=c)
 
 class RDFLibFileModel(RDFLibStore):
     def __init__(self,source='', defaultStatements=(), context='', **kw):    
-        ntpath, stmts, format = loadRDFFile(source, defaultStatements,context)
+        ntpath, stmts, format = loadFileStore(source, defaultStatements,context)
         
         #try to save in source format 
         if format == 'ntriples':
@@ -109,8 +117,8 @@ class RDFLibFileModel(RDFLibStore):
             self.format = 'nt'
             self.path = ntpath
 
-        from rdflib.TripleStore import TripleStore                                    
-        RDFLibStore.__init__(self, TripleStore())
+        import rdflib        
+        RDFLibStore.__init__(self, rdflib.ConjunctiveGraph())
         self.addStatements( stmts )             
 
     def commit(self):
