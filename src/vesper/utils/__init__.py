@@ -653,6 +653,7 @@ For example:
 >>> defaultattrdict.UNDEFINED = 0
 >>> d.unassigned
 0
+>>> defaultattrdict.UNDEFINED = None
     '''
     UNDEFINED = None
     
