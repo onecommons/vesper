@@ -118,11 +118,11 @@ STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
 PROPSUBJECT = JSON_BASE+'propseqsubject'
 
-
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
 _xsdmap = { XSD+'integer': int,
-XSD+'double' : float,
+#XXX sparql maps to float to XSD:decimal unless an exponent is used
+XSD+'double' : float, 
 JSON_BASE+'null' : lambda v: None,
  XSD+'boolean' : lambda v: v=='true' and True or False,
 }

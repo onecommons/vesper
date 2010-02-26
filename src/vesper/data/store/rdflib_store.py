@@ -52,6 +52,8 @@ def object2node(object, objectType):
             kwargs['datatype'] = objectType
         elif objectType and len(objectType) > 1: #must be a language id
             kwargs['lang'] = objectType
+        elif isinstance(object, ResourceUri):
+            return URI2node(object)
         return Literal(object, **kwargs)                                
 
 class RDFLibStore(Model):

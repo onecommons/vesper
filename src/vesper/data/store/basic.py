@@ -32,6 +32,13 @@ class MemStore(Model):
         hints = hints or {}
         limit=hints.get('limit')
         offset=hints.get('offset')
+        #XXX enable this:
+        #if fo and not fot:
+        #    fot = True
+        #    if isinstance(object, ResourceUri):
+        #        objecttype = OBJECT_TYPE_RESOURCE
+        #    else:
+        #        objecttype = OBJECT_TYPE_LITERAL
         
         if not fc:
             if fs:                

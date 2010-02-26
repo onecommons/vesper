@@ -297,7 +297,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         def getcount(obj):
             stmts = model.getStatements(
                 predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
-                object=obj)            
+                object=obj, objecttype=OBJECT_TYPE_RESOURCE)
             return len(set(s[0] for s in stmts))
 
         self.assertEquals(getcount('bnode:A'), 1)        

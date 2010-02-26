@@ -75,7 +75,10 @@ class FtStore(Model):
         if objecttype:
             pred = lambda stmt: stmt.objectType == objecttype
         else:
-            pred = None
+            if isinstance(object, ResourceUri):
+                pred = lambda stmt: stmt.objectType == OBJECT_TYPE_RESOURCE
+            else:
+                pred = lambda stmt: stmt.objectType != OBJECT_TYPE_RESOURCE
         return removeDupStatementsFromSortedList(statements, asQuad, pred, **(hints or {}))
                      
     def addStatement(self, statement ):
