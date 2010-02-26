@@ -20,8 +20,9 @@ data_files = []
 root_dir = os.path.dirname(__file__)
 if root_dir != '':
   os.chdir(root_dir)
-vesper_dir = 'src/vesper'
 
+# add python files
+vesper_dir = 'src/vesper'
 for dirpath, dirnames, filenames in os.walk(vesper_dir):
   # Ignore dirnames that start with '.'
   for i, dirname in enumerate(dirnames):
@@ -38,6 +39,20 @@ for dirpath, dirnames, filenames in os.walk(vesper_dir):
         [os.path.join(dirpath, f) 
             for f in filenames if f != '.DS_Store']
       ])
+
+# XXX needs a way to specify wildcards to filter out files/directories
+def build_file_paths(dir, data):
+    for dirpath, dirnames, filenames in os.walk(dir):
+        # print dirpath, dirnames, filenames
+        for i, dirname in enumerate(dirnames):
+            if dirname.startswith('.'):
+                del dirnames[i]
+        if filenames:
+            data.append([dirpath, [os.path.join(dirpath, f) for f in filenames]])
+
+# add docs and examples
+build_file_paths('doc', data_files)
+build_file_paths('examples', data_files)
 
 setup(
     name = PACKAGE_NAME,
