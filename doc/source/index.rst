@@ -22,6 +22,7 @@ Architecture
 
    intro
    
+   admin
    jsonql
    tutorial
    spec
