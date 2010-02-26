@@ -320,6 +320,38 @@ def encodeStmtObject(object, type, iscompound=False, scope=None, valueName='valu
         jsonobj['context'] = scope
     return jsonobj
 
+def _parseRDFWithRdfLib(contents, baseuri, type, scope):
+    import rdflib
+    from vesper.data.store.rdflib_store import rdflib2Statements                
+    ts = rdflib.ConjunctiveGraph()
+    ts.parse(StringIO.StringIO(contents), baseuri, preserve_bnode_ids=True)
+    return rdflib2Statements(
+      (s,p,o, scope) for (s,p,o) in ts.triples((None, None, None))
+    ), type
+
+def _parseRDFWithRedland(contents, baseuri, type, scope):
+    import RDF
+    from vesper.data.store.redland import rdflib2Statements
+    parser=RDF.Parser(type)
+    stream = parser.parse_string_as_stream(contents, baseuri)
+    return redland2Statements(stream, scope), type 
+
+def _parseRDFWith4Suite(contents, baseuri, type, scope):
+    '''
+    parse RDF/XML with 4Suite's obsolete parser (not recommended)
+    '''            
+    from Ft.Rdf import Util
+    from vesper.data.store import ft
+    model, db=Util.DeserializeFromString(contents,scope=baseuri)
+    statements = ft.Ft2Statements(model.statements())
+    #we needed to set the scope to baseuri for the parser to
+    #resolve relative URLs, so we now need to reset the scope
+    for s in statements:
+        s.scope = scope
+    return statements, type
+
+rdfParser = None
+
 def parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                        options=None, getType=False):
     '''
@@ -413,41 +445,15 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                 raise ParseException("RDF parse error: "+ type+
                     " is only supported by Redland, which isn't installed")
         elif type == 'rdfxml' or type == 'turtle':
+            if rdfParser:
+                return rdfParser(contents, baseuri, type, scope)
             try:
-                #if rdflib is installed, use its RDF/XML parser because it doesn't suck            
-                import rdflib
-                from vesper.data.store.rdflib_store import rdflib2Statements                
-                ts = rdflib.ConjunctiveGraph()                
-                import StringIO as pyStringIO #cStringIO can't have custom attributes
-                contentsStream = pyStringIO.StringIO(contents)
-                #xml.sax.expatreader.ExpatParser.parse() calls
-                #xml.sax.saxutils.prepare_input_source which checks for 
-                #a 'name' attribute to set the InputSource's systemId
-                contentsStream.name = baseuri 
-                ts.parse(contentsStream, preserve_bnode_ids=True)
-                return rdflib2Statements(
-                  (s,p,o, scope) for (s,p,o) in ts.triples((None, None, None))
-                ), type
-            except ImportError:
+                return _parseRDFWithRdfLib(contents, baseuri, type, scope)
+            except ImportError:                
                 try: #try redland's parser
-                    import RDF
-                    parser=RDF.Parser(type)
-                    stream = parser.parse_string_as_stream(contents, baseuri)
-                    return base.redland2Statements(stream, scope), type 
+                    return _parseRDFWithRdfLib(contents, baseuri, type, scope)
                 except ImportError:
-                    #fallback to 4Suite's obsolete parser
-                    try:
-                        from Ft.Rdf import Util
-                        from vesper.data.store import ft
-                        model, db=Util.DeserializeFromString(contents,scope=baseuri)
-                        statements = ft.Ft2Statements(model.statements())
-                        #we needed to set the scope to baseuri for the parser to
-                        #resolve relative URLs, so we now need to reset the scope
-                        for s in statements:
-                            s.scope = scope
-                        return statements, type
-                    except ImportError:
-                        raise ParseException("no RDF/XML parser installed")
+                    raise ParseException("no %s parser installed" % type)
         elif type == 'json':            
             return _parseRDFJSON(contents, scope), type
         elif type == 'pjson' or type == 'yaml' or type == 'mjson':
@@ -496,6 +502,49 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream.close()
     return parseRDFFromString(contents.decode('utf8'), modelbaseuri, type, scope, options, getType)
 
+def _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap):
+    import rdflib
+    from vesper.data.store.rdflib_store import statement2rdflib
+    graph = rdflib.ConjunctiveGraph()
+    if uri2prefixMap:
+        for url, prefix in uri2prefixMap.items():
+            graph.store.bind(prefix, url)
+    for stmt in statements:
+        s, p, o, c = statement2rdflib(stmt)
+        graph.store.add((s, p, o), context=c, quoted=False)
+
+    graph.serialize(stream, format="pretty-xml", max_depth=3)
+
+def _serializeRDFXMLWithRedland(stream, statements, uri2prefixMap):
+    import RDF
+    from vesper.data.store.redland import statement2Redland
+    serializer = RDF.RDFXMLSerializer()
+    model = RDF.Model()
+    for stmt in statements:
+       model.add_statement(statement2Redland(stmt))
+    if uri2prefixMap:
+        for uri,prefix in uri2prefixMap.items():
+            if prefix != 'rdf': #avoid duplicate ns attribute bug
+                serializer.set_namespace(prefix.encode('utf8'), uri)
+    out = serializer.serialize_model_to_string(model)
+    stream.write(out)
+
+def _serializeRDFXMLWith4Suite(stream, statements, uri2prefixMap):
+    from Ft.Rdf.Drivers import Memory
+    from vesper.data.store.ft import statement2Ft
+    db = Memory.CreateDb('', 'default')
+    import Ft.Rdf.Model
+    model = Ft.Rdf.Model.Model(db)
+    for stmt in statements:
+        model.add(base.statement2Ft(stmt) )  
+    from Ft.Rdf.Serializers.Dom import Serializer as DomSerializer
+    serializer = DomSerializer()
+    outdoc = serializer.serialize(model, nsMap = uri2prefixMap)
+    from Ft.Xml.Lib.Print import PrettyPrint
+    PrettyPrint(outdoc, stream=stream)
+
+rdfxmlSerializer = None
+
 def serializeRDF(statements, type, uri2prefixMap=None, options=None):
     stringIO = StringIO.StringIO()
     serializeRDF_Stream(statements, stringIO, type, uri2prefixMap, options)
@@ -510,50 +559,16 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
         type = type.split('-', 1)[1]
 
-    if type == 'rdfxml':
+    if type == 'rdfxml':        
+        if rdfxmlSerializer:
+            return rdfxmlSerializer(stream, statements, uri2prefixMap)
         try:
-            #if rdflib is installed            
-            import rdflib
-            from vesper.data.store.rdflib_store import statement2rdflib
-            graph = rdflib.ConjunctiveGraph()
-            if uri2prefixMap:
-                for url, prefix in uri2prefixMap.items():
-                    graph.store.bind(prefix, url)
-            for stmt in statements:
-                s, p, o, c = statement2rdflib(stmt)
-                graph.store.add((s, p, o), context=c, quoted=False)                    
-             
-            graph.serialize(stream, format="pretty-xml", max_depth=3)
+            _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap)
         except ImportError:
-            try: #try redland's parser
-                import RDF
-                serializer = RDF.RDFXMLSerializer()
-                model = RDF.Model()
-                for stmt in statements:
-                   model.add_statement(base.statement2Redland(stmt))
-                if uri2prefixMap:
-                    for uri,prefix in uri2prefixMap.items():
-                        if prefix != 'rdf': #avoid duplicate ns attribute bug
-                            serializer.set_namespace(prefix.encode('utf8'), uri)
-                out = serializer.serialize_model_to_string(model)
-                stream.write(out)
+            try:
+                _serializeRDFXMLWithRedland(stream, statements, uri2prefixMap)
             except ImportError:
-                try:
-                    #fall back to 4Suite
-                    from Ft.Rdf.Drivers import Memory    
-                    db = Memory.CreateDb('', 'default')
-                    import Ft.Rdf.Model
-                    model = Ft.Rdf.Model.Model(db)
-                    from rx import base
-                    for stmt in statements:
-                        model.add(base.statement2Ft(stmt) )  
-                    from Ft.Rdf.Serializers.Dom import Serializer as DomSerializer
-                    serializer = DomSerializer()
-                    outdoc = serializer.serialize(model, nsMap = uri2prefixMap)
-                    from Ft.Xml.Lib.Print import PrettyPrint
-                    PrettyPrint(outdoc, stream=stream)
-                except ImportError:
-                    raise ParseException("no RDF/XML serializer installed")
+                raise ParseException("no RDF/XML serializer installed")
     elif type == 'ntriples':
         writeTriples(statements, stream)
     elif type == 'ntjson':
@@ -589,7 +604,7 @@ def canWriteFormat(format):
         except ImportError:
             return False
     elif format == 'rdfxml':
-        for pkg in ('rdflib.TripleStore', 'RDF', 'Ft.Rdf.Serializers.Dom'):        
+        for pkg in ('rdflib', 'RDF', 'Ft.Rdf.Serializers.Dom'):        
             try:
                 __import__(pkg)
                 return True
