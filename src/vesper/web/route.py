@@ -72,8 +72,13 @@ def _servefile(kw, retval, uri):
 
 @Action #Route(default=True)
 def servetemplate(kw, retval):
+    from mako.exceptions import TopLevelLookupException
     path = kw._name
-    template = kw.__server__.template_loader.get_template(path)
+    try: 
+        template = kw.__server__.template_loader.get_template(path)
+    except TopLevelLookupException:
+        #could find template
+        return retval
     if template:
         return template.render(params=kw._params, 
                         urlvars=kw.get('urlvars',{}), 
