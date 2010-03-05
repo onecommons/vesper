@@ -1,9 +1,7 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 """
 jql query engine, including an implementation of RDF Schema.
-
-    Copyright (c) 2004-5 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
 
 jql query engine
 

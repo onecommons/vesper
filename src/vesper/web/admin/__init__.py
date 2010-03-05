@@ -1,3 +1,5 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 from vesper.web.route import Route, servetemplate
 from vesper.utils import attrdict
 from vesper.app import createApp, getCurrentApp

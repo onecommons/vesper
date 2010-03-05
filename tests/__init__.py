@@ -1,8 +1,5 @@
-"""
-    Copyright (c) 2003 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
-"""
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import sys, unittest, docTest
 
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 

@@ -1,9 +1,7 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 '''
-    Various utility functions and classes for RxPath
-
-    Copyright (c) 2004-5 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
+    Various utility functions and classes for vesper
 '''
 import re, random, urllib2
 try:

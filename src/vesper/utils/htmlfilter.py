@@ -1,3 +1,5 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 """
     This module allows the filtering XML and HTML files
     such that byte for byte, the source content is untouched
@@ -5,10 +7,6 @@
 
     Includes classes for fixing up links, santizing HTML, and
     truncating content.
-
-    Copyright (c) 2005 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
 """
 import HTMLParser, re, sys
 #fix bug in HTMLParser, need to handle comments in cdata tags like <script>

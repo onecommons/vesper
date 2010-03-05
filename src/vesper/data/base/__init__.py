@@ -1,12 +1,11 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 '''
     An implementation of RxPath.
     Loads and saves the DOM to a RDF model.
 
     See RxPathDOM.py for more notes and todos.
 
-    Copyright (c) 2003 by Adam Souzis <asouzis@users.sf.net>
-    All rights reserved, see COPYING for details.
-    http://rx4rdf.sf.net    
 '''
 from vesper.backports import *
 from vesper import utils

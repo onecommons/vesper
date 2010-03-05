@@ -1,3 +1,5 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 r"""
     multipart json is a simple packaging format for json data designed to make it to easy to read and edit large blocks of text.
     It reminiscent of multipart mime format.

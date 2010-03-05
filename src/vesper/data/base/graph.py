@@ -1,3 +1,5 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 '''
 This module maintains a transaction history of all changes to the underlying store.
 The history can be saved in the store if its supports contexts (aka named graphs) 

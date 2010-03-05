@@ -1,6 +1,10 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
+#
 #this is derived from PEAK's running.lockfiles, specifically:
 #http://cvs.eby-sarna.com/PEAK/src/peak/running/lockfiles.py?rev=1.21
 #but modified to enable the lock to be reentrant
+#
 #Copyright (C) 1996-2004 by Phillip J. Eby and Tyler C. Sarna.
 #All rights reserved.  This software may be used under the same terms
 #as Zope or Python.  THERE ARE ABSOLUTELY NO WARRANTIES OF ANY KIND.

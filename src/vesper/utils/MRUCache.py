@@ -1,11 +1,13 @@
+#:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
+#:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
+#
+#Heavily modified by Adam Souzis, based on this version:
+#Copyright (c) 2002 Bengt Richter 2001-10-05. All rights reserved.
+#Use per Python Software Foundation (PSF) license.
 '''
 An MRU cache implemented as a circular list. Items are not explicitly
 added to the cache, instead requests are made and if a requested key
 isn't in the cache, the value is calculated and added to the cache.
-
-Heavily modified by Adam Souzis, based on this version:
-Copyright (c) 2002 Bengt Richter 2001-10-05. All rights reserved.
-Use per Python Software Foundation (PSF) license.
 '''
 
 from vesper import utils
