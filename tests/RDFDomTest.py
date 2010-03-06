@@ -98,10 +98,10 @@ _:_b <http://rx4rdf.sf.net/ns/wiki#name> _:_b .
 _:_a <http://rx4rdf.sf.net/ns/wiki#name> _:_a .
 '''        
         stmts = MemStore(parseRDFFromString(model,'test:', 'ntriples')).getStatements()
-        #XXX rdflib xml parser doesn't preserve bnode names
         for stype in ['ntriples', 'ntjson', 'pjson', 'mjson', 'yaml', 'rdfxml']:
             if not canWriteFormat(stype):
                 print 'warning, can not test serializing %s, dependent library not installed' % stype
+                continue
             #print 'stype', stype
             options = {}
             if stype == 'mjson':

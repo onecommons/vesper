@@ -604,7 +604,7 @@ def canWriteFormat(format):
         except ImportError:
             return False
     elif format == 'rdfxml':
-        for pkg in ('rdflib', 'RDF', 'Ft.Rdf.Serializers.Dom'):        
+        for pkg in ('rdflib', 'RDF'):        
             try:
                 __import__(pkg)
                 return True
