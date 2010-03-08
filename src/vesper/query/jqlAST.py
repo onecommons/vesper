@@ -442,7 +442,7 @@ class Filter(QueryOp):
     def getType(self):
         return Tupleset
 
-    def addLabel(self, label, pos):
+    def addLabel(self, label, pos=SUBJECT):
         for (name, p) in self.labels:
             if name == label:
                 if p == pos:
