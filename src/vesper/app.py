@@ -528,7 +528,10 @@ class AppConfig(utils.attrdict):
             initLogConfig(self['logconfig'])
 
         if self.get('STORAGE_URL'):
-            (proto, path) = re.split(r':(?://)?', self['STORAGE_URL'],1)
+            try:
+                (proto, path) = re.split(r':(?://)?', self['STORAGE_URL'],1)
+            except ValueError: # split didn't work
+                raise Exception("STORAGE_URL must be of the format 'proto:location'")
 
             self['modelFactory'] = store.get_factory(proto)
             if proto == 'file':
