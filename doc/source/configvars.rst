@@ -23,6 +23,13 @@ datastore configuration variables
 
     Example: ``model_uri='http://example.com/'``
 
+.. confval:: STORAGE_URL 
+
+  A pseudo-URL that describes the connection to the data store.
+  Todo: document how this overrides STORAGE_PATH and modelFactory
+
+  Default: ``STORAGE_URL='mem:``
+
 .. confval:: STORAGE_PATH
 
     The location of the RDF model. Usually a file path but the appropriate value depends on 'modelFactory'
@@ -119,38 +126,35 @@ datastore configuration variables
 
 web configuration variables 
 =================================
-
-EXEC_CMD_AND_EXIT, firepython_enabled
-httpserver , 
+ 
 .. confval:: PORT 
 
     Default: ``PORT=8000``
 
 .. confval:: logconfig 
 
-   A string that is either a log configuration or apath to a log configuration file
+   A string that is either a Python log configuration or a path to the configuration file
 
    Default: ``logconfig=None``
 
 .. confval:: httpserver 
 
-  A class that WSGI server
+  The Python class (or callable object) of the WSGI server that is instantiated
+  when the app is started
 
   Default: ``httpserver=wsgiref.simple_server``
 
-.. confval:: STORAGE_URL 
-
-  A string that is either a log configuration or apath to a log configuration file
-
-  Default: ``STORAGE_URL='mem:``
-
 .. confval:: EXEC_CMD_AND_EXIT 
 
-  A string that is either a log configuration or apath to a log configuration file
+  If set to True, invoking the app will not start the web server -- it will just execute 
+  any given command line arguements and exit.
+  
+  Default: False
 
 .. confval:: wsgi_middleware 
 
-   A string that is either a log configuration or apath to a log configuration file
+   A WSGI middleware Python class or callable object which, if specified, will be instantiated 
+   with the Vesper WSGI app (wrapping it).
 
    Default: ``wsgi_middleware=None``
    
@@ -176,7 +180,7 @@ httpserver ,
 
 .. confval:: template_path
 
-    A string or list specifying the directories that will be searched when resolving static URLs
+    A string or list specifying the directories that will be searched when resolving Mako templates.
 
     Default: the current working directory of the process running the app
 
