@@ -1,3 +1,7 @@
+/*
+ * Copyright 2009-2010 by the Vesper team, see AUTHORS.
+ * Dual licenced under the GPL or Apache2 licences, see LICENSE.
+ */
 if (!window.console) {
     var console = {
         log : function() {}
