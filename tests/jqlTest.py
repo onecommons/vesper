@@ -1173,6 +1173,47 @@ t("""
 """,
 [{'bar': ['a', 'b']}])
 
+#XXX raises error: "tags" projection not found
+'''{ ?tag
+ * 
+ where (?tag = ?item.tags and
+   { id = ?item and type = "post"} 
+ )
+}'''
+
+#XXX id = ?item raise exception, removing it fix things
+'''{ ?tag
+ * 
+ where ( 
+   { id = ?item and type = "post" and ?tag = tags }
+ )
+}'''
+
+#XXX comment causes syntax error
+'''{  * 
+where (  
+#backwards!! 
+  { type = "post" and ?tag = tags and tags in recurse(@taglist, "subsumedby") }
+)  
+}
+'''
+#XXX raises construct: could not find subject label "@1"
+'''{ ?tag  
+     "attributes" : { id where (id=?tag) }, 
+     "state" : "closed", 
+     "data" : label  
+     where (type = "tag")  
+   }''' 
+
+#XXX the id = ?post raises 
+#File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 434, in analyzeJoinPreds
+#   assert isinstance(filter, Filter), filter
+#filter must be None -- has the parent already been removed?
+#(without id = ?post, query is fine)
+#{ ?tag, id  where (
+#{id=?tag1 and @tagid1 in recurse(?tag1, 'subsumedby')} 
+# and {id = ?post and ?tag = tags and tags = ?tag1})}
+
 #XXX turn these into tests:
 '''
     this:
@@ -1233,12 +1274,12 @@ XXX test self-joins e.g. this nonsensical example: { * where(?foo = 'a' and ?foo
     '''
 
 '''
-#join on non-primary key:
+XXX join on non-primary key:
 { 
 where (date = ?foo.date and {id=?foo and type= 'events'})
 }
 
-#join on two non-primary keys:
+XXX join on two non-primary keys:
 { 
 where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'events'})
 }

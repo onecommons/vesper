@@ -144,7 +144,7 @@ except ImportError:
             def __getnewargs__(self):
                 return tuple(self) \n\n''' % locals()
         for i, name in enumerate(field_names):
-            template += '        %s = _property(_itemgetter(%d))\n' % (name, i)
+            template += '            %s = _property(_itemgetter(%d))\n' % (name, i)
         if verbose:
             print template
 

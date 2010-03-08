@@ -792,7 +792,10 @@ def recurse(context, startid, propname=None):
     '''
     #XXX expand propname
     #XXX add unittest for circularity
-    tovisit = [startid]
+    if isinstance(startid, (list, tuple)):
+        tovisit = list(startid)
+    else:
+        tovisit = [startid]
 
     def getRows():
         while tovisit:
@@ -1845,19 +1848,27 @@ class SimpleQueryEngine(object):
     def evalIn(self, op, context):
         left = op.args[0]
         lvalue = left.evaluate(self, context)
+        if not isinstance(lvalue, (list,tuple)):
+            llist = [lvalue]
+        else:
+            llist = list(lvalue)
         args = op.args[1:]
 
         #context = copy.copy( context )
         #XXX sort by cost
         for arg in args:
-            rightValue = arg.evaluate(self, context)
-            if isinstance(rightValue, Tupleset):
-                for row in rightValue:
-                    if lvalue == row[0]:
+            rvalue = arg.evaluate(self, context)
+            for lvalue in llist:
+                if isinstance(rvalue, Tupleset):
+                    for row in rvalue:
+                        if lvalue == row[0]:
+                            return True
+                    return False
+                elif isinstance(rvalue, (list,tuple)):
+                    if lvalue in rvalue:
                         return True
-                return False
-            elif rightValue == lvalue:
-                return True
+                elif rvalue == lvalue:
+                    return True
         return False
 
     def costIn(self, op, context):

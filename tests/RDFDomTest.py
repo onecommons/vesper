@@ -100,10 +100,10 @@ _:_b <http://rx4rdf.sf.net/ns/wiki#name> _:_b .
 _:_a <http://rx4rdf.sf.net/ns/wiki#name> _:_a .
 '''        
         stmts = MemStore(parseRDFFromString(model,'test:', 'ntriples')).getStatements()
-        #XXX rdflib xml parser doesn't preserve bnode names
         for stype in ['ntriples', 'ntjson', 'pjson', 'mjson', 'yaml', 'rdfxml']:
             if not canWriteFormat(stype):
                 print 'warning, can not test serializing %s, dependent library not installed' % stype
+                continue
             #print 'stype', stype
             options = {}
             if stype == 'mjson':
@@ -299,7 +299,7 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         def getcount(obj):
             stmts = model.getStatements(
                 predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
-                object=obj)            
+                object=obj, objecttype=OBJECT_TYPE_RESOURCE)
             return len(set(s[0] for s in stmts))
 
         self.assertEquals(getcount('bnode:A'), 1)        

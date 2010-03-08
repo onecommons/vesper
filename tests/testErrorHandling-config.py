@@ -14,7 +14,7 @@ badCommitCalled = False
 def testInTransactionAction(kw, retval):
     if kw._name != 'errorInCommit':
         return retval
-    kw.__server__.dataStore.add({id:"test", "test" : 'hello!'})
+    kw.__server__.dataStore.add({"id" : "test", "test" : 'hello!'})
     def badCommit(*args, **kw):
         global badCommitCalled
         badCommitCalled = True 

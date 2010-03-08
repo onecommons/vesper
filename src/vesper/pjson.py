@@ -44,7 +44,12 @@ an absolute URL, the latter expands to regular expression that matches
 relative URLs, which includes most strings that don't contain spaces or most
 punctuation characters.  
 
-As an example, the default `refs` pattern is *@(URIREF)*.
+The Ref pattern will be applied after any id pattern are 
+applied, including the default "::" id pattern, so the pattern needs to match 
+the results of the id pattern, which might not be the same as data store's 
+representation of the id.
+
+As an example, the default `refs` pattern is @((::)?URIREF).
 
 If `refs` is an empty string, pattern matching will be disabled.
 
@@ -118,11 +123,11 @@ STANDALONESEQTYPE = JSON_BASE+'standalongseqtype'
 PROPBAG = JSON_BASE+'propseqprop'
 PROPSUBJECT = JSON_BASE+'propseqsubject'
 
-
 XSD = 'http://www.w3.org/2001/XMLSchema#'
 
 _xsdmap = { XSD+'integer': int,
-XSD+'double' : float,
+#XXX sparql maps to float to XSD:decimal unless an exponent is used
+XSD+'double' : float, 
 JSON_BASE+'null' : lambda v: None,
  XSD+'boolean' : lambda v: v=='true' and True or False,
 }
@@ -147,20 +152,16 @@ _refpatternregex = re.compile(r'''(.*?)
 #by default we only find refs that match this pattern
 #we picked an unusual pattern because to require ref pattern
 #to be specified then to have false positives
-defaultSerializeRefPattern = '@(URIREF)'
-defaultParseRefPattern = '@(URIREF)'
+defaultSerializeRefPattern = '@((::)?URIREF)'
+defaultParseRefPattern = '@((::)?URIREF)'
 
-#XXX add _idrefpatternCache = {}
+#XXX add _patternCache = {}
+#match pattern and replacement template when parsing
+#match pattern and replacement template when serializing 
+_ReplacePatterns = namedtuple('_ReplacePatterns', 
+  'parsePattern parseTemplate serializePattern serializeTemplate weight')
 
-#XXX add prop refs support: proprefs" : [
-# "foo|bar" , {"(\w{1,5})" : "http://foo/@@"},
-# '!prop1|prop2' , '<(URIREF)>',
-#  '.*' , { 'foo:(\w+)' : "http://foo/@@", 'bar:(\w+)' : "http://bar/@@"}
-#]
-#XXX support multiple patterns as dict or array
-
-#find referenced match and swap them? would need to parse the regex ourself
-def _parseIdRefPattern(pattern, serializing=False):
+def _parseIdRefPattern(pattern, key=None, disallowPrefix=False):
     r'''
     pattern can be one of:
 
@@ -170,48 +171,65 @@ def _parseIdRefPattern(pattern, serializing=False):
     e.g.
     {'<(URIREF)>' : 'http://foo/@@'}
         
->>> p, r = _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'})
->>> p.pattern, r
+>>> patterns = _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'})
+>>> patterns.parsePattern.pattern, patterns.parseTemplate
 ('\\A\\<(\\w+)\\>\\Z', 'http://foo/\\1')
->>> output, input, r = _parseIdRefPattern({'<(\w+)>' : 'http://foo/@@'}, True)
->>> output.pattern, input.pattern, r
-('\\A\\<(\\w+)\\>\\Z', '\\Ahttp\\:\\/\\/foo\\/(\\w+)\\Z', '<\\1>')
+>>> patterns.serializePattern.pattern, patterns.serializeTemplate
+('\\Ahttp\\:\\/\\/foo\\/(\\w+)\\Z', '<\\1>')
 >>> _parseIdRefPattern(r'<(ABSURI)>')[0].pattern ==  "\\A\\<((?:"+ ABSURI + "))\\>\\Z"
 True
     '''
     if isinstance(pattern, dict):
-        if len(pattern) != 1:
-            raise RuntimeError('parse error: bad idrefpattern: %s' % pattern)
-        pattern, replace = pattern.items()[0]
+        if key is not None:
+            pattern, replace = key, pattern[key]
+        else:
+            if len(pattern) != 1:
+                raise RuntimeError('parse error: bad pattern: %s' % pattern)
+            pattern, replace = pattern.items()[0]
     else:
         replace = '@@' #r'\g<0>'
-
-    #convert backreferences from $1 to \1 (javascript to perl style)
-    #match = re.sub(r'(?<!\$)\$(?=\d{1,2}|\&)', r'\\', p[end+1:])
-    #match = re.sub(r'\&', r'\\g<0>', match)
    
     m = re.match(_refpatternregex, pattern)
     if not m:
-        raise RuntimeError('parse error: bad idrefpattern: %s' % pattern)
-    before, regex, after = m.groups()
-    regex = re.sub(r'(?<!\\)ABSURI', '(?:%s)' % ABSURI, regex)
-    regex = re.sub(r'(?<!\\)URIREF', URIREF, regex) #URIREF already wrapped in (?:)
-
-    pattern = re.escape(before) + '('+regex+')' + re.escape(after)
-    pattern = re.compile(r'\A%s\Z' % pattern)
+        #assume pattern is a prefx and the regex matches everything after that
+        before, regex, after = pattern, '.*', ''        
+    else:
+        before, regex, after = m.groups()
+    if before:
+        weight = 0
+    elif regex.lstrip('(').startswith('.*'):
+        weight = 1
+    else:
+        weight = 2 #matches all
     
-    if serializing:
-        #turn `replace` into the inputpattern regex by replacing the @@ 
-        #with the regex in the original pattern
-        inputpattern = ''.join([x=='@@' and '('+regex+')' or re.escape(x) 
-                    for x in re.split(r'((?<!\\)@@)',replace)])
-        #replace is set to the orginal pattern with \1 replacing the regex part
-        replace = before + r'\1' + after
-        return pattern, re.compile(r'\A%s\Z' % inputpattern), replace
-    else:        
-        replace = re.sub(r'((?<!\\)@@)', r'\\1', replace)    
-        return pattern, replace
+    #convert backreferences from $1 to \1 (javascript style to perl/python style)
+    regex = re.sub(r'(?<!\$)\$(?=\d{1,2}|\&)', r'\\', regex)
+    regex = re.sub(r'\&', r'\\g<0>', regex)
+    #handle ABSURI and URIREF
+    regex = re.sub(r'(?<!\\)ABSURI', '(?:%s)' % ABSURI, regex)
+    #URIREF is already wrapped in (?:)
+    regex = re.sub(r'(?<!\\)URIREF', URIREF, regex)
+    pattern = re.escape(before) + '('+regex+')' + re.escape(after)
+    if disallowPrefix:
+        #disallow replacements that match '::...') by prepending (?!::)
+        pattern = '(?!::)' + pattern
+    pattern = re.compile(r'\A%s\Z' % pattern)
 
+    if not re.search(r'((?<!\\)@@)', replace):
+        replace += '@@' #append '@@' if it doesn't appear
+    
+    parseTemplate = re.sub(r'((?<!\\)@@)', r'\\1', replace)    
+
+    #turn `replace` into the serializepattern regex by replacing the @@ 
+    #with the regex in the original pattern
+    serializePattern = ''.join([x=='@@' and '('+regex+')' or re.escape(x) 
+                for x in re.split(r'((?<!\\)@@)',replace)])
+    serializePattern = re.compile(r'\A%s\Z' % serializePattern)
+    #serializeTemplate is set to the orginal pattern with \1 replacing the regex part
+    serializeTemplate = before + r'\1' + after    
+    return _ReplacePatterns(pattern, parseTemplate, serializePattern, 
+                                            serializeTemplate, weight)
+    
 _defaultBNodeGenerator = 'uuid'
 
 def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, 
@@ -273,13 +291,7 @@ def loads(data):
     else:
         return json.loads(data)
 
-class Serializer(object):    
-    #XXX need separate output nsmap for serializing
-    #this nsmap shouldn't be the default for that
-    nsmap=[(JSON_BASE,'')] 
-            
-    #PROPERTYMAP = property(lambda self: self.QName(JSON_BASE+'propertymap'))
-    
+class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False):
         '''
@@ -307,12 +319,13 @@ class Serializer(object):
             if 'refs' not in self.nameMap:            
                 self.nameMap['refs'] = defaultSerializeRefPattern
         self.parseContext = ParseContext(self.nameMap)
+        self.outputRefPattern, self.inputRefPattern, self.refTemplate = None, None, None
         idrefpattern = self.nameMap.get('refs')
         if idrefpattern:
-            regexes = _parseIdRefPattern(idrefpattern, True)
-        else:
-            regexes = (None, None, None)
-        self.outputRefPattern, self.inputRefPattern, self.refTemplate = regexes
+            patterns = _parseIdRefPattern(idrefpattern)
+            self.outputRefPattern = patterns.parsePattern
+            self.inputRefPattern = patterns.serializePattern
+            self.refTemplate = patterns.serializeTemplate
 
     def serializeObjectValue(self, objectValue, objectType, scope):
         if objectType != OBJECT_TYPE_RESOURCE:
@@ -328,7 +341,7 @@ class Serializer(object):
         v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo, 
                                         context, datatypeName, contextName)
 
-        if isinstance(v, (str, unicode)):                
+        if isinstance(v, (str, unicode)):
             if context is not None or (self.outputRefPattern 
                             and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
@@ -342,33 +355,31 @@ class Serializer(object):
 
         return v
                 
-    def QName(self, prop):
+    def serializeProp(self, prop):
+        '''        
+        If the property matches a replacement, apply the replacement.
+        If not, but if the property looks like a replacement, use the default
+        "::" replacement.
+        Otherwise, return the property name. 
         '''
-        convert prop to QName
-        '''
-        #XXX currently just removes JSON_BASE 
-        #reverse sorted so longest comes first
-        for ns, prefix in self.nsmap:
-            if prop.startswith(ns):
-                suffix = prop[len(ns):]
-                if prefix:
-                    return prefix+'$'+suffix 
-                else:
-                    return suffix
-        return prop
+        return _serializeAbbreviations(prop, self.parseContext.propReplacements)
 
+    def serializeId(self, id):
+        return _serializeAbbreviations(id, self.parseContext.idReplacements)
+        
     def serializeRef(self, uri, context):
         if not self.explicitRefObjects:
             assert self.inputRefPattern
             #check if the ref looks like our inputRefPattern
             #if it doesn't, create a explicit ref object
             if isinstance(uri, (str,unicode)):
-                match = self.inputRefPattern.match(uri)
+                #apply the match to the serialized version of the id 
+                match = self.inputRefPattern.match(self.serializeId(uri))
             else:
                 match = False
         
         if self.explicitRefObjects or not match or context is not None:
-            assert isinstance(uri, (str, unicode))
+            assert isinstance(uri, (str, unicode))        
             ref =  { self.parseContext.refName : uri }
             if context is not None:
                 ref[self.parseContext.contextName] = context
@@ -390,7 +401,7 @@ class Serializer(object):
                 childlist.append( stmt )
         return propbag, childlist
 
-    def _finishPropList(self, prop, childlist, idrefs, resScope, nestedLists):
+    def _finishPropList(self, childlist, idrefs, resScope, nestedLists):
         for i, stmt in enumerate(childlist):
             if not isinstance(stmt, Statement):
                 #this list was already processed
@@ -410,7 +421,7 @@ class Serializer(object):
                     #if nested list handle it now
                     (seqprop, nestedlist) = nestedLists[stmt.object]
                     assert not seqprop
-                    self._finishPropList(prop, nestedlist, idrefs, resScope, nestedLists)
+                    self._finishPropList(nestedlist, idrefs, resScope, nestedLists)
         assert all(not isinstance(node, Statement) for node in childlist)
 
     def createObjectRef(self, id, obj, includeObject, model, scope):
@@ -474,9 +485,10 @@ class Serializer(object):
         for res in nodes: 
             childNodes = root.getProperties(res)           
             if not childNodes:
-                #no properties
+                #no properties, don't include
                 continue            
-            currentobj = { idName : res }
+            idValue = self.serializeId(res)
+            currentobj = { idName : idValue }
             currentlist = []
             #print 'adding to results', res.uri
             results[res] = currentobj
@@ -488,7 +500,7 @@ class Serializer(object):
                 if stmt.predicate == PROPSEQ:
                     #this will replace sequences
                     seqprop, childlist = lists[stmt.object]
-                    key = self.QName(seqprop)
+                    key = self.serializeProp(seqprop)
                     currentobj[ key ] = childlist
                     #print 'adding propseq', p.stmt.object
                 else:
@@ -511,13 +523,13 @@ class Serializer(object):
                 if prop == PROPSEQ:
                     continue
                 
-                key = self.QName(prop)
+                key = self.serializeProp(prop)
                 if key in currentobj:
                     #XXX create namemap that remaps ID if conflict
                     if key in reservedNames:
                         raise RuntimeError('property with reserved name %s' % key)
                     #must have be already handled by _setPropSeq
-                    self._finishPropList(key, currentobj[key], idrefs, resScope, lists)
+                    self._finishPropList(currentobj[key], idrefs, resScope, lists)
                     continue 
 
                 nextMatches = next and next.predicate == prop
@@ -600,7 +612,36 @@ class Serializer(object):
         retval['pjson'] = VERSION
         return retval
 
-class ParseContext(object):
+def _serializeAbbreviations(name, replacements):
+    for r in replacements:
+        match = r.serializePattern.match(name)
+        if match:
+            return match.expand(r.serializeTemplate)
+
+    # if we have replacement for 'rdf:' 
+    # we don't want to serialize a property name like 'rdf:foo' as is
+    # to prevent this we use a default replacement {'' : '::'} so the 
+    # property will be serialized as '::rdf:'
+    #(and we disallow replacements that match '::...') by prepending (?!::)
+    #to all patterns)
+    for r in replacements:
+        if r.parsePattern.match(name):
+            #this prop matches an pattern
+            return '::' + name
+    if name.startswith('::'):
+        return '::' + name
+    return name
+
+def _parseAbbreviations(qname, replacements):    
+    for r in replacements:
+        match = r.parsePattern.match(qname)
+        if match:
+            return match.expand(r.parseTemplate)
+    if qname.startswith('::'):
+        return qname[2:]
+    return qname        
+
+class ParseContext(object):    
     parentid = ''
     
     @staticmethod
@@ -646,6 +687,9 @@ class ParseContext(object):
             self.datatypeName = self.nameMap.get('datatype', parent.datatypeName)
             self.refName = self.nameMap.get('ref', parent.refName)
             self.refsValue = self.nameMap.get('refs', parent.refsValue)
+            self.idsValue = self.nameMap.get('ids', parent.idsValue)
+            self.propsValue = self.nameMap.get('props', parent.propsValue)
+            self.defaultsValue = self.nameMap.get('defaults',parent.defaultsValue)
         else:
             self.idName = self.nameMap.get('id', 'id')
             self.contextName = self.nameMap.get('context', 'context')
@@ -653,7 +697,10 @@ class ParseContext(object):
             self.datatypeName = self.nameMap.get('datatype', 'datatype')
             self.refName = self.nameMap.get('ref', '$ref')
             self.refsValue = self.nameMap.get('refs')
-        
+            self.idsValue = self.nameMap.get('ids')
+            self.propsValue = self.nameMap.get('props')
+            self.defaultsValue = self.nameMap.get('defaults')
+
         self.reservedNames = [self.idName, self.contextName, self.refName, 
             self.datatypeName, 
             #it's the parent context's namemap propery that is in effect:
@@ -661,13 +708,27 @@ class ParseContext(object):
                             
         self.idrefpattern, self.refTemplate = None, None
         self._setIdRefPattern(self.refsValue)
+        self.propReplacements = self._setPropReplacements(self.propsValue)
+        self.idReplacements = self._setPropReplacements(self.idsValue)
         self.currentProp = None
     
     def nameMapChanges(self):
         if self.parent and self.nameMap != self.parent.nameMap:
             return True
         return False
-        
+    
+    def _setPropReplacements(self, more):
+        '''
+        update defaults with props
+        '''
+        propReplacements = []
+        for d in self.defaultsValue, more:
+            if d:
+                for key in d:
+                    propReplacements.append(_parseIdRefPattern(d, key, True))
+        propReplacements.sort(key=lambda v: v.weight)
+        return propReplacements
+            
     def getProp(self, obj, name, default=None):
         nameprop = getattr(self, name+'Name')        
         value = obj.get(nameprop, default)
@@ -685,20 +746,21 @@ class ParseContext(object):
     def isReservedPropertyName(self, prop):
         return prop in self.reservedNames
             
-    def _expandqname(self, qname):
-        #assume reverse sort of prefix
-        return qname
-        #XXX    
-        for ns, prefix in self.nsmap:
-            if qname.startswith(prefix+'$'):
-                suffix = qname[len(prefix)+1:]
-                return ns+suffix
-        return qname
+    def parseProp(self, name):
+        if not isinstance(name, (str,unicode)):
+            raise RuntimeError("propery %r must a be a string" % name)
+        return _parseAbbreviations(name, self.propReplacements)
+
+    def parseId(self, name):
+        return _parseAbbreviations(name, self.idReplacements)
         
     def _setIdRefPattern(self, idrefpattern):
         if idrefpattern:
-            self.idrefpattern, self.refTemplate = _parseIdRefPattern(idrefpattern)
-        elif idrefpattern is not None: #property present but empty value
+            patterns = _parseIdRefPattern(idrefpattern)
+            self.idrefpattern = patterns.parsePattern
+            self.refTemplate = patterns.parseTemplate
+        elif idrefpattern is not None: 
+            #if property present but has empty value, remove current pattern
             self.idrefpattern, self.refTemplate = None, None
 
 class Parser(object):
@@ -743,10 +805,11 @@ class Parser(object):
                 objId = self._blank(prefix+'object:'+suffix)
                 if self.setBNodeOnObj:
                     obj[ newParseContext.getName('id') ] = objId
+                return objId, newParseContext
             elif not isinstance(objId, (unicode, str)):
                 objId = str(objId) #OBJECT_TYPE_RESOURCEs need to be strings
+            objId = newParseContext.parseId(objId)
             return objId, newParseContext
-            
         
         if isinstance(json, (str,unicode)):
             json = loads(json) 
@@ -815,8 +878,8 @@ class Parser(object):
             
             for prop, val in obj.items():
                 if parseContext.isReservedPropertyName(prop):
-                    continue
-                prop = parseContext._expandqname(prop)
+                    continue                
+                prop = parseContext.parseProp(prop)
                 parseContext.currentProp = prop
                 val, objecttype, scope = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
@@ -919,8 +982,12 @@ class Parser(object):
             return False
         
         m = parseContext.idrefpattern.match(s)
-        if m is not None:            
+        if m is not None:
+            #this string looks the ref pattern
+            #so use the ref template to generate the resource id
             res = m.expand(parseContext.refTemplate)
+            #the id might be an abbreviation to try to parse that
+            res = parseContext.parseId(res)
             return res
         return False
 

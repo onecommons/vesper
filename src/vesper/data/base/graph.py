@@ -949,6 +949,7 @@ match the changeset's branchid: %s''' % (
             
         if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
             if changeset.baserevision in self.pendingQueue:
+                assert changeset != self.pendingQueue[changeset.baserevision], changeset
                 self.merge(self.pendingQueue[changeset.baserevision])
             elif len(self.pendingQueue) < self.maxPendingQueueSize:
                 #xxx queue should be persistent because we're SOL if 

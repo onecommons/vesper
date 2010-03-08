@@ -215,7 +215,8 @@ class RequestProcessor(TransactionProcessor):
         self.loadConfig(appVars)
                  
         # XXX copy and paste from
-        self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
+        self.initThreadLocals(requestContext=None, inErrorHandler=0, 
+                                                previousResolvers=None)
         self.requestContext = [{}] #stack of dicts
         self.lock = None
         self.log = log
@@ -223,9 +224,12 @@ class RequestProcessor(TransactionProcessor):
                 
         if self.template_path:
             from mako.lookup import TemplateLookup
-            self.template_loader = TemplateLookup(directories=self.template_path, 
-                default_filters=['decode.utf8'], module_directory='mako_modules',
+            templateArgs = dict(directories=self.template_path, 
+                default_filters=['decode.utf8'], 
+                module_directory =self.mako_module_dir,
                 output_encoding='utf-8', encoding_errors='replace')
+            templateArgs.update(self.templateOptions)
+            self.template_loader = TemplateLookup(**templateArgs)
         self.requestDispatcher = Requestor(self)
         self.loadModel()
         self.handleCommandLine(self.argsForConfig)
@@ -284,6 +288,8 @@ class RequestProcessor(TransactionProcessor):
                 
         self.defaultRequestTrigger = appVars.get('DEFAULT_TRIGGER','http-request')
         initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
+        self.mako_module_dir = appVars.get('mako_module_dir', 'mako_modules')
+        initConstants( ['templateOptions'], {})        
         self.globalRequestVars.extend( self.defaultGlobalVars )
         self.defaultPageName = appVars.get('defaultPageName', 'index')
         #cache settings:
@@ -663,7 +669,7 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
         _current_config = AppConfig()        
     
     #config variables that shouldn't be simply overwritten should be specified 
-    #as an explicit function args
+    #as an explicit function argument so they're not overwritten by this line:
     _current_config.update(config)
     
     if 'actions' in _current_config:
@@ -674,20 +680,20 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
     
     basedir = _current_configpath[-1] or derived_path
     if basedir is not None:
-        if isinstance(static_path, (str, unicode)):
-            static_path = [static_path]
-        static_path = list(static_path) + _current_config.get('static_path',[])
-        _current_config.static_path = [_normpath(basedir, x) for x in static_path]
-        # print "static path:" + str(_current_config.static_path)
-        assert all([os.path.isdir(x) for x in _current_config.static_path]
-                    ), "invalid directory in:" + str(_current_config.static_path)
+        def addToPath(path, configvar):
+            if isinstance(path, (str, unicode)):
+                path = [path]
+            path = list(path) + _current_config.get(configvar,[])
+            path = [_normpath(basedir, x) for x in path]
+            _current_config[configvar] = path            
+            assert all([os.path.isdir(x) for x in path]
+                        ), "invalid directory in:" + str(path)
 
-        if isinstance(template_path, (str, unicode)):
-            template_path = [template_path]
-        template_path = list(template_path) + _current_config.get('template_path',[])
-        _current_config.template_path = [_normpath(basedir, x) for x in template_path]
-        # print "template path:" + str(_current_config.template_path)
-        assert all([os.path.isdir(x) for x in _current_config.template_path]
-                    ), "invalid directory in:" + str(_current_config.template_path)
+        addToPath(static_path, 'static_path')
+        addToPath(template_path, 'template_path')
+        #set the 'mako_modules' directory default to be relative to directory of
+        #the most derived app to prevent tmp directory spew in current directory
+        mako_module_dir = config.get('mako_module_dir', 'mako_modules')
+        _current_config.mako_module_dir = _normpath(basedir, mako_module_dir)
     
     return _current_config

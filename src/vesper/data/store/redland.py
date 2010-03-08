@@ -38,12 +38,14 @@ def object2node(object, objectType):
             objectType = objectType.encode('utf8')
             
         kwargs = { 'literal':object }
-        if objectType and objectType != OBJECT_TYPE_LITERAL:
-            if objectType.find(':') > -1:
-                kwargs['datatype'] = RDF.Uri(objectType)
-                kwargs['language'] = None
-            elif len(objectType) > 1: #must be a language id
-                kwargs['language'] = objectType                    
+        if objectType and objectType.find(':') > -1:
+            kwargs['datatype'] = RDF.Uri(objectType)
+            kwargs['language'] = None
+        elif objectType and len(objectType) > 1: #must be a language id
+            kwargs['language'] = objectType
+        elif isinstance(object, ResourceUri):
+            return URI2node(object)
+                                    
         return RDF.Node(**kwargs)            
     
 def statement2Redland(statement):

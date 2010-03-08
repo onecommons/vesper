@@ -32,7 +32,7 @@ class VoteForCommitException(Exception):
 # python 2.4 explodes on unregistering loghandlers which it registers through
 # atexit, so purposefully break atexit
 import sys
-if sys.version_info[:2] <= (2,5):
+if sys.version_info[:2] < (2,5):
     import atexit
     sys.exitfunc = lambda: 0
 
