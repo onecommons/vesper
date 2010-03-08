@@ -220,6 +220,23 @@ httpserver ,
     default is True
     useEtags = False #disable
 
+.. confval:: mako_module_dir
+
+    Specifies the directory where the mako templates are compiled. If an absolute
+    path is not specified, the path is made relative to the location of the app 
+    configuration file. This property sets the `module_directory` parameter 
+    in the `mako.lookup.TemplateLookup` constructor.
+    
+    default is `"mako_module"` relative to the location of the app configuration file.
+    
+.. confval:: templateOptions
+
+  This setting is a dictionary that contains keyword arguments for the 
+  `mako.lookup.TemplateLookup` constructor used when initializing the template engine.
+  Keys in this dictionary override the default values for that parameter.
+  
+  default is `{}`
+  
 advanced configuration variables 
 ================================
 
