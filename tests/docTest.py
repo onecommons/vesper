@@ -1,12 +1,17 @@
 import doctest
 import unittest
-import glob
+import glob, sys
 from vesper import query, pjson, multipartjson
 from vesper.query import engine
 import vesper.utils
 
 suite = unittest.TestSuite()
-for mod in (query, engine, pjson, multipartjson, vesper.utils):
+
+modulesWithDoctests = [query, engine, pjson, multipartjson, vesper.utils]
+if sys.version_info[:2] < (2,6):
+    modulesWithDoctests.append(vesper.backports)
+
+for mod in modulesWithDoctests:
     suite.addTest(doctest.DocTestSuite(mod))
 
 #for path in glob.glob('../doc/source/*.rst'):

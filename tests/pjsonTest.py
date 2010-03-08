@@ -226,8 +226,8 @@ def test():
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
 
     namemap = {
-            "id" : "itemid",
-            "ref" : "ref"
+        "id" : "itemid",
+        "ref" : "ref"
     }
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,
@@ -236,6 +236,46 @@ def test():
     } 
     assert_json_and_back_match(src, serializerOptions= dict(nameMap=namemap,
                                                     explicitRefObjects = True))
+
+    #test ref defaults when a regex and replace pattern isn't specified:
+    namemap = { 
+        "refs" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' }
+    }    
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,
+    "data" :[{ "id" : "1", "type" : 'rdf:List' }]
+    }
+    expectedStmts = [Statement("1", "type", "http://www.w3.org/1999/02/22-rdf-syntax-ns#List",OBJECT_TYPE_RESOURCE,'')]
+    assert_json_and_back_match(src, expectedstmts=expectedStmts, serializerOptions= dict(nameMap=namemap))
+
+    #test props 
+    namemap = { 
+        "defaults" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',          
+         },         
+         "props" : { '': 'http://myschema.com#' },
+         "ids" : { '': 'http://example.com/instanceA#' },
+         "refs": "@((::)?URIREF)"
+    }
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,
+    "data" :[
+        { 
+        "id" : "1", 
+        'myprop' : "a",
+        "rdf:type" : '@::foo',
+        "::rdf:type" : '@b',
+        "::::doublecolonprop" : "c"
+        }
+    ]
+    }
+    expectedStmts = [
+        Statement("http://example.com/instanceA#1", "http://myschema.com#myprop", 'a', OBJECT_TYPE_LITERAL,''),
+        Statement("http://example.com/instanceA#1", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",'foo', OBJECT_TYPE_RESOURCE,''),
+        Statement("http://example.com/instanceA#1", "rdf:type", 'http://example.com/instanceA#b', OBJECT_TYPE_RESOURCE,''),
+        Statement("http://example.com/instanceA#1", "::doublecolonprop", 'c', OBJECT_TYPE_LITERAL,''),
+    ]
+    assert_json_and_back_match(src, expectedstmts=expectedStmts, serializerOptions= dict(nameMap=namemap))
+    
     
     #############################################
     ################ scope/context tests
