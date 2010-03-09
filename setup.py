@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 import sys, os
 
 install_requires = ['ply', 'routes', 'mako']
-extra_requires = { 'yaml' : ['pyyaml'],
+extras_require = { 'yaml' : ['pyyaml'],
   #'replication' : [stomp.py]
   #'doc' : ['sphinx']
 }
@@ -69,7 +69,7 @@ setup(
     packages = find_packages('src'),
     data_files = data_files,
     install_requires = install_requires,
-    extra_requires = extra_requires,
+    extras_require = extras_require,
     zip_safe=False,
 
    entry_points = {
