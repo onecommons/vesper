@@ -7,7 +7,10 @@ from setuptools import setup, find_packages
 import sys, os
 
 install_requires = ['ply', 'routes', 'mako']
-#XXX add optional libraries: pyyaml, stomp.py
+extra_requires = { 'yaml' : ['pyyaml'],
+  #'replication' : [stomp.py]
+  #'doc' : ['sphinx']
+}
 PACKAGE_NAME = 'vesper'
 pyver = sys.version_info[:2]
 if pyver < (2,4):
@@ -66,6 +69,7 @@ setup(
     packages = find_packages('src'),
     data_files = data_files,
     install_requires = install_requires,
+    extra_requires = extra_requires,
     zip_safe=False,
 
    entry_points = {
