@@ -57,9 +57,11 @@ def build_file_paths(dir, data):
 build_file_paths('doc', data_files)
 build_file_paths('examples', data_files)
 
+_egg_version = os.getenv('EGG_VERSION_LABEL', "0.0.1")
+
 setup(
     name = PACKAGE_NAME,
-    version = "0.0.1",
+    version = _egg_version,
     package_dir = {'': 'src'},
     packages = find_packages('src'),
     data_files = data_files,
