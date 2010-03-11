@@ -52,13 +52,13 @@ def startMorbidQueue(port):
     reactor.listenTCP(options['port'], stomp_factory, interface=options['interface'])
     reactor.run()
 
-def startVesperInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
+def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
     print "creating vesper instance:%s (%s:%d)" % (nodeId, queueHost, port)
     conf = {
-        'STORAGE_URL':"mem://",
-        'saveHistory':True,
-        'trunkId': trunkId,
-        'branchId':nodeId,
+        'storage_url':"mem://",
+        'save_history':True,
+        'trunk_id': trunk_id,
+        'branch_id':nodeId,
         'REPLICATION_HOSTS':[(queueHost, queuePort)],
         'REPLICATION_CHANNEL':channel
         
@@ -70,7 +70,7 @@ def startVesperInstance(trunkId, nodeId, port, queueHost, queuePort, channel):
         autoAck=True
     
     rep = replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
-    conf['CHANGESET_HOOK'] = rep.replication_hook
+    conf['changeset_hook'] = rep.replication_hook
     
     @app.Action
     def startReplication(kw, retVal):

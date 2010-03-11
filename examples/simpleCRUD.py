@@ -184,15 +184,15 @@ actions = {
   'http-request' : rx.route.gensequence
 }
 
-# using STORAGE_URL sets modelFactory and STORAGE_PATH
-#STORAGE_URL="tyrant://localhost:1978"
-#STORAGE_URL="rdf://out2.nt"
-STORAGE_URL="mem://"
+# using storage_url sets model_factory and storage_path
+#storage_url="tyrant://localhost:1978"
+#storage_url="rdf://out2.nt"
+storage_url="mem://"
 
 parser = OptionParser()
 (options, args) = parser.parse_args()
 if len(args) > 0:
-    STORAGE_URL = args[0]
+    storage_url = args[0]
     
 try:
     raccoon.run(globals())

@@ -275,7 +275,7 @@ class RequestProcessor(TransactionProcessor):
             self.appName = re.sub(r'\W','_', self.BASE_MODEL_URI)
         self.log = logging.getLogger("app." + self.appName)
 
-        useFileLock = appVars.get('useFileLock')
+        useFileLock = appVars.get('use_file_lock')
         if useFileLock:
             if isinstance(useFileLock, type):
                 self.LockFile = useFileLock
@@ -527,17 +527,17 @@ class AppConfig(utils.attrdict):
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
 
-        if self.get('STORAGE_URL'):
+        if self.get('storage_url'):
             try:
-                (proto, path) = re.split(r':(?://)?', self['STORAGE_URL'],1)
+                (proto, path) = re.split(r':(?://)?', self['storage_url'],1)
             except ValueError: # split didn't work
-                raise Exception("STORAGE_URL must be of the format 'proto:location'")
+                raise Exception("storage_url must be of the format 'proto:location'")
 
-            self['modelFactory'] = store.get_factory(proto)
+            self['model_factory'] = store.get_factory(proto)
             if proto == 'file':
                 path = UriToOsPath(path)            
-            self['STORAGE_PATH'] = path
-            #XXX if modelFactory is set should override STORAGE_URL            
+            self['storage_path'] = path
+            #XXX if model_factory is set should override storage_url            
 
         from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(appVars=self.copy())
@@ -570,11 +570,11 @@ class AppConfig(utils.attrdict):
         return root
 
 def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
-    #XXX very confusing that storageURL spelling doesn't match STORAGE_URL 
+    #XXX very confusing that storageURL spelling doesn't match storage_url 
     root = createApp(
-        STORAGE_URL = storageURL,
-        STORAGE_TEMPLATE = json,
-        storageTemplateOptions = dict(generateBnode=idGenerator),
+        storage_url = storageURL,
+        storage_template = json,
+        storage_template_options = dict(generateBnode=idGenerator),
         **kw    
     ).run(False)
     return root.dataStore

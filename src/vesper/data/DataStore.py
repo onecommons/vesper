@@ -62,7 +62,7 @@ class DataStore(transactions.TransactionParticipant): # XXX this base class can 
         
     def _normalizeSource(self, requestProcessor, source):
         if not source:
-            self.log.warning('no model path given and STORAGE_PATH'
+            self.log.warning('no model path given and storage_path'
                              ' is not set -- model is read-only.')            
         elif not os.path.isabs(source):
             #XXX its possible for source to not be file path
@@ -72,67 +72,67 @@ class DataStore(transactions.TransactionParticipant): # XXX this base class can 
             
 class BasicStore(DataStore):
 
-    def __init__(self, requestProcessor, modelFactory=None,
+    def __init__(self, requestProcessor, model_factory=None,
                  schemaFactory=defaultSchemaClass,
-                 STORAGE_PATH ='',
-                 STORAGE_TEMPLATE='',
-                 APPLICATION_MODEL='',
-                 transactionLog = '',
-                 saveHistory = False,
-                 VERSION_STORAGE_PATH='',
-                 versionModelFactory=None,
-                 storageTemplateOptions=None,
-                 modelOptions=None,
-                 CHANGESET_HOOK=None,
-                 trunkId = '0A', 
-                 branchId = None,                  
+                 storage_path ='',
+                 storage_template='',
+                 application_model='',
+                 transaction_log = '',
+                 save_history = False,
+                 version_storage_path='',
+                 version_model_factor=None,
+                 storage_template_options=None,
+                 model_options=None,
+                 changeset_hook=None,
+                 trunk_id = '0A', 
+                 branch_id = None,                  
                  **kw):
         '''
-        modelFactory is a base.Model class or factory function that takes
+        model_factory is a base.Model class or factory function that takes
         two parameters:
           a location (usually a local file path) and iterator of Statements
           to initialize the model if it needs to be created
         '''
         self.requestProcessor = requestProcessor
-        self.modelFactory = modelFactory
-        self.versionModelFactory = versionModelFactory
+        self.model_factory = model_factory
+        self.version_model_factor = version_model_factor
         self.schemaFactory = schemaFactory 
-        self.APPLICATION_MODEL = APPLICATION_MODEL        
-        self.STORAGE_PATH = STORAGE_PATH        
-        self.VERSION_STORAGE_PATH = VERSION_STORAGE_PATH
-        self.STORAGE_TEMPLATE = STORAGE_TEMPLATE
-        self.transactionLog = transactionLog
-        self.saveHistory = saveHistory
-        self.storageTemplateOptions = storageTemplateOptions or {}
-        self.trunkId = trunkId
-        self.branchId = branchId
-        self.changesetHook = CHANGESET_HOOK
+        self.application_model = application_model        
+        self.storage_path = storage_path        
+        self.version_storage_path = version_storage_path
+        self.storage_template = storage_template
+        self.transaction_log = transaction_log
+        self.save_history = save_history
+        self.storage_template_options = storage_template_options or {}
+        self.trunk_id = trunk_id
+        self.branch_id = branch_id
+        self.changesetHook = changeset_hook
         self._txnparticipants = []
-        self.modelOptions = modelOptions or {}
+        self.model_options = model_options or {}
 
     def load(self):
         requestProcessor = self.requestProcessor
         self.log = logging.getLogger("datastore." + requestProcessor.appName)
 
-        #normalizeSource = getattr(self.modelFactory, 'normalizeSource',
+        #normalizeSource = getattr(self.model_factory, 'normalizeSource',
         #                                        DataStore._normalizeSource)
         #source is the data source for the store, usually a file path
-        #source = normalizeSource(self, requestProcessor, self.STORAGE_PATH)
-        source = self.STORAGE_PATH
+        #source = normalizeSource(self, requestProcessor, self.storage_path)
+        source = self.storage_path
         model, defaultStmts, historyModel, lastScope = self.setupHistory(source)
         if not model:
             #setupHistory didn't initialize the store, so do it now
-            #modelFactory will load the store specified by `source` or create
+            #model_factory will load the store specified by `source` or create
             #new one at that location and initializing it with `defaultStmts`
-            modelFactory = self.modelFactory or FileStore
-            self.log.info("Using %s at '%s'" % (modelFactory.__name__, source))
-            model = modelFactory(source=source, defaultStatements=defaultStmts,
-                                                            **self.modelOptions)
+            model_factory = self.model_factory or FileStore
+            self.log.info("Using %s at '%s'" % (model_factory.__name__, source))
+            model = model_factory(source=source, defaultStatements=defaultStmts,
+                                                            **self.model_options)
                 
         #if there's application data (data tied to the current revision
         #of your app's implementation) include that in the model
-        if self.APPLICATION_MODEL:
-            stmtGen = base.parseRDFFromString(self.APPLICATION_MODEL, 
+        if self.application_model:
+            stmtGen = base.parseRDFFromString(self.application_model, 
                 requestProcessor.MODEL_RESOURCE_URI, scope=graphmod.APPCTX) 
             appmodel = MemStore(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
@@ -140,10 +140,10 @@ class BasicStore(DataStore):
             #from what's stored (this requires a context-aware store)
             model = base.MultiModel(model, appmodel)
         
-        if self.saveHistory:
+        if self.save_history:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
             self.model = self.graphManager = graphmod.MergeableGraphManager(model, 
-                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.trunkId, self.branchId) 
+                historyModel, requestProcessor.MODEL_RESOURCE_URI, lastScope, self.trunk_id, self.branch_id) 
             if self._txnparticipants:
                 self._txnparticipants.insert(0, #must go first
                         TwoPhaseTxnGraphManagerAdapter(self.graphManager))
@@ -153,17 +153,17 @@ class BasicStore(DataStore):
 
         #turn on update logging if a log file is specified, which can be used to 
         #re-create the change history of the store
-        if self.transactionLog:
+        if self.transaction_log:
             #XXX doesn't log history model if store is split
             #XXX doesn't log models that are TransactionParticipants themselves
             #XXX doesn't log models that don't support updateAdvisory 
             if isinstance(self.model, ModelWrapper):
-                self.model.adapter.logPath = self.transactionLog
+                self.model.adapter.logPath = self.transaction_log
             else:                
-                self.log.warning("transactionLog is configured but not compatible with model")
+                self.log.warning("transaction_log is configured but not compatible with model")
         
         if self.changesetHook:
-            assert self.saveHistory, "replication requires saveHistory to be on"
+            assert self.save_history, "replication requires save_history to be on"
             self.model.notifyChangeset = self.changesetHook
         
         #set the schema (default is no-op)
@@ -174,50 +174,50 @@ class BasicStore(DataStore):
             self.model = self.schema
 
         #hack!:
-        if self.storageTemplateOptions.get('generateBnode') == 'counter':            
+        if self.storage_template_options.get('generateBnode') == 'counter':            
             model.bnodePrefix = '_:'
             self.model.bnodePrefix = '_:'
 
     def setupHistory(self, source):
         requestProcessor = self.requestProcessor
-        if self.saveHistory:
+        if self.save_history:
             #if we're going to be recording history we need a starting context uri
             initCtxUri = graphmod.getTxnContextUri(requestProcessor.MODEL_RESOURCE_URI, 0)
         else:
             initCtxUri = ''
         
         #data used to initialize a new store
-        defaultStmts = base.parseRDFFromString(self.STORAGE_TEMPLATE, 
+        defaultStmts = base.parseRDFFromString(self.storage_template, 
                         requestProcessor.MODEL_RESOURCE_URI, scope=initCtxUri, 
-                        options=self.storageTemplateOptions) 
+                        options=self.storage_template_options) 
         
-        if self.saveHistory == 'split':                                                
-            versionModelFactory = self.versionModelFactory
+        if self.save_history == 'split':                                                
+            version_model_factor = self.version_model_factor
             versionModelOptions = {}
-            if not versionModelFactory:
-                if self.VERSION_STORAGE_PATH and self.modelFactory:
-                    #if a both a version path and the modelfactory was set, use the model factory
-                    versionModelFactory = self.modelFactory
-                    versionModelOptions = self.modelOptions
-                elif self.STORAGE_PATH or self.VERSION_STORAGE_PATH: #use the default
-                    versionModelFactory = IncrementalNTriplesFileStoreBase
+            if not version_model_factor:
+                if self.version_storage_path and self.model_factory:
+                    #if a both a version path and the model_factory was set, use the model factory
+                    version_model_factor = self.model_factory
+                    versionModelOptions = self.model_options
+                elif self.storage_path or self.version_storage_path: #use the default
+                    version_model_factor = IncrementalNTriplesFileStoreBase
                 else:
-                    versionModelFactory = MemStore
+                    version_model_factor = MemStore
 
-            if not self.VERSION_STORAGE_PATH and issubclass(versionModelFactory, FileStore):
+            if not self.version_storage_path and issubclass(version_model_factor, FileStore):
                 #generate path based on primary path
-                assert self.STORAGE_PATH
+                assert self.storage_path
                 import os.path
-                versionStoreSource = os.path.splitext(self.STORAGE_PATH)[0] + '-history.nt'
+                versionStoreSource = os.path.splitext(self.storage_path)[0] + '-history.nt'
             else:
-                versionStoreSource = self.VERSION_STORAGE_PATH
+                versionStoreSource = self.version_storage_path
             
             if versionStoreSource:
-                normalizeSource = getattr(self.versionModelFactory, 
+                normalizeSource = getattr(self.version_model_factor, 
                         'normalizeSource', DataStore._normalizeSource)
                 versionStoreSource = normalizeSource(self, requestProcessor,
                                                      versionStoreSource)
-            revisionModel = versionModelFactory(source=versionStoreSource,
+            revisionModel = version_model_factor(source=versionStoreSource,
                                         defaultStatements=[], **versionModelOptions)
         else:
             #either no history or no separate model
@@ -230,13 +230,13 @@ class BasicStore(DataStore):
         #the history into a separate model
         #
         #note: to override loadNtriplesIncrementally, set this attribute
-        #on your custom modelFactory        
-        if self.saveHistory == 'split' and getattr(
-                self.modelFactory, 'loadNtriplesIncrementally', False):
+        #on your custom model_factory        
+        if self.save_history == 'split' and getattr(
+                self.model_factory, 'loadNtriplesIncrementally', False):
             if not revisionModel:
                 revisionModel = MemStore()
             dmc = graphmod.DeletionModelCreator(revisionModel)
-            model = self.modelFactory(source=source,
+            model = self.model_factory(source=source,
                     defaultStatements=defaultStmts, incrementHook=dmc)
             lastScope = dmc.lastScope
         else:
@@ -316,7 +316,7 @@ class BasicStore(DataStore):
     
     def _toStatements(self, json):
         #if we parse pjson, make sure we generate the same kind of bnodes as the model
-        return _toStatements(json, generateBnode=self.storageTemplateOptions.get('generateBnode'))
+        return _toStatements(json, generateBnode=self.storage_template_options.get('generateBnode'))
         
     def add(self, adds):
         '''

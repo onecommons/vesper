@@ -7,7 +7,7 @@ configuration variables
 datastore configuration variables 
 =================================
 
-.. confval:: dataStoreFactory
+.. confval:: datastore_factory
 
   The class or factory function the Raccoon will call to instantiate the application's primary data store
   It is passed as keyword arguments the dictionary of the variables contained in the config file
@@ -23,106 +23,106 @@ datastore configuration variables
 
     Example: ``model_uri='http://example.com/'``
 
-.. confval:: STORAGE_URL 
+.. confval:: storage_url 
 
   A pseudo-URL that describes the connection to the data store.
-  Todo: document how this overrides STORAGE_PATH and modelFactory
+  Todo: document how this overrides storage_path and modelFactory
 
-  Default: ``STORAGE_URL='mem:``
+  Default: ``storage_url='mem:``
 
-.. confval:: STORAGE_PATH
+.. confval:: storage_path
 
     The location of the RDF model. Usually a file path but the appropriate value depends on 'modelFactory'
     default is '' 
-    STORAGE_PATH = 'mywebsite.nt'
+    storage_path = 'mywebsite.nt'
 
-.. confval:: transactionLog
+.. confval:: transaction_log
  
-    The path of the transactionLog. The transactionLog records in NTriples format a log 
+    The path of the transaction log.. The transaction log records in NTriples format a log 
     of the statements added and removed from the model along with comments on when and by whom.
     Note: the default file store uses this format so there is not much reason to use this if you are using the default
     
-    default is '' (no transactionLog)
+    default is '' (no transaction log)
     
-    ``transactionLog='/logs/auditTrail.nt'``
+    ``transaction_log='/logs/auditTrail.nt'``
 
-.. confval:: STORAGE_TEMPLATE
+.. confval:: storage_template
 
     A string containing NTriples that is used when 
-    the file specified by STORAGE_PATH is not found
+    the file specified by storage_path is not found
     
-    STORAGE_TEMPLATE='''
+    storage_template='''
     _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#name> "item-disposition-handler-template" .
     _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#revisions> _:itemdispositionhandlertemplate1List .
     _:itemdispositionhandlertemplate <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#NamedContent> .
     '''
-.. confval:: APPLICATION_MODEL 
+.. confval:: application_model 
 
     A string containing NTriples that are added to the RDF model
     but are read-only and not saved to disc. Use for structural components such as the schema.
     
-    APPLICATION_MODEL='''<http://rx4rdf.sf.net/ns/wiki#item-format-zml'> <http://www.w3.org/2000/01/rdf-schema#label> "ZML" .'''
+    application_model='''<http://rx4rdf.sf.net/ns/wiki#item-format-zml'> <http://www.w3.org/2000/01/rdf-schema#label> "ZML" .'''
 
-.. confval:: modelFactory
+.. confval:: model_factory
 
     The class or factory function used by RxPathDomStore to load or create a new RDF document or database
     note that this is a callable object which may need to be imported into the config file
     
     default is RxPath.IncrementalNTriplesFileModel
     
-    modelFactory=RxPath.RedlandHashBdbModel
+    model_factory=RxPath.RedlandHashBdbModel
 
-.. confval:: VERSION_STORAGE_PATH
+.. confval:: version_storage_path
 
     The location of a separate RDF model for storing the history of changes to the database.
-    Usually a file path but the appropriate value depends on 'versionModelFactory'
+    Usually a file path but the appropriate value depends on 'version_model_factory'
     
     default is '' (history not stored separately)
     
-    VERSION_STORAGE_PATH = 'mywebsite.history.nt'
+    version_storage_path = 'mywebsite.history.nt'
 
-.. confval:: versionModelFactory
+.. confval:: version_model_factory
 
     The class or factory function used by RxPathDomStore to load or create the version history RDF database
     #note that this is a callable object which may need to be imported into the config file
     
-    default is whatever 'modelFactory' is set to
+    default is whatever 'model_factory' is set to
     
-    ``versionModelFactory=RxPath.RedlandHashBdbModel``
+    ``version_model_factory=RxPath.RedlandHashBdbModel``
 
-.. confval:: useFileLock 
+.. confval:: use_file_lock 
 
     If True `vesper.app` will use interprocess file lock when committing 
-    a transaction. Alternately useFileLock can be a reference to a class or factory
+    a transaction. Alternately use_file_lock can be a reference to a class or factory
     function that conforms to the glock.LockFile interface.
 
     Default is False
     
-    ``useFileLock=True #enable``
+    ``use_file_lock=True #enable``
 
-.. confval:: saveHistory 
+.. confval:: save_history 
 
-    Default: ``saveHistory = False``
+    Default: ``save_history = False``
 
-.. confval:: storageTemplateOptions
+.. confval:: storage_template_options
  
-    Default: ``storageTemplateOptions=None``
+    Default: ``storage_template_options=None``
 
-.. confval:: modelOptions 
+.. confval:: model_options 
 
-    Default: ``modelOptions=None``
+    Default: ``model_options=None``
 
-.. confval:: CHANGESET_HOOK 
+.. confval:: changeset_hook 
 
-    Default: ``CHANGESET_HOOK=None``
+    Default: ``changeset_hook=None``
 
-.. confval:: trunkId 
+.. confval:: trunk_id 
 
-    Default: ``trunkId = '0A'``
+    Default: ``trunk_id = '0A'``
 
-.. confval:: branchId 
+.. confval:: branch_id 
 
-    Default: ``branchId = None``                  
+    Default: ``branch_id = None``                  
 
 web configuration variables 
 =================================

@@ -127,7 +127,7 @@ class RaccoonTestCase(unittest.TestCase):
         
         #use a model that doesn't support 2phase commit (i.e. doesn't support updateAdvisory) 
         self.failUnless(not TransactionMemStore.updateAdvisory)
-        self._testErrorHandling(appVars=dict(modelFactory=TransactionMemStore))
+        self._testErrorHandling(appVars=dict(model_factory=TransactionMemStore))
         #now we will have a critical error
         self.failUnless('CRITICAL' in [r.levelname for r in self.logHandler.records])
         
@@ -189,7 +189,7 @@ class RaccoonTestCase(unittest.TestCase):
         else:
             self.fail('should have raised an error')
         
-        app2 = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:', trunkId='0A', branchId='0B')
+        app2 = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:', trunk_id='0A', branch_id='0B')
         app2.load()
         root2 = app2._server
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
@@ -217,7 +217,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
         
     def testMerge(self):
-        store1 = vesper.app.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',BASE_MODEL_URI = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')
                 
         store1.add([{ 'id' : '1', 'prop' : 0,
@@ -289,7 +289,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
                 
     def testMergeConflict(self):        
-        store1 = vesper.app.createStore(saveHistory='split', branchId='B',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='B',BASE_MODEL_URI = 'test:')
         store1.add([{ 'id' : 'a_resource',
            'newprop' : 'change an existing resource'
         }])
@@ -303,7 +303,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testMergeInTransaction(self):
         #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
-        store1 = vesper.app.createStore(saveHistory='split', branchId='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',BASE_MODEL_URI = 'test:')
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
@@ -370,16 +370,16 @@ class RaccoonTestCase(unittest.TestCase):
         #this transaction failed so model statements should not have changed
         self.assertEqual(initialStmts, store.model.getStatements())
         
-    def _test2PhaseTxn(self, saveHistory):
+    def _test2PhaseTxn(self, save_history):
         '''
         Test updates with multiple transaction participants
         '''
         from vesper.data import DataStore
-        store = vesper.app.createStore(saveHistory=saveHistory, BASE_MODEL_URI = 'test:')
+        store = vesper.app.createStore(save_history=save_history, BASE_MODEL_URI = 'test:')
         root = store.requestProcessor        
-        if saveHistory == 'split':
+        if save_history == 'split':
             graphParticipants = 2            
-        elif saveHistory == 'combined':
+        elif save_history == 'combined':
             graphParticipants = 1
         else:
             graphParticipants = 0
@@ -394,9 +394,9 @@ class RaccoonTestCase(unittest.TestCase):
                 self.assertEquals(len(root.txnSvc.state.participants), 
                         3 + graphParticipants, root.txnSvc.state.participants)
                 
-                if saveHistory == 'split':
+                if save_history == 'split':
                     stmts = store._txnparticipants[-2].undo 
-                elif saveHistory == 'combined':
+                elif save_history == 'combined':
                     stmts = [s for s in store._txnparticipants[-1].undo 
                             if s[0] is base.Removed and not s[1][4] or len(s) == 1 and not s[0][4] ]
                 else:
@@ -441,7 +441,7 @@ class RaccoonTestCase(unittest.TestCase):
         testState = self.TxnTestState(store)
         before = False
         self._run2PhaseTxnTest(testState, voteForCommit, testFail)
-        if saveHistory: 
+        if save_history: 
             self.assertEqual(store.model.currentVersion, '0A00001')
         else:
             self.failUnless(isinstance(root.dataStore.model, DataStore.ModelWrapper))
@@ -474,15 +474,15 @@ class RaccoonTestCase(unittest.TestCase):
             add = {"id":"1",                    
                   "tags" : [ '@t' ]
                   }            
-            store = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', saveHistory=True)
+            store = vesper.app.createStore(storage_path=tmppath, storageURL='', 
+                model_factory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', save_history=True)
             store.add(add)
             
-            #now reload the file into a new store without saveHistory turned on,
+            #now reload the file into a new store without save_history turned on,
             #so that the history representation is visible to the app
             #print file(tmppath).read()            
-            store2 = vesper.app.createStore(STORAGE_PATH=tmppath, storageURL='', 
-                modelFactory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', saveHistory=False)
+            store2 = vesper.app.createStore(storage_path=tmppath, storageURL='', 
+                model_factory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', save_history=False)
             #XXX jql is not including scope in results
             self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
         finally:

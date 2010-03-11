@@ -48,7 +48,7 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
             vars['LOG_CONFIG'] = logConfig
 
         if '-m' in mainArgs:
-            vars['STORAGE_PATH'] = mainArgs[mainArgs.index("-m")+1]
+            vars['storage_path'] = mainArgs[mainArgs.index("-m")+1]
         
         #any args left over treat as config variable 
         vars.update(argsToKw(rootArgs))        

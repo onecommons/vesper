@@ -101,7 +101,7 @@ from vesper.data.store.basic import FileStore
 app = createApp(
     static_path=['static'],
     STORAGE_PATH="baseapp-store.json",
-    modelFactory=FileStore,
+    model_factory=FileStore,
     defaultPageName = 'index.html',
     actions = actions
 )
@@ -148,7 +148,7 @@ def parseCmdLine():
         # log.addHandler(stream)
         
     if options.storage:
-        CONF['STORAGE_URL'] = options.storage
+        CONF['storage_url'] = options.storage
     if options.port:
         CONF['PORT'] = int(options.port)
     
@@ -156,8 +156,8 @@ def parseCmdLine():
     if len(CONF) > 0:
         app.update(CONF)
         
-    if 'STORAGE_URL' not in app:
-        parser.error("STORAGE_URL not specified. Either use the -s option or load a config file that sets the value.")
+    if 'storage_url' not in app:
+        parser.error("storage_url not specified. Either use the -s option or load a config file that sets the value.")
         
     return app # ??
 

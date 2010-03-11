@@ -117,8 +117,8 @@ class NamedGraphManager(base.Model):
     lastLatest = None
     
     initialRevision = 0
-    trunkId = None
-    branchId = None    
+    trunk_id = None
+    branch_id = None    
     notifyChangeset = None
 
     autocommit = property(lambda self: self.managedModel.autocommit,
@@ -399,7 +399,7 @@ class NamedGraphManager(base.Model):
         #XXX do we need to handle StatementWithOrder specially?
         changeset = attrdict(revision = txn.currentRev, 
                 baserevision=txn.baseRev, timestamp=txn.timestamp, 
-                origin=self.branchId , statements = ctxStmts)
+                origin=self.branch_id , statements = ctxStmts)
         try:
             self.notifyChangeset(changeset)
         except:
@@ -739,12 +739,12 @@ class MergeableGraphManager(NamedGraphManager):
     maxPendingQueueSize = 1000
     pendingQueue = {} 
 
-    def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, trunkId='0A', branchId=None):
-        self.trunkId = trunkId.rjust(2, '0')
-        if branchId:        
-            self.branchId = branchId.rjust(2, '0')
+    def __init__(self, primaryModel, revisionModel, modelUri, lastScope=None, trunk_id='0A', branch_id=None):
+        self.trunk_id = trunk_id.rjust(2, '0')
+        if branch_id:        
+            self.branch_id = branch_id.rjust(2, '0')
         else:
-            self.branchId = trunkId
+            self.branch_id = trunk_id
         super(MergeableGraphManager, self).__init__(primaryModel, revisionModel, modelUri, lastScope)
 
     @staticmethod
@@ -776,34 +776,34 @@ class MergeableGraphManager(NamedGraphManager):
         if not rev:
             return self.initialRevision
         
-        if self.branchId not in rev:
+        if self.branch_id not in rev:
             #create new branch            
-            if [node for node in rev.split(',') if node > self.branchId]:
+            if [node for node in rev.split(',') if node > self.branch_id]:
                  raise RuntimeError(
-                    'branchId %s precedes current branches in rev %s' % 
-                                                    (self.branchId, rev))
+                    'branch_id %s precedes current branches in rev %s' % 
+                                                    (self.branch_id, rev))
             if rev == self.initialRevision:
-                return self.branchId + '00001'            
-            return rev + ',' + self.branchId + '00001'
+                return self.branch_id + '00001'            
+            return rev + ',' + self.branch_id + '00001'
 
         def incLocalBranch(node):
-            if node.startswith(self.branchId):
-                start = len(self.branchId)
+            if node.startswith(self.branch_id):
+                start = len(self.branch_id)
                 inc = int(node[start:])+1
-                return self.branchId + '%05d' % inc
+                return self.branch_id + '%05d' % inc
             else:
                 return node
         return ','.join([incLocalBranch(node) for node in rev.split(',')])
         
     def mergeVersions(self, rev1, rev2):
         nodes = {}
-        branchLen = len(self.branchId)
+        branchLen = len(self.branch_id)
         for branchRev in (rev1+','+rev2).split(','):
-            branchId = branchRev[:branchLen]
+            branch_id = branchRev[:branchLen]
             branchNum = branchRev[branchLen:]
-            num = nodes.get(branchId)
+            num = nodes.get(branch_id)
             if not num or num < branchNum:
-                nodes[branchId] = branchNum
+                nodes[branch_id] = branchNum
         return ','.join( sorted([k+v for (k,v) in nodes.items()]) )
         
     def _addChangesetStatements(self, changeset, setrevision):
@@ -827,15 +827,15 @@ class MergeableGraphManager(NamedGraphManager):
         if self.currentVersion == self.initialRevision:
             #just take the changesets revision
             assert changeset.baserevision == self.initialRevision
-            if changeset.origin not in (self.trunkId, self.branchId):
+            if changeset.origin not in (self.trunk_id, self.branch_id):
                 #we can't allow this since we need changesets to at least 
                 #share the trunk revision
                 raise RuntimeError('''merging a changeset into an empty store 
 but neither its trunkid %s not its branchid %s 
 match the changeset's branchid: %s''' % (
-                                self.trunkId, self.branchId, changeset.origin))            
+                                self.trunk_id, self.branch_id, changeset.origin))            
         else:
-            branchidlen = len(self.branchId)
+            branchidlen = len(self.branch_id)
             if (changeset.revision[:branchidlen] != 
                     self.currentVersion[:branchidlen]):
                 raise RuntimeError('can not add a changeset that does not share trunk branch: %s, %s'
@@ -943,9 +943,9 @@ match the changeset's branchid: %s''' % (
         if not isinstance(changeset, attrdict):
             changeset = attrdict(changeset)
 
-        if changeset.origin == self.branchId:
+        if changeset.origin == self.branch_id:
             #handle receiving own changeset
-            raise RuntimeError("merge received changeset from itself: " + self.branchId)
+            raise RuntimeError("merge received changeset from itself: " + self.branch_id)
             
         if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
             if changeset.baserevision in self.pendingQueue:

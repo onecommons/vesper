@@ -57,15 +57,15 @@ actions = {
   'run-cmds' : [testaction]
 }
 
-parser = OptionParser("usage: %prog [options] STORAGE_URL")
+parser = OptionParser("usage: %prog [options] storage_url")
 parser.add_option("-l", "--load", dest="load", help="load data from file")
 parser.add_option("-d", "--dump", dest="dump", help="dump data to file")
 (options, args) = parser.parse_args()
 
 if len(args) > 0:
-    STORAGE_URL = args[0]
+    storage_url = args[0]
 else:
-    parser.error("STORAGE_URL required")
+    parser.error("storage_url required")
     
 _LOAD=options.load
 _DUMP=options.dump
@@ -73,7 +73,7 @@ if not _LOAD and not _DUMP:
     parser.error("Must specify either a load or a dump file")
 
 CONF = {
-    'STORAGE_URL':STORAGE_URL,
+    'storage_url':storage_url,
     'actions':actions,
     'EXEC_CMD_AND_EXIT': True
 }

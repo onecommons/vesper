@@ -40,4 +40,4 @@ actions = { 'http-request' : [updateAction, queryAction],
 'load-model':[testLoadModelHook]
 }
 
-createApp(actions=actions, saveHistory='split')
+createApp(actions=actions, save_history='split')

@@ -25,9 +25,9 @@ def servefile(kw, retval):
 actions = { 'http-request' : lambda kw: gensequence(kw, default=fromdatastore)
         }
 
-APPLICATION_MODEL = [{ 'id' : 'a_resource', 
+application_model = [{ 'id' : 'a_resource', 
                       'label' : 'foo', 
                        'comment' : 'page content.'
                     }]
                     
-createApp(actions=actions, APPLICATION_MODEL=APPLICATION_MODEL)
+createApp(actions=actions, application_model=application_model)

@@ -28,7 +28,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     def loadDataStore(self, kw):
         self.txnSvc = transactions.RaccoonTransactionService(self)
         
-        dataStoreFactory = kw.get('dataStoreFactory', kw.get('domStoreFactory', DataStore.BasicStore))
+        dataStoreFactory = kw.get('datastore_factory', kw.get('domStoreFactory', DataStore.BasicStore))
         self.dataStore = dataStoreFactory(self, **kw)
         self.dataStore.addTrigger = self.txnSvc.addHook
         self.dataStore.removeTrigger = self.txnSvc.removeHook
