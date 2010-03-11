@@ -60,7 +60,7 @@ def _servefile(kw, retval, uri):
         filepath = os.path.join(prefix.strip(), path)
         #print 'filepath', filepath
         #check to make sure the path url wasn't trying to sneak outside the path (e.g. by using "..")
-        if server.SECURE_FILE_ACCESS:
+        if server.secure_file_access:
             if not os.path.abspath(filepath).startswith(os.path.abspath(prefix)):
                 unauthorized = True                
                 continue

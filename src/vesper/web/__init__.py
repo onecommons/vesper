@@ -79,7 +79,7 @@ class HTTPRequestProcessor(RequestProcessor):
             #rc['_session']=kw['_session']
             self.requestContext.append(rc)
 
-            self.validateExternalRequest(kw)
+            self.validate_external_request(kw)
 
             result = self.runActions('http-request', kw)
             if result is not None:
@@ -98,17 +98,17 @@ class HTTPRequestProcessor(RequestProcessor):
                 if not status.startswith('200'):
                     return result #don't set the following headers
 
-                if (self.defaultExpiresIn and
+                if (self.default_expires_in and
                     'expires' not in kw['_responseHeaders']):
-                    if self.defaultExpiresIn == -1:
+                    if self.default_expires_in == -1:
                         expires = '-1'
                     else:
                         expires = time.strftime("%a, %d %b %Y %H:%M:%S GMT",
-                                        time.gmtime(time.time() + self.defaultExpiresIn))
+                                        time.gmtime(time.time() + self.default_expires_in))
                     kw['_responseHeaders']['expires'] = expires
 
                 #XXX this etag stuff should be an action
-                if self.useEtags:
+                if self.use_etags:
                     resultHash = kw['_responseHeaders'].get('etag')
                     #if the app already set the etag use that value instead
                     if resultHash is None and isinstance(result, str):
@@ -132,7 +132,7 @@ class HTTPRequestProcessor(RequestProcessor):
         Converts an HTTP requests into these Action keywords:
 
         :var _name: environ['PATH_INFO'] without leading or trailing '/' 
-              or :confval:`defaultPageName` if empty
+              or :confval:`default_page_name` if empty
         :var _uri:  wsgiref.util.request_uri(environ),
         :var _baseUri:  wsgiref.util.application_uri(environ),        
         :var _params: (a utils.attrdict) A merge of URL parameters and if a POST with form variables, 
@@ -147,7 +147,7 @@ class HTTPRequestProcessor(RequestProcessor):
         import Cookie, wsgiref.util
         _name = environ['PATH_INFO'].strip('/')
         if not _name:
-            _name = self.defaultPageName
+            _name = self.default_page_name
 
         _responseCookies = Cookie.SimpleCookie()
         _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
@@ -192,8 +192,8 @@ class HTTPRequestProcessor(RequestProcessor):
             return "text/html"
         elif test.startswith("<?xml") or test[2:].startswith("<?xml"):
             return "text/xml"
-        elif self.DEFAULT_MIME_TYPE:
-            return self.DEFAULT_MIME_TYPE
+        elif self.default_mime_type:
+            return self.default_mime_type
         else:
             return None
 

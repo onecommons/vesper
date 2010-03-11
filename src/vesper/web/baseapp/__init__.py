@@ -102,7 +102,7 @@ app = createApp(
     static_path=['static'],
     STORAGE_PATH="baseapp-store.json",
     model_factory=FileStore,
-    defaultPageName = 'index.html',
+    default_page_name = 'index.html',
     actions = actions
 )
 
@@ -150,7 +150,7 @@ def parseCmdLine():
     if options.storage:
         CONF['storage_url'] = options.storage
     if options.port:
-        CONF['PORT'] = int(options.port)
+        CONF['port'] = int(options.port)
     
     # apply these last since they must override anything from the config file
     if len(CONF) > 0:

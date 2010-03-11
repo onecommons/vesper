@@ -127,9 +127,9 @@ datastore configuration variables
 web configuration variables 
 =================================
  
-.. confval:: PORT 
+.. confval:: port 
 
-    Default: ``PORT=8000``
+    Default: ``port=8000``
 
 .. confval:: logconfig 
 
@@ -144,7 +144,7 @@ web configuration variables
 
   Default: ``httpserver=wsgiref.simple_server``
 
-.. confval:: EXEC_CMD_AND_EXIT 
+.. confval:: exec_cmd_and_exit 
 
   If set to True, invoking the app will not start the web server -- it will just execute 
   any given command line arguements and exit.
@@ -160,14 +160,14 @@ web configuration variables
    
    Example: ``import firepython.middleware; wsgi_middleware = firepython.middleware.FirePythonWSGI``
 
-.. confval:: RECORD_REQUESTS 
+.. confval:: record_requests 
 
   Any HTTP requests made are saved to a file. They can be played-back using the ``DEBUG_FILENAME``
   option.
 
-.. confval:: DEBUG_FILENAME 
+.. confval:: debug_filename 
 
-   If specified, the given file containing a history of requests recorded by ``RECORD_REQUESTS``
+   If specified, the given file containing a history of requests recorded by ``record_requests``
    is played back before starting the server.
 
 .. confval:: static_path
@@ -186,30 +186,30 @@ web configuration variables
 
     Example: ``template_path = 'templates'``
   
-.. confval:: defaultPageName
+.. confval:: default_page_name
 
     The name of the page to be invoke if the request URL doesn't include a path 
     e.g. http://www.example.org/ is equivalent to http://www.example.org/index 
     
     default is: 'index.html'
     
-    `defaultPageName='home.html'`
+    `default_page_name='home.html'`
 
-.. confval:: DEFAULT_MIME_TYPE
+.. confval:: default_mime_type
 
     The MIME type sent on any request that doesn't set its own mimetype 
     and Raccoon can't guess its MIME type
     default is '' (not set)
-    DEFAULT_MIME_TYPE='text/plain'
+    default_mime_type='text/plain'
 
-.. confval:: MODEL_RESOURCE_URI
+.. confval:: model_resource_uri
 
     The resource that represents the model this instance of the application is running
     it can be used to assertions about the model itself, e.g its location or which application created it
     default is the value of BASE_MODEL_URI
-    MODEL_RESOURCE_URI = 'http://example.org/rhizomeapp/2/20/2004'
+    model_resource_uri = 'http://example.org/rhizomeapp/2/20/2004'
 
-.. confval:: defaultExpiresIn
+.. confval:: default_expires_in
 
     What to do about Expires HTTP response header if it 
     hasn't already set by the application. If it's value is 0 or None the header 
@@ -217,15 +217,15 @@ web configuration variables
     that responses should expire. To indicate that they already expired set it to -1;
     to indicate that they never expires set it to 31536000 (1 year).
     default is 3600 (1 hour)
-    defaultExpiresIn = 0 #disable setting the Expires header by default
+    default_expires_in = 0 #disable setting the Expires header by default
 
-.. confval:: useEtags 
+.. confval:: use_etags 
 
     If True, If-None-Match request headers are honors and an etag based 
     on a MD5 hash of the response content will be set with every response
     
     default is True
-    useEtags = False #disable
+    use_etags = False #disable
 
 .. confval:: mako_module_dir
 
@@ -236,7 +236,7 @@ web configuration variables
     
     default is `"mako_module"` relative to the location of the app configuration file.
     
-.. confval:: templateOptions
+.. confval:: template_options
 
   This setting is a dictionary that contains keyword arguments for the 
   `mako.lookup.TemplateLookup` constructor used when initializing the template engine.
@@ -249,13 +249,13 @@ advanced configuration variables
 
 These setting variables are only necessary when developing a new Raccoon application
 
-.. confval:: appName
+.. confval:: app_name
 
   A short name for this application, must be unique within the current ``vesper.app`` process
 
   Default: `"root"
   `
-  Example: ``appName = 'root'``
+  Example: ``app_name = 'root'``
 
 .. confval:: cmd_usage
 
@@ -290,56 +290,56 @@ These setting variables are only necessary when developing a new Raccoon applica
                   'load-model' : [ FunctorAction(rhizome.initIndex) ],
                 }
 
-.. confval:: DEFAULT_TRIGGER 
+.. confval:: default_trigger 
 
       Used by Requestor objects and the "site:" URL resolver as the trigger to use to invoke a request
       default is 'http-request'
       DEFAULT_TRIGGER='http-request'
 
-.. confval:: globalRequestVars
+.. confval:: global_request_vars
 
       A list of request metadata variables that should be preserved 
       when invoking callActions() (e.g. to invoke templates or an error handler)
       default is [] (but `vesper.app`  will always adds the following: 
       '_name', '_noErrorHandling', '__current-transaction', and '__readOnly')
 
-      globalRequestVars = [ '__account', '_static'] 
+      global_request_vars = [ '__account', '_static'] 
 
-.. confval:: getPrincipleFunc
+.. confval:: get_principal_func
 
       A function that is called to retrieve the 
       application-specific Principal (in the security sense) object 
       for the current request context.
       It takes one argument that is the dictionary of metadata for the current request
       default: lambda kw: '' 
-      getPrincipleFunc = lambda kw: kw.get('__account','')
+      get_principal_func = lambda kw: kw.get('__account','')
 
-.. confval:: validateExternalRequest
+.. confval:: validate_external_request
 
       A function that is called when receiving an external request (e.g. an http request)
       It is called before invoking runActions(). Use it to make sure the request 
       doesn't contain metadata that could dangerously confuse request processing.
       Its signature looks like:
-      ``def validateExternalRequest(kw)``
+      ``def validate_external_request(kw)``
       where `kw` is the request metadata dictionary (which can be modified if necessary).
       It should raise raccoon.NotAuthorized if the request should not be processed.
       
       default is lambda *args: True
       
-      ``validateExternalRequest=rhizome.validateExternalRequest``
+      ``validate_external_request=rhizome.validate_external_request``
 
-.. confval:: SECURE_FILE_ACCESS
+.. confval:: secure_file_access
 
     Limits URLs access to only the directories reachable through `static_path` or `templates_path`
 
     default is True
 
-    SECURE_FILE_ACCESS = True
+    secure_file_access = True
 
-.. confval:: ACTION_CACHE_SIZE
+.. confval:: action_cache_size
 
     Sets the maximum number of items to be stored in the Action cache. Set to 0 to disable.
 
     default is 0
 
-    ACTION_CACHE_SIZE=1000
+    action_cache_size=1000

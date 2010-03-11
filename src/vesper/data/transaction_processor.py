@@ -37,7 +37,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
             #newResourceHook is optional since it's expensive
             self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
         
-        self.MODEL_RESOURCE_URI = kw.get('MODEL_RESOURCE_URI',
+        self.model_resource_uri = kw.get('model_resource_uri',
                                          self.BASE_MODEL_URI)
         
     def getLock(self):
@@ -50,7 +50,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     
     def loadModel(self):
         if not self.lock:
-            lockName = 'r' + str(hash(self.MODEL_RESOURCE_URI)) + '.lock'
+            lockName = 'r' + str(hash(self.model_resource_uri)) + '.lock'
             self.lock = self.LockFile(lockName)
 
         lock = self.getLock()
@@ -72,7 +72,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
             raise
         else:
             if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                self.txnSvc.addInfo(source=self.get_principal_func(kw))
                 self.txnSvc.state.retVal = retVal                
                 if self.txnSvc.isDirty():
                     if kw.get('__readOnly'):
@@ -106,7 +106,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                 raise
             else:
                 if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                    self.txnSvc.addInfo(source=self.getPrincipleFunc(kw))
+                    self.txnSvc.addInfo(source=self.get_principal_func(kw))
                     if self.txnSvc.isDirty():
                         if kw.get('__readOnly'):
                             self.log.warning(

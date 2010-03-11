@@ -82,7 +82,7 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
         'load-model':[startReplication]    
     }
     
-    app.createApp(baseapp='miniserver.py',model_uri = 'test:', PORT=port, **conf).run()
+    app.createApp(baseapp='miniserver.py',model_uri = 'test:', port=port, **conf).run()
     # blocks forever
     
 

@@ -75,7 +75,7 @@ if not _LOAD and not _DUMP:
 CONF = {
     'storage_url':storage_url,
     'actions':actions,
-    'EXEC_CMD_AND_EXIT': True
+    'exec_cmd_and_exit': True
 }
 
 app = raccoon.createApp(**CONF).run()

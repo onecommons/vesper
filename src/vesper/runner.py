@@ -65,15 +65,15 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
                     raise ValueError
             except (IndexError, ValueError):
                 debugFileName = 'debug-wiki.pkl'
-            vars['DEBUG_FILENAME'] = debugFileName
+            vars['debug_filename'] = debugFileName
 
         else:
             if '-r' in mainArgs:
-                vars['RECORD_REQUESTS'] = True
+                vars['record_requests'] = True
 
             #if -x (execute cmdline and exit) we're done
             if '-x' in mainArgs:
-                vars['EXEC_CMD_AND_EXIT'] = True
+                vars['exec_cmd_and_exit'] = True
 
     except (CmdArgError), e:
         print>>out, e
@@ -93,10 +93,10 @@ def main(argv=sys.argv[1:], out=sys.stdout):
     For convenience, short alternative are available:
 
     -l [log.config] LOG_CONFIG specify a config file for logging
-    -x EXEC_CMD_AND_EXIT exit after executing config specific cmd arguments
+    -x exec_cmd_and_exit exit after executing config specific cmd arguments
     -m [store.json] SOURCE (connect to/load the store)
-    -r RECORD_REQUESTS record requests (ctrl-c to stop recording) 
-    -d [debug.pkl] DEBUG_FILENAME debug mode (replay the requests saved in debug.pkl)    
+    -r record_requests record requests (ctrl-c to stop recording) 
+    -d [debug.pkl] debug_filename debug mode (replay the requests saved in debug.pkl)    
     '''
     # mimics behavior of old main(), not really used anywhere
     appPath, vars = parse_args(argv, out)

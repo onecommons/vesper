@@ -228,7 +228,7 @@ class RequestProcessor(TransactionProcessor):
                 default_filters=['decode.utf8'], 
                 module_directory =self.mako_module_dir,
                 output_encoding='utf-8', encoding_errors='replace')
-            templateArgs.update(self.templateOptions)
+            templateArgs.update(self.template_options)
             self.template_loader = TemplateLookup(**templateArgs)
         self.requestDispatcher = Requestor(self)
         self.loadModel()
@@ -267,13 +267,13 @@ class RequestProcessor(TransactionProcessor):
             return assignAttrs(self, appVars, varlist, default)
 
         initConstants( [ 'actions'], {})
-        initConstants( ['DEFAULT_MIME_TYPE'], '')
+        initConstants( ['default_mime_type'], '')
         initConstants( ['BASE_MODEL_URI'], self.BASE_MODEL_URI)
-        initConstants( ['appName'], 'root')
-        #appName is a unique name for this request processor instance
-        if not self.appName:
-            self.appName = re.sub(r'\W','_', self.BASE_MODEL_URI)
-        self.log = logging.getLogger("app." + self.appName)
+        initConstants( ['app_name'], 'root')
+        #app_name is a unique name for this request processor instance
+        if not self.app_name:
+            self.app_name = re.sub(r'\W','_', self.BASE_MODEL_URI)
+        self.log = logging.getLogger("app." + self.app_name)
 
         useFileLock = appVars.get('use_file_lock')
         if useFileLock:
@@ -286,21 +286,21 @@ class RequestProcessor(TransactionProcessor):
         
         self.loadDataStore(appVars)
                 
-        self.defaultRequestTrigger = appVars.get('DEFAULT_TRIGGER','http-request')
-        initConstants( ['globalRequestVars', 'static_path', 'template_path'], [])
+        self.defaultRequestTrigger = appVars.get('default_trigger','http-request')
+        initConstants( ['global_request_vars', 'static_path', 'template_path'], [])
         self.mako_module_dir = appVars.get('mako_module_dir', 'mako_modules')
-        initConstants( ['templateOptions'], {})        
-        self.globalRequestVars.extend( self.defaultGlobalVars )
-        self.defaultPageName = appVars.get('defaultPageName', 'index')
+        initConstants( ['template_options'], {})        
+        self.global_request_vars.extend( self.defaultGlobalVars )
+        self.default_page_name = appVars.get('default_page_name', 'index')
         #cache settings:
-        initConstants( ['SECURE_FILE_ACCESS', 'useEtags'], True)
-        self.defaultExpiresIn = appVars.get('defaultExpiresIn', 0)
-        initConstants( ['ACTION_CACHE_SIZE'], 0)
-        self.validateExternalRequest = appVars.get('validateExternalRequest',
+        initConstants( ['secure_file_access', 'use_etags'], True)
+        self.default_expires_in = appVars.get('default_expires_in', 0)
+        initConstants( ['action_cache_size'], 0)
+        self.validate_external_request = appVars.get('validate_external_request',
                                         lambda *args: True)
-        self.getPrincipleFunc = appVars.get('getPrincipleFunc', lambda kw: '')
+        self.get_principal_func = appVars.get('get_principal_func', lambda kw: '')
 
-        self.MODEL_RESOURCE_URI = appVars.get('MODEL_RESOURCE_URI',
+        self.model_resource_uri = appVars.get('model_resource_uri',
                                          self.BASE_MODEL_URI)
         
         self.argsForConfig = appVars.get('argsForConfig', [])
@@ -310,7 +310,7 @@ class RequestProcessor(TransactionProcessor):
             appVars['configHook'](appVars)
 
     def loadModel(self):
-        self.actionCache = MRUCache.MRUCache(self.ACTION_CACHE_SIZE,
+        self.actionCache = MRUCache.MRUCache(self.action_cache_size,
                                              digestKey=True)
         super(RequestProcessor, self).loadModel()
         self.runActions('load-model')
@@ -452,7 +452,7 @@ class RequestProcessor(TransactionProcessor):
         but without modified the current context.
         Particularly useful for template processing.
         '''
-        globalVars = self.globalRequestVars + (globalVars or [])
+        globalVars = self.global_request_vars + (globalVars or [])
 
         #merge previous prevkw, overriding vars as necessary
         prevkw = kw.get('_prevkw', {}).copy()
@@ -552,15 +552,15 @@ class AppConfig(utils.attrdict):
         if not root:
             root = self.load()
 
-        if 'DEBUG_FILENAME' in self:
-            self.playbackRequestHistory(self['DEBUG_FILENAME'], out)
+        if 'debug_filename' in self:
+            self.playbackRequestHistory(self['debug_filename'], out)
 
-        if self.get('RECORD_REQUESTS'):
+        if self.get('record_requests'):
             root.requestsRecord = []
             root.requestRecordPath = 'debug-wiki.pkl'
 
-        if not self.get('EXEC_CMD_AND_EXIT', not startserver):
-            port = self.get('PORT', 8000)
+        if not self.get('exec_cmd_and_exit', not startserver):
+            port = self.get('port', 8000)
             middleware =  self.get('wsgi_middleware')
             httpserver = self.get('httpserver')
             log.info("Starting HTTP on port %d..." % port)
