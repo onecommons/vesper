@@ -13,7 +13,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         """
         self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
         
-        self.BASE_MODEL_URI = model_uri
+        self.model_uri = model_uri
         
         self.requestContext = [{}] #stack of dicts
         
@@ -38,7 +38,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
             self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
         
         self.model_resource_uri = kw.get('model_resource_uri',
-                                         self.BASE_MODEL_URI)
+                                         self.model_uri)
         
     def getLock(self):
         '''

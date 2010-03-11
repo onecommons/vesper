@@ -122,7 +122,16 @@ datastore configuration variables
 
 .. confval:: branch_id 
 
-    Default: ``branch_id = None``                  
+    Default: ``branch_id = None``
+
+.. confval:: replication_hosts 
+
+    Default: ``replication_hosts = None``
+
+.. confval:: replication_channel 
+
+    Default: ``replication_channel = None``
+
 
 web configuration variables 
 =================================
@@ -206,7 +215,7 @@ web configuration variables
 
     The resource that represents the model this instance of the application is running
     it can be used to assertions about the model itself, e.g its location or which application created it
-    default is the value of BASE_MODEL_URI
+    default is the value of model_uri
     model_resource_uri = 'http://example.org/rhizomeapp/2/20/2004'
 
 .. confval:: default_expires_in

@@ -251,10 +251,10 @@ class RequestProcessor(TransactionProcessor):
         self.runActions('run-cmds', kw)
 
     def loadConfig(self, appVars):
-        self.BASE_MODEL_URI = appVars.get('model_uri')
-        if not self.BASE_MODEL_URI:
+        self.model_uri = appVars.get('model_uri')
+        if not self.model_uri:
             import socket
-            self.BASE_MODEL_URI= 'http://' + socket.getfqdn() + '/'
+            self.model_uri= 'http://' + socket.getfqdn() + '/'
 
         self.config = utils.defaultattrdict(appVars)
 
@@ -268,11 +268,11 @@ class RequestProcessor(TransactionProcessor):
 
         initConstants( [ 'actions'], {})
         initConstants( ['default_mime_type'], '')
-        initConstants( ['BASE_MODEL_URI'], self.BASE_MODEL_URI)
+        initConstants( ['model_uri'], self.model_uri)
         initConstants( ['app_name'], 'root')
         #app_name is a unique name for this request processor instance
         if not self.app_name:
-            self.app_name = re.sub(r'\W','_', self.BASE_MODEL_URI)
+            self.app_name = re.sub(r'\W','_', self.model_uri)
         self.log = logging.getLogger("app." + self.app_name)
 
         useFileLock = appVars.get('use_file_lock')
@@ -301,7 +301,7 @@ class RequestProcessor(TransactionProcessor):
         self.get_principal_func = appVars.get('get_principal_func', lambda kw: '')
 
         self.model_resource_uri = appVars.get('model_resource_uri',
-                                         self.BASE_MODEL_URI)
+                                         self.model_uri)
         
         self.argsForConfig = appVars.get('argsForConfig', [])
         #XXX self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')

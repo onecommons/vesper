@@ -59,8 +59,8 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
         'save_history':True,
         'trunk_id': trunk_id,
         'branch_id':nodeId,
-        'REPLICATION_HOSTS':[(queueHost, queuePort)],
-        'REPLICATION_CHANNEL':channel
+        'replication_hosts':[(queueHost, queuePort)],
+        'replication_channel':channel
         
     }
     # assume remote queue implements message ack
@@ -69,7 +69,7 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
     else:
         autoAck=True
     
-    rep = replication.get_replicator(nodeId, conf['REPLICATION_CHANNEL'], hosts=conf['REPLICATION_HOSTS'], autoAck=autoAck)
+    rep = replication.get_replicator(nodeId, conf['replication_channel'], hosts=conf['replication_hosts'], autoAck=autoAck)
     conf['changeset_hook'] = rep.replication_hook
     
     @app.Action

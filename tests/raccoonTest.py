@@ -217,7 +217,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
         
     def testMerge(self):
-        store1 = vesper.app.createStore(save_history='split', branch_id='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')
                 
         store1.add([{ 'id' : '1', 'prop' : 0,
@@ -289,7 +289,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
                 
     def testMergeConflict(self):        
-        store1 = vesper.app.createStore(save_history='split', branch_id='B',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='B',model_uri = 'test:')
         store1.add([{ 'id' : 'a_resource',
            'newprop' : 'change an existing resource'
         }])
@@ -303,7 +303,7 @@ class RaccoonTestCase(unittest.TestCase):
     def testMergeInTransaction(self):
         #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
-        store1 = vesper.app.createStore(save_history='split', branch_id='A',BASE_MODEL_URI = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
@@ -375,7 +375,7 @@ class RaccoonTestCase(unittest.TestCase):
         Test updates with multiple transaction participants
         '''
         from vesper.data import DataStore
-        store = vesper.app.createStore(save_history=save_history, BASE_MODEL_URI = 'test:')
+        store = vesper.app.createStore(save_history=save_history, model_uri = 'test:')
         root = store.requestProcessor        
         if save_history == 'split':
             graphParticipants = 2            
@@ -475,14 +475,14 @@ class RaccoonTestCase(unittest.TestCase):
                   "tags" : [ '@t' ]
                   }            
             store = vesper.app.createStore(storage_path=tmppath, storageURL='', 
-                model_factory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', save_history=True)
+                model_factory=vesper.data.store.basic.FileStore,model_uri = 'test:', save_history=True)
             store.add(add)
             
             #now reload the file into a new store without save_history turned on,
             #so that the history representation is visible to the app
             #print file(tmppath).read()            
             store2 = vesper.app.createStore(storage_path=tmppath, storageURL='', 
-                model_factory=vesper.data.store.basic.FileStore,BASE_MODEL_URI = 'test:', save_history=False)
+                model_factory=vesper.data.store.basic.FileStore,model_uri = 'test:', save_history=False)
             #XXX jql is not including scope in results
             self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
         finally:
