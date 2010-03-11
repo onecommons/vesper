@@ -38,7 +38,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Vesper'
-copyright = u'2009, adam souzis'
+copyright = u'2009, the Vesper team (see AUTHORS)'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -103,7 +103,7 @@ html_theme = 'sphinxdoc' #'default'
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
-#html_title = None
+html_title = "Vesper"
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #html_short_title = None
@@ -173,7 +173,7 @@ htmlhelp_basename = 'vesperdoc'
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
   ('index', 'vesper.tex', u'Vesper Documentation',
-   u'adam souzis', 'manual'),
+   u'Vesper team', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

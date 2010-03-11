@@ -1,14 +1,17 @@
 .. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 .. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
-Using the Administration Server
-===============================
+Quick Start
+=========== 
 
 Installation
 ------------
 
 The easiest way to install vesper is via *easy_install*, but you can also download it from
 http://onecommons.net.
+
+Running the Administration Server
+-------------------------------
 
 Once installed, you should be able to start the vesper admin server with `vesper-admin`.  If not, it's possible
 that easy_install didn't put the script on your path.  Where these scripts are placed is platform

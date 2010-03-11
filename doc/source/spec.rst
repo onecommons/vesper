@@ -7,64 +7,48 @@ Informal JSONQL Specification
 = constructing a JSON object, array or value =
 
 .. productionlist::
- query: `constructobject` | `constructarray` | `constructvalue`
-
+ query  : `constructobject` 
+        :| `constructarray` 
+        :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `objectpair` | "*" [","])+
-                 :    [`query_criteria`] 
+                 :    (`objectitem` | `objectpair` | "*" [","])+ 
+                 :     [`query_criteria`] 
                  :  "}"
-
  constructarray  : "[" [`label`]
-                 :    (`arrayitem` [","])+
-                 :    [`query_criteria`] 
+                 :  (`arrayitem` [","])+ [`query_criteria`] 
                  : "]"
-
  constructvalue  : "(" 
-                 :    `expression` 
-                 :    [`query_criteria`] 
+                 :    `expression` [`query_criteria`] 
                  : ")"
-
- arrayitem : `expression` | "*" 
- 
- objectitem : `propertyname` | "*"
- 
- objectpair : `expression` ":" (`expression` | `constructarray` | `constructobject`)
-
- propertyname : NAME | "<" CHAR+ ">"
-  
- query_criteria : ["WHERE(" `expression` ")"]
-                : ["GROUPBY(" (`expression`[","])+ ")"]
-                : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
-                : ["LIMIT" number]
-                : ["OFFSET" number]
-                : ["DEPTH" number]
-
-.. productionlist::
- expression: `expression` "and" `expression`
-             | `expression` "or" `expression`
-             | "maybe" `expression`
-             | "not" `expression`
-             | `expression` `operator` `expression`
-             | `join`
-             | `atom`
-             | "(" `expression` ")"
- 
- operator : "+"|"-"|"*"|"/"|"%"|"="|"=="|"<"|"<="|">"|"=>"|["not"] "in"  
-
- join: "{" `expression` "}"
-
- atom : `label` | `propertyreference` | `constant` | `functioncall` | `bindvar`
-
- label : "?"NAME
- 
- bindvar : ":"NAME
-
- propertyreference:: [`label`"."]`propertyname`["."`propertyname`]+
-
- functioncall:: NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
-
+ arrayitem       : `expression` | "*" 
+ objectitem      : `propertyname` | "*"
+ objectpair      : `expression` ":" (`expression` 
+                 : | `constructarray` | `constructobject`)
+ propertyname    : NAME | "<" CHAR+ ">"
+ query_criteria  : ["WHERE(" `expression` ")"]
+                 : ["GROUPBY(" (`expression`[","])+ ")"]
+                 : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
+                 : ["LIMIT" number]
+                 : ["OFFSET" number]
+                 : ["DEPTH" number]
+ expression : `expression` "and" `expression`
+            : | `expression` "or" `expression`
+            : | "maybe" `expression`
+            : | "not" `expression`
+            : | `expression` `operator` `expression`
+            : | `join`
+            : | `atom`
+            : | "(" `expression` ")"
+ operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
+            : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
+ join       : "{" `expression` "}"
+ atom       : `label` | `bindvar` | `constant` 
+            : | `functioncall` | `propertyreference`
+ label      : "?"NAME
+ bindvar    : ":"NAME
+ propertyreference : [`label`"."]`propertyname`["."`propertyname`]+
+ functioncall : NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
  constant : STRING | NUMBER | "true" | "false" | "null"
- 
  comments : "#" CHAR* <end-of-line> 
           : | "//" CHAR* <end-of-line> 
           : | "/*" CHAR* "*/"
