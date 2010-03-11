@@ -1,45 +1,58 @@
-.. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
-.. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
-Overview
-~~~~~~~~~
 
-JQL is languages for querying data that can represented in JSON. A JQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A JQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
+jsonQL Overview
+~~~~~~~~~~~~~~~
+
+jsonQL is languages for querying data that can represented in JSON. A JQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A JQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found [here|grammar]). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
 .. productionlist::
- query: `constructobject` | `constructarray` | `constructvalue`
-
+ query  : `constructobject` 
+        :| `constructarray` 
+        :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `objectpair` | "*" [","])+
-                 :    [`query_criteria`] 
+                 :    (`objectitem` | `objectpair` | "*" [","])+ 
+                 :     [`query_criteria`] 
                  :  "}"
-
  constructarray  : "[" [`label`]
-                 :    (`arrayitem` [","])+
-                 :    [`query_criteria`] 
+                 :  (`arrayitem` [","])+ [`query_criteria`] 
                  : "]"
-
  constructvalue  : "(" 
-                 :    `expression` 
-                 :    [`query_criteria`] 
+                 :    `expression` [`query_criteria`] 
                  : ")"
-
- arrayitem : `expression` | "*" 
- 
- objectitem : `propertyname` | "*"
- 
- objectpair : `expression` ":" (`expression` | `constructarray` | `constructobject`)
-
- propertyname : NAME | "<" CHAR+ ">"
-  
- query_criteria : ["WHERE(" `expression` ")"]
-                : ["GROUPBY(" (`expression`[","])+ ")"]
-                : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
-                : ["LIMIT" number]
-                : ["OFFSET" number]
-                : ["DEPTH" number]
+ arrayitem       : `expression` | "*" 
+ objectitem      : `propertyname` | "*"
+ objectpair      : `expression` ":" (`expression` 
+                 : | `constructarray` | `constructobject`)
+ propertyname    : NAME | "<" CHAR+ ">"
+ query_criteria  : ["WHERE(" `expression` ")"]
+                 : ["GROUPBY(" (`expression`[","])+ ")"]
+                 : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
+                 : ["LIMIT" number]
+                 : ["OFFSET" number]
+                 : ["DEPTH" number]
+ expression : `expression` "and" `expression`
+            : | `expression` "or" `expression`
+            : | "maybe" `expression`
+            : | "not" `expression`
+            : | `expression` `operator` `expression`
+            : | `join`
+            : | `atom`
+            : | "(" `expression` ")"
+ operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
+            : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
+ join       : "{" `expression` "}"
+ atom       : `label` | `bindvar` | `constant` 
+            : | `functioncall` | `propertyreference`
+ label      : "?"NAME
+ bindvar    : ":"NAME
+ propertyreference : [`label`"."]`propertyname`["."`propertyname`]+
+ functioncall : NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
+ constant : STRING | NUMBER | "true" | "false" | "null"
+ comments : "#" CHAR* <end-of-line> 
+          : | "//" CHAR* <end-of-line> 
+          : | "/*" CHAR* "*/"
 
 Patterns
 ========

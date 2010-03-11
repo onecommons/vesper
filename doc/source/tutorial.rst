@@ -1,8 +1,17 @@
 .. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 .. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
+
 Json Query Language Tutorial
 ================================
+
+.. toctree::
+   :maxdepth: 1
+
+   self
+   jsonql
+   spec
+   grammar
 
 .. contents::
 
