@@ -11,7 +11,7 @@ The easiest way to install vesper is via *easy_install*, but you can also downlo
 http://onecommons.net.
 
 Running the Administration Server
--------------------------------
+---------------------------------
 
 Once installed, you should be able to start the vesper admin server with `vesper-admin`.  If not, it's possible
 that easy_install didn't put the script on your path.  Where these scripts are placed is platform

@@ -38,19 +38,18 @@ Documentation Contents
 ----------------------
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
 
+   self
    admin
    intro
-   jsonql
    tutorial
-   spec
-   grammar
    pjson
    datastore
    vesper.app
    vesper.web
    configvars
+
 * :ref:`modindex`
 * :ref:`genindex`
 
