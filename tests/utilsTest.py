@@ -150,20 +150,6 @@ class utilsTestCase(unittest.TestCase):
         self.failUnless(test.buggy_old_() == 1) 
         self.failUnless(test.addedFunc() == 'NeedsPatching')
 
-import doctest
-
-class DocTestTestCase(unittest.TestCase):
-    '''This testcast automatically adds doctests to the default TestSuite'''
-    
-    doctestSuite = doctest.DocTestSuite(utils)
-
-    def run(self, result):
-        return self.doctestSuite.run(result)
-
-    def runTest(self):
-        '''Just here so this TestCase gets automatically added to the
-        default TestSuite'''
-        
 if __name__ == '__main__':
     import sys
     try:
