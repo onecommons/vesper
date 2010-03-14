@@ -2,18 +2,8 @@
 .. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
 
-Json Query Language Tutorial
+jsonQL Tutorial
 ================================
-
-.. toctree::
-   :maxdepth: 1
-
-   self
-   jsonql
-   spec
-   grammar
-
-.. contents::
 
 Intro 
 -----
@@ -184,13 +174,9 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 * group by 
 * recursion
 * LIMIT, OFFSET and DEPTH
-* identifiers: names, qnames and URIs
-* outer joins
-  where( foo = '2' or b = 1)
 * where foo not in {bar = 2}
    * foo not in (select id from X where bar = 2)
    * join( filter(foo), joincond(join(filter(eq(bar,2)) ), join='a') )
-* use case: merging name { 'name' : username or projectname } 
 
 ..
     #save for advanced example, with a user case that make sense

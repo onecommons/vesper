@@ -8,19 +8,6 @@ import sys
 sys.path.append('.')
 from jqltester import *
 
-'''
-todo: query tests:
-
-*joins:
-outer joins (maybe())
-semi-join (in)
-anti-join (not in)
-* unions (or)
-* intersect (not)
-
-* construction:
-id keys only (not objects)
-'''
 t = Suite()
 skip = Suite()
 
@@ -53,6 +40,7 @@ t('''
 [['bar'], ['bar'], ['1', '2'], ['1', '3']]
 )
 
+#id keys only
 t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}, ])
 
 t("{}", [{}]) 
@@ -101,7 +89,6 @@ t(
            })
     }
 ''', [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}])
-
 
 t(
 ''' { ?parentid,        
@@ -1134,6 +1121,72 @@ t('''
   }
 ])
 
+#same as previous query but using a join expression instead of 
+#a nested construct. The join is treated as a label.
+t('''
+{   ?post, id, 
+    'tags' : { id=?tag and label="tag 1"}
+    where (tags = ?tag and type='post')
+}''',
+[{'id': '2', 'tags': 'tag1'}])
+
+#XXX results should be the same as query label 
+#but can't find label 'tag', it doesn't look set on the join
+skip('''
+{   ?post, id, 
+    'tags' : ?tag
+    where (tags = ?tag and type='post'
+       and { id=?tag and label="tag 1"}
+    )
+}''',
+[{'id': '2', 'tags': 'tag1'}])
+
+t.group= 'semijoins' #(and antijoins)
+'''
+#XXX throws only equijoins supported
+{
+* 
+where (tags in { id = 'tag1' })
+}
+'''
+
+skip('''{
+* 
+where (tags not in { id = 'tag1' })
+}
+''')
+
+skip('''{
+* 
+where (tags in { label = 'tag 1' })
+}
+''')
+
+skip('''{
+* 
+where (tags not in { label = 'tag 1' })
+}
+''')
+
+#XXX this is like a label evaluated as a boolean
+#which is true if it exists
+#so this should return an emty results
+#since there are no objects where {a=b and b=2}
+skip('''{* where(
+  {a=1 and b=2}
+)}''')
+
+#{ { } } -- what does that mean? treat the same as { } or flag as error?
+skip('''{* where(
+  {{a=1 and b=2}}
+)}''')
+
+
+#XXX test labels in property expressions
+#?foo 
+#?foo or ?bar
+#not ?foo
+#test equivalent inline joins
 t.group = 'ref'
 
 from vesper.data.store.basic import MemStore
@@ -1172,6 +1225,7 @@ t("""
 { bar where (bar = 'a')}
 """,
 [{'bar': ['a', 'b']}])
+
 
 #XXX raises error: "tags" projection not found
 '''{ ?tag

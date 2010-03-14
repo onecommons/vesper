@@ -73,7 +73,7 @@ class _ParseState(object):
         self._anonJoinCounter += 1
         return '@' + str(self._anonJoinCounter)
 
-    def _joinFromConstruct(self, construct, where, groupby, orderby):
+    def joinFromConstruct(self, construct, where, groupby, orderby):
         '''
         build a join expression from the construct pattern
         '''
@@ -84,8 +84,8 @@ class _ParseState(object):
                 #but we do want to find projections which we need to join
                 #(but we skip project(0) -- no reason to join)
                 for child in prop.depthfirst(
-                 descendPredicate=lambda op: not isinstance(op, (ResourceSetOp, Construct))):
-                    if isinstance(child, Project):                        
+                 descendPredicate=lambda op: not isinstance(op, (ResourceSetOp, Select))):
+                    if isinstance(child, Project):
                         if child.name != '*' and child.fields != [SUBJECT]:
                             if not prop.nameFunc or not child.isDescendentOf(prop.nameFunc):
                                 prop.projects.append(child)
@@ -99,9 +99,17 @@ class _ParseState(object):
                             else:
                                 assert child
                                 left = And(left, cchild )
+                    elif isinstance(child, ResourceSetOp):
+                        self.replaceJoinWithLabel(child)
+                        #but add the join to left for analysis
+                        if not left:
+                            left = child
+                        else:
+                            left = And(left, child)                        
                     elif isinstance(child, AnyFuncOp) and child.isAggregate():
                         prop.hasAggFunc = True
-
+                #if isinstance(child, ResourceSetOp):
+                #    print '!!!child', child
                 #treat ommittable properties as outer joins:
                 if prop.ifEmpty == PropShape.omit:
                     for a in prop.args:
@@ -133,11 +141,11 @@ class _ParseState(object):
                     else:
                         assert child
                         left = And(left, cchild )
-            
+        
         if left:
             left = self.makeJoinExpr(left)
             assert left
-        
+
         if not left:
             left = Join()
     
@@ -229,6 +237,17 @@ class _ParseState(object):
             self.addLabeledJoin(project.varref, op)
         
         return op
+
+    def replaceJoinWithLabel(self, child):
+        if not child.name:
+            child.name = self.nextAnonJoinId()
+            self.addLabeledJoin(child.name, child)
+        #replace this join with a Label
+        newchild = Label(child.name)
+        newchild.maybe = child.maybe
+        if child.parent:
+            child.parent.replaceArg(child,newchild)
+        return newchild
     
     def makeJoinExpr(self, expr):
         '''
@@ -305,19 +324,19 @@ class _ParseState(object):
             for child in root.depthfirst(
                     descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
                 if isinstance(child, ResourceSetOp):                
-                    if child is root:
+                    #print 'child', child, 'isroot', child is root
+                    if child is root:                        
                         #e.g. "where( {...} )" or "... and {...}"
                         #don't include as a filter in parent join
+                        #XXX this should replace this with a label
+                        #instead of setting skipRoot = True
+                        #i.e. root = self.replaceJoinWithLabel(child)
+                        #but then we need to deal with Filter(label)
+                        #which we don't yet handle well
                         child._parent = None
                         skipRoot = True
                     else:
-                        if not child.name:
-                            child.name = self.nextAnonJoinId()
-                            self.addLabeledJoin(child.name, child)
-                        #replace this join with a Label
-                        newchild = Label(child.name)
-                        newchild.maybe = child.maybe
-                        child.parent.replaceArg(child,newchild)
+                        self.replaceJoinWithLabel(child)
                     self.orphanedJoins.setdefault(parent,[]).append(child)
                 elif isinstance(child, Project):
                     projectop = self._getASTForProject(child)                    
@@ -327,7 +346,7 @@ class _ParseState(object):
                         #don't include bare Project as filter, projectops should take of that
                         skipRoot = True
                         #XXX enable this but we need to implement EXIST() 
-                        #and _joinFromConstruct use exists instead of a raw Project
+                        #and joinFromConstruct use exists instead of a raw Project
                         #because we don't want to filter out False values
                         #if isinstance(projectop, Filter):
                             #this was bare reference to a property field

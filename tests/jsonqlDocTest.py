@@ -11,7 +11,6 @@ skip = Suite()
 ########### basic tests ###########
 ###################################
 t.model = modelFromJson([
-
 { "type": "post", 
 'id' : "post1", 
 'contentType' : 'text/plain',
@@ -59,12 +58,12 @@ t.model = modelFromJson([
 ])
 
 t % '''
-jsonQL Overview
-~~~~~~~~~~~~~~~
+Informal Specification
+~~~~~~~~~~~~~~~~~~~~~~
 
 jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
-Below is simplifed representation of the JQL grammar (the formal grammar can be found [here|grammar]). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
+Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
 .. productionlist::
  query  : `constructobject` 
@@ -81,7 +80,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
                  :    `expression` [`query_criteria`] 
                  : ")"
  arrayitem       : `expression` | "*" 
- objectitem      : `propertyname` | "*"
+ objectitem      : `propertyname` | "id" | "*"
  objectpair      : `expression` ":" (`expression` 
                  : | `constructarray` | `constructobject`)
  propertyname    : NAME | "<" CHAR+ ">"
@@ -113,10 +112,10 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
           : | "//" CHAR* <end-of-line> 
           : | "/*" CHAR* "*/"
 
-Patterns
-========
+Construct Patterns
+==================
 
-There are three top level constructions depending on whether you want generate JSON objects (dictionaries), arrays (lists) or simple value (such as a string or number).
+There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
 JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will return a list of instances of that pattern. These basic patterns are:
 
@@ -138,27 +137,20 @@ t('''{
     ]
 )
 
+#XXX: expression key
 
 t%'''
-Create arrays:
 This query selects the same objects but it formats each result as a list not an object.
 '''
 
-t("[id, displayname]", {
-    "results": [
-        [
-            "user:1", 
-            "abbey aardvaark"
-        ], 
-        [
-            "user:2", 
-            "billy billygoat"
-        ]
+t("[id, displayname]", [    
+    ['user:1', 'abbey aardvaark'], ['user:2', 'billy billygoat']
     ]
-})
+)
 
 t%'''
-strings:
+:token:`constructvalue`
+You can select individual values (strings or numbers) by wrapping an :token:`expression`  
 '''
 
 t("(displayname)",
@@ -168,7 +160,7 @@ t("(displayname)",
 ])
 
 '''
-We can abbreviate as:
+We can abbreviate property names, 
 
 '''
 
@@ -193,17 +185,20 @@ t("{*}")
 
 
 t%'''
-Filtering (where clause)
-======
+Filtering (the WHERE() clause)
+==============================
 
-Constructing a JSON object (dictionary) specify 
+Note: Unlike SQL the WHERE expression must be in a parentheses.
+
 '''
+
 
 t%'''
 joins
 =====
 
 You can create a reference to an object creating object labels, which look this this syntax: `?identifier`. 
+
 By declaring the variable 
 
 Once an objected labels, you can create joins by referencing that label in an expression.
@@ -222,7 +217,7 @@ t('''
 '''
 
 You can also 
-Braces "{}" that occurr within the where clause indicate that 
+Braces "{}" that occur within the where clause indicate that 
 where ( { foo = 1 } ) 
 
 You can also declare object name inside  
@@ -234,13 +229,13 @@ You can also declare object name inside
 t%"find all tag, include child tags in result"
 t('''
     {
-    id : ?parent, 
+    ?parent, 
     *,
     'contains' : { where(subsumedby = ?parent)}
     }
 ''')
 
-'''
+t%'''
 Objects, id and anonymous objects
 =================================
 
@@ -253,8 +248,33 @@ Expressions
 ===========
 '''
 
+t % '''
+Property Names and `id`
+-----------------------
+
+Name tokens not used elsewhere in the grammar are treated as a reference to object properties.
+You can specify properties whose name match reserved keywords or have invalid characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
+
+`id` is a reserved name that always refers to the id of the object, not a property named "id".
+Such a property can written as `<id>`.
+'''
+
+t.model = modelFromJson([
+{
+"key" : "1",
+"namemap" : { "id" : "key"},
+"id" : "a property named id",
+"a property with spaces" : "this property name has spaces"
+}
+])
+t("{ 'key' : id, <id>, <a property with spaces>}",
+[{'a property with spaces': 'this property name has spaces',  
+  'id': 'a property named id',
+  'key': '1'}]
+)
+
 t%'''
-..  colophon: this doc was generated with "python tests/tutorialTest.py --printdoc > doc/source/jsonql.rst"
+..  colophon: this doc was generated with "python tests/jsonqlDocTest.py --printdoc > doc/source/spec.rst"
 '''
 
 import unittest

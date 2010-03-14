@@ -81,9 +81,10 @@ print '''
 .. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 .. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
-JsonQL grammar
+Formal Grammar
 ===================
 
+This grammar file is machine generated.
 '''
 
 print ".. productionlist::"
@@ -93,3 +94,7 @@ for key in order:
     value = productions[key]
     print "    ", key.lower().ljust(14), ":", ('\n'+(20*' ')+': |').join(value)
 
+print '''
+
+..  colophon: this doc was generated with "python doc/source/gengrammardoc.py > doc/source/grammar.rst"
+'''
