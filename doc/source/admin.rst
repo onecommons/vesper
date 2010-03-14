@@ -8,7 +8,7 @@ Installation
 ------------
 
 The easiest way to install vesper is via *easy_install*, but you can also download it from
-http://onecommons.net.
+http://onecommons.net or get it :download:`here <../../dist/vesper-0.0.1.tar.gz>`
 
 Running the Administration Server
 ---------------------------------

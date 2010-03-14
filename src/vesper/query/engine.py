@@ -1680,7 +1680,7 @@ class SimpleQueryEngine(object):
         position = context.currentTupleset.findColumnPos(op.name)
         if position is None:
             return None
-        return flatten( (c[0] for c in getColumn(pos, context.currentRow)) )        
+        return flatten( (c[0] for c in getColumn(position, context.currentRow)) )        
 
     def costLabel(self, op, context):
         return 1.0

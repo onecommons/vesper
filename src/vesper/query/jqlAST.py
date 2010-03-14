@@ -154,14 +154,12 @@ class QueryOp(object):
 
     def _validateArgs(self):
         if not all(a.parent is self for a in self.args):
-            print self.__class__, self.name, id(self), 'has child(ren) with wrong parent:'
-            debugp([a for a in self.args if a.parent is not self])
-            print 'wrong parent:'
-            debugp([(id(a.parent), a.parent) for a in self.args if a.parent is not self])
-        assert all(a.parent is self for a in self.args), (
-                ('self:'+repr((self.__class__, self.name))
-            + repr(['wrong parent:'+str((a.parent))+'for:'+repr(a)
-                    for a in self.args if a.parent is not self])))
+            print self.__class__, self.name, id(self)
+            print 'has child(ren) with wrong parent:'
+            debugp([(a.__class__, a.name, id(a)) for a in self.args if a.parent is not self])
+            print 'wrong parent(s):'
+            debugp([(a.parent.__class__, getattr(a,'name', None), id(a.parent)) for a in self.args if a.parent is not self])
+        assert all(a.parent is self for a in self.args), 'op has children with wrong parent'
 
     def _siblings(self):
         if not self.parent:
@@ -208,7 +206,7 @@ class QueryOp(object):
         if not isinstance(self.args, list):
             raise QueryException('invalid operation replaceArg for %s', type(self))
         for i, a in enumerate(self.args):
-            if a is child:
+            if a is child:                
                 self.args[i] = with_                
                 if with_.parent and with_.parent is not self:
                     with_.parent.removeArg(with_)
@@ -666,8 +664,6 @@ class Project(QueryOp):
     def __init__(self, fields, var=None, constructRefs = False):
         self.varref = var 
         if not isinstance(fields, list):
-            if str(fields).lower() == 'id':
-                fields = SUBJECT
             self.fields = [ fields ]
         else:
             self.fields = fields
@@ -744,13 +740,20 @@ class ConstructProp(QueryOp):
         else:
             raise QueryException('removeArg failed: not a child')
 
+    def replaceArg(self, child, with_):
+        if self.value is child:
+            child._parent = None
+            self.appendArg(with_)
+            return
+        raise QueryException('replaceArg failed: not a child')
+
+
     def __eq__(self, other):
         return (super(ConstructProp,self).__eq__(other)
          and self.ifEmpty == other.ifEmpty and self.ifSingle == self.ifSingle)
          #and self.nameIsFilter == other.nameIsFilter)
 
-    #args = property(lambda self: (self.value,))
-    args = property(lambda self: [a for a in [self.value, self.nameFunc] if a])
+    args = property(lambda self: tuple([a for a in [self.value, self.nameFunc] if a]))
 
 class ConstructSubject(QueryOp):
     def __init__(self, name='id', value=None):
@@ -874,6 +877,3 @@ class Select(QueryOp):
             child._parent = None
         else:
             raise QueryException('removeArg failed: not a child')
-
-    def replaceArg(self, child, with_):
-        raise QueryException('invalid operation')

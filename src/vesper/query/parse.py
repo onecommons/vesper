@@ -220,7 +220,8 @@ def p_root(p):
     #we're done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     p.parser.jqlState.buildJoins(select)
-
+    #XXX should check for orpaned joins so that can be evaluated 
+    #or at least warn until that is implemented
     if not select.where or not select.where.args:
         #top level queries without a filter (e.g. {*}) 
         #should not include anyonmous objects that have already appeared 
@@ -266,10 +267,11 @@ def p_construct0(p):
     if label:
         assert isinstance(label, T.label)
         op.id.appendArg( Label(label[0]) )
-    where = defaults['where'] = p.parser.jqlState._joinFromConstruct(op, 
-                                    defaults['where'], groupby, defaults['orderby'])
-    #XXX add support for ns constructop    
     
+    where = defaults['where']
+    where = defaults['where'] = p.parser.jqlState.joinFromConstruct(op, 
+                                        where, groupby, defaults['orderby'])
+    #XXX add support for namemap constructop    
     p[0] = Select(op, **defaults)
     assert not where or where.parent is p[0]
 
@@ -400,7 +402,7 @@ def p_atom_id(p):
     """
     atom : ID
     """
-    p[0] = Project(p[1])
+    p[0] = Project(0)
 
 def p_funcname(p):
     '''funcname : NAME
