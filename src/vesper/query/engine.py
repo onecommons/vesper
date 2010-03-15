@@ -486,7 +486,21 @@ class SimpleQueryEngine(object):
             context.depth = op.depth
                                                 
         #print 'where ct', context.currentTupleset
-        return op.construct.evaluate(self, context)
+        result = op.construct.evaluate(self, context)
+        if op.mergeall:
+            def merge():
+                shape = op.construct.shape
+                merged = self.getShape(context, shape)
+                for row in result:
+                    if shape is jqlAST.Construct.dictShape:
+                        merged.update(row)
+                    else:
+                        merged.extend( row )
+                yield merged
+            return SimpleTupleset(merge, hint=result, op='merge result',
+                                                        debug=context.debug)
+        else:
+            return result
 
     def _evalAggregate(self, context, op, keepSeq=False):
         v = []

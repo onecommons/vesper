@@ -10,6 +10,16 @@ skip = Suite()
 ###################################
 ########### basic tests ###########
 ###################################
+
+t % '''
+Informal Specification
+~~~~~~~~~~~~~~~~~~~~~~
+
+jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
+
+The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
+'''
+
 t.model = modelFromJson([
 { "type": "post", 
 'id' : "post1", 
@@ -49,19 +59,18 @@ t.model = modelFromJson([
    }
   ]
 },
-
 { 'type' : 'user', 
 'id' : 'user:2',
-'displayname': 'billy billygoat', 
+'displayname': 'billy billygoat',
 },
 
 ])
 
-t % '''
-Informal Specification
-~~~~~~~~~~~~~~~~~~~~~~
+t % printmodel(t.model)
 
-jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
+t % '''
+Basic Grammar
+=============
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
@@ -80,7 +89,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
                  :    `expression` [`query_criteria`] 
                  : ")"
  arrayitem       : `expression` | "*" 
- objectitem      : `propertyname` | "id" | "*"
+ objectitem      : `propertyname` | "ID" | "*"
  objectpair      : `expression` ":" (`expression` 
                  : | `constructarray` | `constructobject`)
  propertyname    : NAME | "<" CHAR+ ">"
@@ -90,6 +99,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
                  : ["LIMIT" number]
                  : ["OFFSET" number]
                  : ["DEPTH" number]
+                 : ["MERGEALL"]
  expression : `expression` "and" `expression`
             : | `expression` "or" `expression`
             : | "maybe" `expression`
@@ -122,35 +132,51 @@ JQL query consists of a pattern describes a JSON object (dictionary), a list (ar
 '''
 
 t('''{ 
-    "username" : displayname,
+    "displayname" : displayname,
     "type" : type
     }
 ''', [
         {
-            "type": "user", 
-            "username": "abbey aardvaark"
+            "displayname": "abbey aardvaark",
+            "type": "user"            
         }, 
         {
-            "type": "user", 
-            "username": "billy billygoat"
+            "displayname": "billy billygoat",
+            "type": "user"            
         }
     ]
 )
 
-#XXX: expression key
+t %'''
+When a single property name appears instead of a name-value pair, it is 
+treated as name-value pair where the name is the name of the property and 
+the value expression is a reference to property. So the following example is 
+equivalent to prior one. 
+'''
+t("{ displayname, type }", [
+        {
+            "displayname": "abbey aardvaark",
+            "type": "user"            
+        }, 
+        {
+            "displayname": "billy billygoat",
+            "type": "user"            
+        }
+    ]
+)
 
 t%'''
-This query selects the same objects but it formats each result as a list not an object.
+You can also construct results as arrays (lists) instead of objects. This query selects the same objects but it formats each result as a list not an object.
 '''
 
-t("[id, displayname]", [    
-    ['user:1', 'abbey aardvaark'], ['user:2', 'billy billygoat']
+t("[displayname, type]", [    
+    ['abbey aardvaark', "user"], ['billy billygoat', "user"]
     ]
 )
 
 t%'''
 :token:`constructvalue`
-You can select individual values (strings or numbers) by wrapping an :token:`expression`  
+You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
 '''
 
 t("(displayname)",
@@ -159,22 +185,31 @@ t("(displayname)",
     "billy billygoat"
 ])
 
-'''
-We can abbreviate property names, 
+
+t % """Both the key and value of an property pair can be expressions. So property names can vary for each result. This example uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service"""
+
+t("""{
+  service : maybe facebook_uid or maybe email
+  MERGEALL 
+}""",
+ [{'facebook': 394090223, 'google': 'aaardvaark@gmail.com'}]
+)
+
+#XXX throws File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 125, in groupbyUnordered
+#    vals = resources.get(key)
+#TypeError: list objects are unhashable
+#where key is MutableTupleset[['google', 'R', None]] 
+skip("""{
+  displayname, 
+  "logins" : { service : maybe facebook_uid or maybe email MERGEALL }  
+}""",
+  [{'google': 'aaardvaark@gmail.com'}, {'facebook': 394090223}]
+)
 
 '''
-
-t("{ displayname, type }")
-
-
-'''
-* object properties lists
-* abbreviated property lists
-* mix and match 
-
 The * will expand to all properties defined for the object. For example, this query retrieves all objects in the store:
 
-Property and array item lists 
+Properties and array item lists 
 =============================
 
 

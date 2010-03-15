@@ -842,7 +842,7 @@ class Select(QueryOp):
     orderby=None
     skipEmbeddedBNodes = False
 
-    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None, orderby=None):
+    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None, orderby=None, mergeall=False):
         self.appendArg(construct)
         if where:
             self.appendArg(where)
@@ -854,6 +854,7 @@ class Select(QueryOp):
         self.limit = limit
         self.depth = depth
         self.ns = ns
+        self.mergeall = mergeall
 
     def appendArg(self, op):
         if (isinstance(op, ResourceSetOp)): 

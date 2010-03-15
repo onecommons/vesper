@@ -247,7 +247,7 @@ def p_construct0(p):
     props = p[1][2]
     op = Construct(props, shape)
     defaults = dict(where = None, ns = {}, offset = None, limit = None,
-                    groupby = None, depth=None, orderby=None)
+                    groupby = None, depth=None, orderby=None, mergeall=False)
 
     if len(p[1]) > 3 and p[1][3]:
         for constructop in p[1][3]:
@@ -612,7 +612,7 @@ def p_constructop5(p):
     '''
     constructop : MERGEALL
     '''
-    p[0] = T.constructop(p[1])
+    p[0] = T.constructop(p[1], True)
 
 def p_orderbyexp_1(p):
     '''

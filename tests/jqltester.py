@@ -103,25 +103,35 @@ logging.basicConfig()
 from string import Template
 
 _printedmodels = []
+
+def formatmodel(modelsrc, modelname):
+    modelformatted = pprint.pformat(modelsrc, width=50).replace('\n', '\n ... ')  
+    return Template("""
+ >>> $modelname = app.createStore('''$modelformatted''')
+""").substitute(locals())
+
+def printmodel(model):
+    modelsrc, modelname = _models[id(model)]    
+    assert id(model) not in _printedmodels
+    _printedmodels.append(id(model))        
+    return formatmodel(modelsrc, modelname)
+    
 def printdocs(test):
     if not test.doc:
         return    
     modelsrc, modelname = _models[id(test.model)]    
     if id(test.model) in _printedmodels:    
         createmodel = ''
-    else:
-        _printedmodels.append(id(test.model))
-        modelformatted = pprint.pformat(modelsrc).replace('\n', '\n ... ')  
-        createmodel = Template("""
- >>> $modelname = app.createStore('''$modelformatted''')
-""").substitute(locals())
+    else:        
+        _printedmodels.append(id(test.model))        
+        createmodel = formatmodel(modelsrc, modelname)
     doc = test.doc
-    result = pprint.pformat(test.results).replace('\n', '\n ')     
+    result = pprint.pformat(test.results, width=50).replace('\n', '\n ')     
     queryformatted = test.query.replace('\n', '\n ... ')  
     print Template("""
 $doc$createmodel
  >>> ${modelname}.query('''$queryformatted''')
-$result
+ $result
 """).substitute(locals())
 
 def listgroups(t):
