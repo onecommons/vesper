@@ -223,8 +223,13 @@ where ( { foo = 1 } )
 You can also declare object name inside  
 `{ id = ?foo }`
 '''
-
-
+#document:
+# when evaluating join expressions are replaced with a label reference to that join
+# labels evaluate to the object id of the object except when evaluating as a boolean, 
+# in that case it returns true if the object id exists (e.g a label to an object 
+#whose id's value was 0 would still evaluate as true)
+#note that following these rules, a join expression at the root of the where filter expression 
+#(e.g. "where ({ a=1 })") evaluates to true if there exists an object with "a = 1"
 
 t%"find all tag, include child tags in result"
 t('''
