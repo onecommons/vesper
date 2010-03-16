@@ -46,15 +46,6 @@ class _Env (object):
 
 T = _Env()
 
-class QName(Tag):
-    __slots__ = ()
-
-    def __new__(cls, prefix, name):
-        return tuple.__new__(cls, (prefix, name) )
-
-    prefix = property(lambda self: self[0])
-    name = property(lambda self: self[1])
-
 #####PLY ####
 
 import ply.lex
@@ -64,7 +55,7 @@ import ply.yacc
 #### TOKENS
 ###########
 
-reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', #'NS', 
+reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NAMEMAP', 
            'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
            'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'INCLUDE', 'EXCLUDE', 'WHEN')
 
@@ -84,7 +75,7 @@ tokens = reserved + (
     'LBRACE', 'RBRACE',
     'COMMA', 'PERIOD', 'COLON',
 
-    'PROPSTRING', 'LABEL', 'QNAME', 'QSTAR', 'BINDVAR'
+    'PROPSTRING', 'LABEL', 'BINDVAR'
 )
 
 # Operators
@@ -149,26 +140,17 @@ def t_LABEL(t):
     return t
 t_LABEL.__doc__ = r'\?'+ _namere +''
 
-def t_QNAME(t):
-    prefix, name = t.lexer.lexmatch.group('prefix','name')
-    if prefix:
-        t.value = QName(prefix[:-1], name)
-    else:
-        key = t.value.lower() #make keywords case-insensitive (like SQL)
-        t.type = reserved_map.get(key,"NAME")
-        t.value = reserved_constants.get(key, t.value)
+def t_NAME(t):
+    key = t.value.lower() #make keywords case-insensitive (like SQL)
+    t.type = reserved_map.get(key,"NAME")
+    t.value = reserved_constants.get(key, t.value)
     return t
-t_QNAME.__doc__ = '(?P<prefix>'+_namere+':)?(?P<name>' + _namere + ')'
+t_NAME.__doc__ = '(?P<name>' + _namere + ')'
 
 def t_BINDVAR(t):
     t.value = t.value[1:]
     return t
-t_BINDVAR.__doc__ = r'\@'+ _namere +''
-
-def t_QSTAR(t):    
-    t.value = QName(t.value[:-2], '*')
-    return t
-t_QSTAR.__doc__ = _namere + r':\*'
+t_BINDVAR.__doc__ = r'\:'+ _namere +''
 
 # SQL/C-style comments
 def t_comment(t):
@@ -177,7 +159,7 @@ def t_comment(t):
 
 # Comment (both Python and C++-Style)
 def t_linecomment(t):
-    r'(//|\#).*\n'
+    r'(//|\#).*?\n'
     t.lexer.lineno += 1
 
 def t_error(t):
@@ -203,10 +185,9 @@ def resolveQNames(nsmap, root):
             lambda n: c is root or not isinstance(n, Select)):
         if isinstance(c, Select):
             if c is root:
-                if c.ns:
-                    nsmap.update(c.ns)
+                nsmap = nsmap.initParseContext({'namemap':c.namemap}, nsmap)
             else:
-                resolveQNames(nsmap.copy(), c)
+                resolveQNames(nsmap, c)
         else:
             c._resolveQNames(nsmap) 
 
@@ -216,7 +197,7 @@ def p_root(p):
     '''
     p[0] = p[1]
     select = p[0]
-    resolveQNames({}, select)
+    resolveQNames(p.parser.jqlState.namemap, select)
     #we're done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     p.parser.jqlState.buildJoins(select)
@@ -246,8 +227,8 @@ def p_construct0(p):
     label = p[1][1]
     props = p[1][2]
     op = Construct(props, shape)
-    defaults = dict(where = None, ns = {}, offset = None, limit = None,
-                    groupby = None, depth=None, orderby=None, mergeall=False)
+    defaults = dict(where = None, offset = None, limit = None, namemap = None,
+       groupby = None, depth=None, orderby=None, mergeall=False)
 
     if len(p[1]) > 3 and p[1][3]:
         for constructop in p[1][3]:
@@ -270,8 +251,7 @@ def p_construct0(p):
     
     where = defaults['where']
     where = defaults['where'] = p.parser.jqlState.joinFromConstruct(op, 
-                                        where, groupby, defaults['orderby'])
-    #XXX add support for namemap constructop    
+                                        where, groupby, defaults['orderby'])    
     p[0] = Select(op, **defaults)
     assert not where or where.parent is p[0]
 
@@ -406,7 +386,6 @@ def p_atom_id(p):
 
 def p_funcname(p):
     '''funcname : NAME
-                | QNAME
                 | PROPSTRING
     '''
     p[0] = p[1]
@@ -440,6 +419,8 @@ def p_arglist(p):
                       | barecolumnref 
     arrayindexlist : arrayindexlist COMMA arrayindex
                    | arrayindex
+    jsondictlist : jsondictlist COMMA jsondictitem
+                 | jsondictitem
     """
     if len(p) == 4:
         p[0] = p[1] + [p[3]]
@@ -462,6 +443,7 @@ def p_arglist_empty(p):
     sortexplist : empty
     barecolumnreflist : empty
     arrayindexlist : empty
+    jsondictlist : empty
     """
     p[0] = []
 
@@ -472,9 +454,27 @@ def p_keyword_argument(p):
     p[0] = T.keywordarg(p[1], p[3])
 
 def p_join(p):
-    "join : LBRACE expression RBRACE"
+    """
+    join : LBRACE expression RBRACE
+         | LBRACE LABEL COMMA expression RBRACE
+         | LBRACE LABEL expression RBRACE
+    """
     try:
-        p[0] = p.parser.jqlState.makeJoinExpr(p[2])
+        if len(p) == 5:
+            expr = p[3]            
+            assert isinstance(p[2], T.label)
+            label = p[2][0]            
+        elif len(p) == 6:
+            expr = p[4]
+            assert isinstance(p[2], T.label)
+            label = p[2][0]            
+        else:
+            assert len(p) == 4
+            expr = p[2]
+            label = None
+        p[0] = p.parser.jqlState.makeJoinExpr(expr)
+        if label:
+            p[0].name = label
     except QueryException, e:
         import traceback
         traceback.print_exc()#file=sys.stdout)
@@ -546,10 +546,8 @@ def p_arrayindex(p):
     
 def p_barecolumnref(p):
     '''barecolumnref : NAME
-                    | QNAME
                     | TIMES
                     | PROPSTRING
-                    | QSTAR
     '''
     p[0] = p[1]
 
@@ -591,7 +589,6 @@ def p_constructop1(p):
     constructop : WHERE LPAREN expression RPAREN
                 | GROUPBY LPAREN arglist RPAREN
     '''
-    #           | NS LPAREN arglist RPAREN
     p[0] = T.constructop(p[1], p[3])
 
 def p_constructop2(p):
@@ -613,6 +610,27 @@ def p_constructop5(p):
     constructop : MERGEALL
     '''
     p[0] = T.constructop(p[1], True)
+
+def p_constructop6(p):
+    '''
+    constructop : NAMEMAP EQ jsondict
+    '''
+    p[0] = T.constructop(p[1], p[3])
+
+def p_jsondict(p):
+    '''    
+    jsondict : LBRACE jsondictlist RBRACE
+    '''
+    p[0] = dict(p[2])
+
+def p_jsondictitem(p):
+    '''
+    jsondictitem : STRING COLON STRING
+                 | STRING COLON jsondict
+                 | NAME COLON STRING
+                 | NAME COLON jsondict
+    '''
+    p[0] = (p[1], p[3])
 
 def p_orderbyexp_1(p):
     '''
@@ -740,7 +758,7 @@ def buildparser(errorlog=None, debug=0):
 import threading, thread
 threadlocals = threading.local()
 
-def parse(query, functions, debug=False):
+def parse(query, functions, debug=False, namemap=None):
     
     #get a separate logger for each thread so that concurrent parsing doesn't
     #intermix messages
@@ -761,7 +779,7 @@ def parse(query, functions, debug=False):
     errorlog.addHandler(log_messages)    
     try:
         from vesper.query import rewrite
-        parseState = rewrite._ParseState(functions)        
+        parseState = rewrite._ParseState(functions, namemap)        
         parser.jqlState = parseState
         
         #XXX only turn tracking on if there's an error

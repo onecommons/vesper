@@ -66,11 +66,11 @@ t('''
 
 t('''{ * where ( foo > 'bar') }''', [])
 
-t('''{ * where ( id = @id) }''', 
+t('''{ * where ( id = :id) }''', 
 [{'foo':'bar', 'id':'2'}], 
                 bindvars={'id':'2'})
 
-t('''{ * where ( child = @child) }''', 
+t('''{ * where ( child = :child) }''', 
 [{'child': '2', 'id': '_:2', 'parent': '1'}], 
         bindvars={'child':'2'})
 
@@ -236,13 +236,29 @@ t(r'''
 ''', ["unicode\nlinefeed"])
 
 syntaxtests = [
+#test comments
+'''{
+*
+// a comment
+}
+''',
+'''{
+*
+/* a comment */
+}
+''',
+'''{
+*
+# a comment!!
+}
+''',
 #test qnames:
-'''{ rdfs:comment:* where(rdfs:label='foo')}''', #propname : *
+'''{ <rdfs:comment>:* where(<rdfs:label>='foo')}''', #propname : *
 '''
-[rdfs:comment where(rdfs:label='foo')]
+[<rdfs:comment> where(<rdfs:label>='foo')]
 ''',
 '''
-(rdfs:comment where(rdfs:label='foo'))
+(<rdfs:comment> where(<rdfs:label>='foo'))
 ''',
 ]
 
@@ -270,7 +286,7 @@ foo : { ?join, id },
 where( {
     ?id == 'http://foaf/friend' and
     topic_interest = ?ss and
-    foaf:topic_interest = ?artist.foo.bar #Join(
+    <foaf:topic_interest> = ?artist.foo.bar #Join(
   })
 GROUPBY(foo)
 }
@@ -396,6 +412,25 @@ t.model = modelFromJson([
 }
 
 ])
+
+t.group = 'namemap'
+
+#XXX need to serialize based on namemap
+t('''{
+* 
+where (<rdfs:range> = 'Tag')
+namemap = {
+ "props" : { 
+      'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+      'rdfs:': 'http://www.w3.org/2000/01/rdf-schema#'
+    }
+}
+}''',
+[{u'http://www.w3.org/2000/01/rdf-schema#domain': 'Tag',
+  u'http://www.w3.org/2000/01/rdf-schema#range': 'Tag',
+  u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf': u'http://www.w3.org/2000/01/rdf-schema#subClassOf',
+  'id': 'subsumedby'}]
+)
 
 t.group = 'groupby'
 
@@ -646,6 +681,22 @@ t( '''
     *
      where (subject= ?tag and
           { id = ?tag and
+            ?tag in recurse('commons', 'subsumedby')
+           }
+        )
+    }
+    ''',
+[{'content': 'some text about the commons',
+  'subject': 'commons'},
+ {'content': 'some more text about the commons', 'subject': 'commons'}]
+)
+
+#test label instead of id = ?tag, should have same result as previous query
+t( '''
+    {
+    *
+     where (subject= ?tag and
+          { ?tag, 
             ?tag in recurse('commons', 'subsumedby')
            }
         )
@@ -1243,14 +1294,6 @@ t("""
  )
 }'''
 
-#XXX comment causes syntax error
-'''{  * 
-where (  
-#backwards!! 
-  { type = "post" and ?tag = tags and tags in recurse(@taglist, "subsumedby") }
-)  
-}
-'''
 #XXX raises construct: could not find subject label "@1"
 '''{ ?tag  
      "attributes" : { id where (id=?tag) }, 

@@ -9,18 +9,20 @@
 from vesper.query.jqlAST import *
 import copy, itertools
 from vesper.utils import debugp
+from vesper.pjson import ParseContext
 
 class _ParseState(object):
 
     #: Maps labels to Join op
     labeledjoins = None
     
-    def __init__(self, functions):
+    def __init__(self, functions, namemap=None):
         self.labeledjoins = {}
         self.labeledjoinorder = []
         self.orphanedJoins = {}
         self._anonJoinCounter = 0
         self.functions = functions
+        self.namemap = ParseContext(namemap)
 
     def mapOp(self, op):
         _opmap = {
@@ -220,10 +222,10 @@ class _ParseState(object):
         for propname in reversed(project.fields):
             #XXX if propname == '*', * == OBJECT? what about foo = * really a no-op
             if not op:
-                op = Filter(Eq(propname, Project(PROPERTY)), objectlabel=propname)
+                op = Filter(Eq(PropString(propname), Project(PROPERTY)), objectlabel=propname)
             else:
                 subjectlabel = self.nextAnonJoinId()
-                filter = Filter(Eq(propname, Project(PROPERTY)),
+                filter = Filter(Eq(PropString(propname), Project(PROPERTY)),
                                                 subjectlabel=subjectlabel)
                 #create a new join, joining the object of this filter with
                 #the subject of the prior one
@@ -555,7 +557,7 @@ class _ParseState(object):
             assert isinstance(filter.parent, JoinConditionOp)
             jointype = filter.parent.join
             self.prepareJoinMove(topjoin)
-            filterPred = Eq(Project(PROPERTY), propname)#XXX use joinPred?
+            filterPred = Eq(Project(PROPERTY), PropString(propname))#XXX use joinPred?
             if topjoin.args:
                 topjoin.appendArg(
                         JoinConditionOp(
@@ -651,7 +653,7 @@ def consolidateFilter(filter, projections):
         name = p.name
         assert len(p.fields) == 1
         p.fields = [OBJECT] #replace label with pos
-        filter.appendArg( Eq(Project(PROPERTY), name) )
+        filter.appendArg( Eq(Project(PROPERTY), PropString(name)) )
         filter.addLabel(name, OBJECT)
         #remove replaced filter:
         del projections[i]

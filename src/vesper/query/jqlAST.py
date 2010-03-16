@@ -1,13 +1,12 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 from vesper.query import *
+from vesper.pjson import ParseContext
 from vesper.utils import flattenSeq, flatten,debugp,debugp
 
 #############################################################
 ########################   AST   ############################
 #############################################################
-
-
 def depthfirstsearch(root, descendPredicate = None):
     """
     Given a starting vertex, root, do a depth-first search.
@@ -362,8 +361,8 @@ class JoinConditionOp(QueryOp):
             #self.appendArg(Eq(Project(SUBJECT),Project(self.position)) )
 
     def _resolveQNames(self, nsmap):
-        if isinstance(self.position, tuple):
-            self.position = ':'.join(self.position) #XXX
+        if isinstance(self.position, (str, unicode)):
+            self.position = nsmap.parseProp(self.position)
         
     def getPositionLabel(self):
         if isinstance(self.position, int):
@@ -461,10 +460,7 @@ class Filter(QueryOp):
 
     def _resolveQNames(self, nsmap):
         def resolve(name):
-            if isinstance(name, tuple):
-                return ':'.join(name) #XXX
-            else:
-                return name
+            return nsmap.parseProp(name)
 
         self.labels = [ (resolve(name), p) for (name, p) in self.labels]
 
@@ -506,6 +502,18 @@ class Constant(QueryOp):
 
     def __repr__(self):
         return repr(self.value)
+
+    @classmethod
+    def _costMethodName(cls):
+        return 'cost'+ Constant.__name__
+
+    @classmethod
+    def _evalMethodName(cls):
+        return 'eval'+ Constant.__name__
+
+class PropString(Constant):
+    def _resolveQNames(self, nsmap):
+        self.value = nsmap.parseProp(self.value)
 
 class AnyFuncOp(QueryOp):
 
@@ -676,10 +684,9 @@ class Project(QueryOp):
 
     def _resolveQNames(self, nsmap):
         def resolve(name):
-            if isinstance(name, tuple):
-                return ':'.join(name) #XXX
-            else:
-                return name
+            if isinstance(name, (str, unicode)):
+                return nsmap.parseProp(name)
+            return name
 
         self.fields = [resolve(name) for name in self.fields]
 
@@ -842,7 +849,8 @@ class Select(QueryOp):
     orderby=None
     skipEmbeddedBNodes = False
 
-    def __init__(self, construct, where=None, groupby=None, limit=None, offset=None, depth=None, ns=None, orderby=None, mergeall=False):
+    def __init__(self, construct, where=None, groupby=None, limit=None, 
+        offset=None, depth=None, namemap=None, orderby=None, mergeall=False):
         self.appendArg(construct)
         if where:
             self.appendArg(where)
@@ -853,7 +861,7 @@ class Select(QueryOp):
         self.offset = offset
         self.limit = limit
         self.depth = depth
-        self.ns = ns
+        self.namemap = namemap
         self.mergeall = mergeall
 
     def appendArg(self, op):

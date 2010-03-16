@@ -642,7 +642,7 @@ def _parseAbbreviations(qname, replacements):
     return qname        
 
 class ParseContext(object):    
-    parentid = ''
+    context = None
     
     @staticmethod
     def initParseContext(obj, parent):
@@ -721,7 +721,7 @@ class ParseContext(object):
         '''
         update defaults with props
         '''
-        propReplacements = []
+        propReplacements = []        
         for d in self.defaultsValue, more:
             if d:
                 for key in d:
