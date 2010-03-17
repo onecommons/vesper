@@ -13,11 +13,7 @@ logging.basicConfig()
 app = createApp(__name__, 'vesper.web.baseapp'
               ,static_path=['static']
               ,template_path=['templates']
-              ,storage_path="app-store-rev.mjson"
               ,model_options=dict(serializeOptions=dict(indent=2))
-              ,currentMod = __name__
-              #,save_history='split'
-              #,firepython_enabled = 1
 )
 
 # entry point from setuptools console_scripts, called with no args

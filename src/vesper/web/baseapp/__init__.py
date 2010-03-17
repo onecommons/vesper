@@ -100,7 +100,6 @@ except ImportError:
 from vesper.data.store.basic import FileStore
 app = createApp(
     static_path=['static'],
-    STORAGE_PATH="baseapp-store.json",
     model_factory=FileStore,
     default_page_name = 'index.html',
     actions = actions

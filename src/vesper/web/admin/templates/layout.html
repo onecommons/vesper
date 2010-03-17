@@ -316,7 +316,7 @@ function makePanels(selector, refreshCallback) {
         $('.panel-header .ui-icon-refresh').click(refreshCallback);
 }
 
-var gItemSaveQuery = "{ * where (id=@this)  }";
+var gItemSaveQuery = "{ * where (id=:this)  }";
 
 function initItems(context) {
    context = context || document;
