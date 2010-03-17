@@ -8,7 +8,8 @@ jsonQL is languages for querying data that can represented in JSON. A jsonQL imp
 The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
 
 
- >>> model1 = app.createStore('''[{'author': 'user:1',
+ >>> model1 = app.createStore(
+ ... '''[{'author': 'user:1',
  ...   'contentType': 'text/plain',
  ...   'contents': 'hello world!',
  ...   'id': 'post1',
@@ -99,7 +100,8 @@ There are three top level constructions depending on whether you want construct 
 JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will return a list of instances of that pattern. These basic patterns are:
 
 
- >>> model1.query('''{ 
+ >>> model1.query(
+ ... '''{ 
  ...     "displayname" : displayname,
  ...     "type" : type
  ...     }
@@ -116,7 +118,8 @@ treated as name-value pair where the name is the name of the property and
 the value expression is a reference to property. So the following example is 
 equivalent to prior one. 
 
- >>> model1.query('''{ displayname, type }''')
+ >>> model1.query(
+ ... '''{ displayname, type }''')
  [{'displayname': 'abbey aardvaark',
    'type': 'user'},
   {'displayname': 'billy billygoat',
@@ -126,7 +129,8 @@ equivalent to prior one.
 
 You can also construct results as arrays (lists) instead of objects. This query selects the same objects but it formats each result as a list not an object.
 
- >>> model1.query('''[displayname, type]''')
+ >>> model1.query(
+ ... '''[displayname, type]''')
  [['abbey aardvaark', 'user'],
   ['billy billygoat', 'user']]
 
@@ -135,12 +139,14 @@ You can also construct results as arrays (lists) instead of objects. This query 
 :token:`constructvalue`
 You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
 
- >>> model1.query('''(displayname)''')
+ >>> model1.query(
+ ... '''(displayname)''')
  ['abbey aardvaark', 'billy billygoat']
 
 
 Both the key and value of an property pair can be expressions. So property names can vary for each result. This example uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service
- >>> model1.query('''{
+ >>> model1.query(
+ ... '''{
  ...   service : maybe facebook_uid or maybe email
  ...   MERGEALL 
  ... }''')
@@ -167,7 +173,8 @@ Once an objected labels, you can create joins by referencing that label in an ex
 
 This is example, value of the contains property will be any object that
 
- >>> model1.query('''
+ >>> model1.query(
+ ... '''
  ...     {
  ...     ?parent, 
  ...     *,
@@ -178,7 +185,8 @@ This is example, value of the contains property will be any object that
 
 
 find all tag, include child tags in result
- >>> model1.query('''
+ >>> model1.query(
+ ... '''
  ...     {
  ...     ?parent, 
  ...     *,
@@ -204,12 +212,14 @@ You can specify properties whose name match reserved keywords or have invalid ch
 `id` is a reserved name that always refers to the id of the object, not a property named "id".
 Such a property can written as `<id>`.
 
- >>> model2 = app.createStore('''[{'a property with spaces': 'this property name has spaces',
+ >>> model2 = app.createStore(
+ ... '''[{'a property with spaces': 'this property name has spaces',
  ...   'id': 'a property named id',
  ...   'key': '1',
  ...   'namemap': {'id': 'key'}}]''')
 
- >>> model2.query('''{ 'key' : id, <id>, <a property with spaces>}''')
+ >>> model2.query(
+ ... '''{ 'key' : id, <id>, <a property with spaces>}''')
  [{'a property with spaces': 'this property name has spaces',
    'id': 'a property named id',
    'key': '1'}]

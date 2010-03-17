@@ -419,6 +419,7 @@ t.group = 'namemap'
 t('''{
 * 
 where (<rdfs:range> = 'Tag')
+orderby (<rdfs:range>)
 namemap = {
  "props" : { 
       'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
@@ -434,24 +435,25 @@ namemap = {
 
 t.group = 'groupby'
 
-#XXX: AssertionError: cant find 0 in SimpleTupleset 0xd6c650 for group by '#0' [ColInfo('', <type 'object'>), ColInfo('#0', MutableTupleset[])]
+#XXX return empty result
 skip('''
 {
-groupby('id', display=merge)
+id
+groupby(id, display=merge)
 }
 ''')
 
 # XXX * is broken: need evalProject not to assume id is SUBJECT
 skip('''{
 *,  
-groupby('subject', display=merge)
+groupby(subject, display=merge)
 }
 ''')
 
 t('''{
 subject, 
 content
-groupby('subject')
+groupby(subject)
 }
 ''', 
 [{'content': ['some text about the commons', 
@@ -476,7 +478,7 @@ groupby(subject)
 t('''{
  subject, 
  'count' : count(content)
- groupby('subject')
+ groupby(subject)
  }
  ''', 
  [{'count': 2, 'subject': 'commons'}, {'count': 1, 'subject': 'rhizome'}])
@@ -521,7 +523,7 @@ for key in 1,10 for type in 1,2 for val in 2,4]
 )
 
 
-t.group = 'recurse'
+t.group = 'in'
 
 t('''{
 ?parent,
@@ -575,52 +577,19 @@ t('''
  #, name='labeled but no where'
  )
 
+t.group = 'nestedconstruct'
+
 #XXX throws: vesper.query.QueryException: only equijoins currently supported
 skip('''
     {
     *
      where (subjectof= ?tag and
           {
-            ?tag in recurse('commons', 'subsumedby')
+            ?tag in follow('commons', subsumedby)
            }
         )
     }
     ''',[])
-
-#test recurse()
-skip(ast=
-Select(Construct([cp(Project('*'))]),
-Join(
-    JoinConditionOp(
-      Filter(In(Project(0), qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
-          ),               
-     JoinConditionOp(
-      Join(
-        JoinConditionOp(
-          Filter(Eq('subject',Project(1)), subjectlabel='#0', objectlabel='subject')
-                       )
-        ,name='@1') 
-      ,'subject')
-    )
-)
-)
-
-skip(ast=
-Select(Construct([cp(Project('*'))]),
-Join(
-    JoinConditionOp(
-          Filter(Eq('subject',Project(1)), subjectlabel='#0', objectlabel='subject')          
-    ),
-    JoinConditionOp(
-      Join(
-        JoinConditionOp(
-            Filter(In(Project(0), qF.getOp('recurse',Constant('commons'),Constant('subsumedby'))), subjectlabel='#0')
-                       )
-        ,name='@1') 
-        ,'subject')
-,name='@1')
-)
-)
 
 t('''{ *, 'blah' : [{ *  where(id = ?tag and ?tag = 'dd') }]
  where ( subject = ?tag) }
@@ -656,13 +625,25 @@ t('''{ content,
 ]
 )
 
+t("""{
+'blah' : [{* where (id=?tag)}] 
+where (tags = ?tag)
+}
+""",
+[{'blah': []}],
+model=modelFromJson([{
+  "tags" : []
+}])
+)
+
+t.group = 'follow'
 #find all the entries that implicitly or explicitly are tagged 'projects'
 t('''
     {
     * 
      where (
           { id = ?tag and
-            'projects' in recurse(?tag, 'subsumedby')
+            'projects' in follow(?tag, subsumedby)
            }
            and subject= ?tag
         )
@@ -681,7 +662,7 @@ t( '''
     *
      where (subject= ?tag and
           { id = ?tag and
-            ?tag in recurse('commons', 'subsumedby')
+            ?tag in follow('commons', subsumedby)
            }
         )
     }
@@ -697,7 +678,7 @@ t( '''
     *
      where (subject= ?tag and
           { ?tag, 
-            ?tag in recurse('commons', 'subsumedby')
+            ?tag in follow('commons', subsumedby)
            }
         )
     }
@@ -714,7 +695,7 @@ skip( '''
           { id = ?start and id = 'commons' }
           and
           {
-           id = ?tag and id in recurse(?start, 'subsumedby')
+           id = ?tag and id in follow(?start, subsumedby)
            }
         )
     }
@@ -738,8 +719,6 @@ t('''
 }
 '''
 )
-
-t('''{*}''')
 
 t.group = 'not'
 
@@ -1308,7 +1287,7 @@ t("""
 #filter must be None -- has the parent already been removed?
 #(without id = ?post, query is fine)
 #{ ?tag, id  where (
-#{id=?tag1 and @tagid1 in recurse(?tag1, 'subsumedby')} 
+#{id=?tag1 and @tagid1 in follow(?tag1, subsumedby)} 
 # and {id = ?post and ?tag = tags and tags = ?tag1})}
 
 #XXX turn these into tests:

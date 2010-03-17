@@ -45,7 +45,7 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 
 """
 from vesper.backports import *
-from vesper.data.base import Tupleset, ColumnInfo, EMPTY_NAMESPACE
+from vesper.data.base import Tupleset, ColumnInfo, EMPTY_NAMESPACE, ResourceUri
 from vesper import utils
 import StringIO
         
@@ -70,7 +70,10 @@ QueryOpTypes = ( Tupleset, ResourceSet, ObjectType, StringType, NumberType,
     BooleanType )
 NullType = type(None)
 
-class QueryException(Exception): pass
+class QueryException(Exception):    
+
+    def __init__(self, msg, op=None):
+        self.op = None
 
 def runQuery(query, model):
     (ast, err) = buildAST(query)

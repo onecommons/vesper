@@ -236,9 +236,7 @@ def p_construct0(p):
 
     groupby = defaults['groupby']
     if groupby:
-        if isinstance(groupby[0], Constant):
-            arg = Project(groupby[0].value)
-        elif isinstance(groupby[0], Project):
+        if isinstance(groupby[0], Project):
             arg = groupby[0]
         else:
             raise QueryException("bad group by expression")

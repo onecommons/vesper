@@ -708,8 +708,8 @@ class ParseContext(object):
                             
         self.idrefpattern, self.refTemplate = None, None
         self._setIdRefPattern(self.refsValue)
-        self.propReplacements = self._setPropReplacements(self.propsValue)
-        self.idReplacements = self._setPropReplacements(self.idsValue)
+        self.propReplacements = self._setReplacements(self.propsValue)
+        self.idReplacements = self._setReplacements(self.idsValue)
         self.currentProp = None
     
     def nameMapChanges(self):
@@ -717,17 +717,14 @@ class ParseContext(object):
             return True
         return False
     
-    def _setPropReplacements(self, more):
-        '''
-        update defaults with props
-        '''
-        propReplacements = []        
+    def _setReplacements(self, more):
+        replacements = []        
         for d in self.defaultsValue, more:
             if d:
                 for key in d:
-                    propReplacements.append(_parseIdRefPattern(d, key, True))
-        propReplacements.sort(key=lambda v: v.weight)
-        return propReplacements
+                    replacements.append(_parseIdRefPattern(d, key, True))
+        replacements.sort(key=lambda v: v.weight)
+        return replacements
             
     def getProp(self, obj, name, default=None):
         nameprop = getattr(self, name+'Name')        
@@ -762,6 +759,23 @@ class ParseContext(object):
         elif idrefpattern is not None: 
             #if property present but has empty value, remove current pattern
             self.idrefpattern, self.refTemplate = None, None
+
+    def lookslikeIdRef(self, s):
+        #XXX think about case where if number were ids
+        if not isinstance(s, (str,unicode)):
+            return False
+        if not self.idrefpattern:
+            return False
+
+        m = self.idrefpattern.match(s)
+        if m is not None:
+            #this string looks the ref pattern
+            #so use the ref template to generate the resource id
+            res = m.expand(self.refTemplate)
+            #the id might be an abbreviation to try to parse that
+            res = self.parseId(res)
+            return res
+        return False
 
 class Parser(object):
     
@@ -973,31 +987,13 @@ class Parser(object):
             return True
         return False
 
-    @staticmethod
-    def lookslikeIdRef(s, parseContext):
-        #XXX think about case where if number were ids
-        if not isinstance(s, (str,unicode)):
-            return False
-        if not parseContext.idrefpattern:
-            return False
-        
-        m = parseContext.idrefpattern.match(s)
-        if m is not None:
-            #this string looks the ref pattern
-            #so use the ref template to generate the resource id
-            res = m.expand(parseContext.refTemplate)
-            #the id might be an abbreviation to try to parse that
-            res = parseContext.parseId(res)
-            return res
-        return False
-
     def deduceObjectType(self, item, parseContext):
         if isinstance(item, list):
             return item, None, parseContext.context
         if isinstance(item, multipartjson.BlobRef):
             item = item.resolve()
             context = parseContext.context
-            res = self.lookslikeIdRef(item, parseContext)
+            res = parseContext.lookslikeIdRef(item)
         elif isinstance(item, dict):
             size = len(item)
             hasContext = int('context' in item)
@@ -1032,7 +1028,7 @@ class Parser(object):
                     objectType = 'pjson:' + objectType
                 return value, objectType, context
         else:
-            res = self.lookslikeIdRef(item, parseContext)                        
+            res = parseContext.lookslikeIdRef(item)
             context = parseContext.context
         
         if res:

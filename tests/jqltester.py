@@ -107,7 +107,8 @@ _printedmodels = []
 def formatmodel(modelsrc, modelname):
     modelformatted = pprint.pformat(modelsrc, width=50).replace('\n', '\n ... ')  
     return Template("""
- >>> $modelname = app.createStore('''$modelformatted''')
+ >>> $modelname = app.createStore(
+ ... '''$modelformatted''')
 """).substitute(locals())
 
 def printmodel(model):
@@ -130,7 +131,8 @@ def printdocs(test):
     queryformatted = test.query.replace('\n', '\n ... ')  
     print Template("""
 $doc$createmodel
- >>> ${modelname}.query('''$queryformatted''')
+ >>> ${modelname}.query(
+ ... '''$queryformatted''')
  $result
 """).substitute(locals())
 

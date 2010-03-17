@@ -203,7 +203,7 @@ class QueryOp(object):
 
     def replaceArg(self, child, with_):
         if not isinstance(self.args, list):
-            raise QueryException('invalid operation replaceArg for %s', type(self))
+            raise QueryException('invalid operation replaceArg for %s' % type(self))
         for i, a in enumerate(self.args):
             if a is child:                
                 self.args[i] = with_                
@@ -212,7 +212,7 @@ class QueryOp(object):
                 with_.parent = self
                 child._parent = None
                 return
-        raise QueryException('invalid operation for %s', type(self))
+        raise QueryException('invalid operation for %s' % type(self))
 
     def removeArg(self, child):
         try:
@@ -232,7 +232,7 @@ class QueryOp(object):
                 return p
         return None
 
-    def _resolveQNames(self, nsmap):
+    def _resolveQNames(self, parseContext):
         pass #no op by default
         
 class ErrorOp(QueryOp):
@@ -360,9 +360,9 @@ class JoinConditionOp(QueryOp):
             self.position = position #index or label
             #self.appendArg(Eq(Project(SUBJECT),Project(self.position)) )
 
-    def _resolveQNames(self, nsmap):
+    def _resolveQNames(self, parseContext):
         if isinstance(self.position, (str, unicode)):
-            self.position = nsmap.parseProp(self.position)
+            self.position = parseContext.parseProp(self.position)
         
     def getPositionLabel(self):
         if isinstance(self.position, int):
@@ -408,7 +408,7 @@ class JoinConditionOp(QueryOp):
             child._parent = None
             return
         print 'op', self.op, 'replace',child, 'with', with_
-        raise QueryException('invalid operation for %s', type(self))
+        raise QueryException('invalid operation for %s' % type(self))
 
 class Filter(QueryOp):
     '''
@@ -458,9 +458,9 @@ class Filter(QueryOp):
                 self.labels.append( (label+':type', OBJTYPE_POS) )
                 self.labels.append( (label+':pos', LIST_POS) )
 
-    def _resolveQNames(self, nsmap):
+    def _resolveQNames(self, parseContext):
         def resolve(name):
-            return nsmap.parseProp(name)
+            return parseContext.parseProp(name)
 
         self.labels = [ (resolve(name), p) for (name, p) in self.labels]
 
@@ -497,6 +497,11 @@ class Constant(QueryOp):
         else:
             return ObjectType
 
+    def _resolveQNames(self, parseContext):
+        ref = parseContext.lookslikeIdRef(self.value)
+        if ref:
+            self.value = ResourceUri.new(ref)
+
     def __eq__(self, other):
         return super(Constant,self).__eq__(other) and self.value == other.value
 
@@ -512,8 +517,8 @@ class Constant(QueryOp):
         return 'eval'+ Constant.__name__
 
 class PropString(Constant):
-    def _resolveQNames(self, nsmap):
-        self.value = nsmap.parseProp(self.value)
+    def _resolveQNames(self, parseContext):
+        self.value = parseContext.parseProp(self.value)
 
 class AnyFuncOp(QueryOp):
 
