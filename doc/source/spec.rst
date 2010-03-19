@@ -49,7 +49,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
         :| `constructarray` 
         :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `objectpair` | "*" [","])+ 
+                 :    (`objectitem` | `objectpair` [","])+ 
                  :     [`query_criteria`] 
                  :  "}"
  constructarray  : "[" [`label`]
@@ -58,10 +58,11 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- arrayitem       : `expression` | "*" 
  objectitem      : `propertyname` | "ID" | "*"
  objectpair      : `expression` ":" (`expression` 
-                 : | `constructarray` | `constructobject`)
+                 : | "*" | `nestedconstruct`)
+ arrayitem       : `expression` | "*" | `nestedconstruct`                 
+ nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
  query_criteria  : ["WHERE(" `expression` ")"]
                  : ["GROUPBY(" (`expression`[","])+ ")"]
@@ -97,7 +98,7 @@ Construct Patterns
 
 There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
-JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will return a list of instances of that pattern. These basic patterns are:
+JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
 
 
  >>> model1.query(
@@ -113,38 +114,9 @@ JQL query consists of a pattern describes a JSON object (dictionary), a list (ar
 
 
 
-When a single property name appears instead of a name-value pair, it is 
-treated as name-value pair where the name is the name of the property and 
-the value expression is a reference to property. So the following example is 
-equivalent to prior one. 
+Both the property name and value are expressions. In this example, the property names is simply string constants while the property value are property references. In the next example, the property name is a property reference and property value is a
+more complex expression. It uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service. [#f1]_
 
- >>> model1.query(
- ... '''{ displayname, type }''')
- [{'displayname': 'abbey aardvaark',
-   'type': 'user'},
-  {'displayname': 'billy billygoat',
-   'type': 'user'}]
-
-
-
-You can also construct results as arrays (lists) instead of objects. This query selects the same objects but it formats each result as a list not an object.
-
- >>> model1.query(
- ... '''[displayname, type]''')
- [['abbey aardvaark', 'user'],
-  ['billy billygoat', 'user']]
-
-
-
-:token:`constructvalue`
-You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
-
- >>> model1.query(
- ... '''(displayname)''')
- ['abbey aardvaark', 'billy billygoat']
-
-
-Both the key and value of an property pair can be expressions. So property names can vary for each result. This example uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service
  >>> model1.query(
  ... '''{
  ...   service : maybe facebook_uid or maybe email
@@ -155,15 +127,142 @@ Both the key and value of an property pair can be expressions. So property names
 
 
 
+:token:`objectitem`
+-----------------------
+When a single property name appears instead of a name-value pair, it is 
+treated as name-value pair where the name is the name of the property and 
+the value expression is a reference to property. So the following example is 
+equivalent to the first query: 
+
+ >>> model1.query(
+ ... '''{ displayname, type }''')
+ [{'displayname': 'abbey aardvaark',
+   'type': 'user'},
+  {'displayname': 'billy billygoat',
+   'type': 'user'}]
+
+
+
+:token:`constructarray`
+-----------------------
+You can also construct results as arrays (lists) instead of objects. This query selects the same objects but it formats each result as a list not an object.
+
+ >>> model1.query(
+ ... '''[displayname, type]''')
+ [['abbey aardvaark', 'user'],
+  ['billy billygoat', 'user']]
+
+
+
+:token:`constructvalue`
+-----------------------
+
+You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
+
+ >>> model1.query(
+ ... '''(displayname)''')
+ ['abbey aardvaark', 'billy billygoat']
+
+
+
+Property Names and `id`
+-----------------------
+
+Name tokens not used elsewhere in the grammar are treated as a reference to object properties.
+You can specify properties whose name match reserved keywords or have invalid characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
+
+`id` is a reserved name that always refers to the id of the object, not a property named "id".
+Such a property can written as `<id>`.
+
+ >>> model2 = app.createStore(
+ ... '''[{'a property with spaces': 'this property name has spaces',
+ ...   'id': 'a property named id',
+ ...   'key': '1',
+ ...   'namemap': {'id': 'key'}}]''')
+
+ >>> model2.query(
+ ... '''{ 'key' : id, <id>, <a property with spaces>}''')
+ [{'a property with spaces': 'this property name has spaces',
+   'id': 'a property named id',
+   'key': '1'}]
+
+
+
+Property wildcards
+------------------
+The "*" will expand to all properties defined for the object. For example, this query retrieves all objects in the store:
+
+ >>> model1.query(
+ ... '''{*}''')
+ [{'id': 'tag:nonsense',
+   'label': 'Nonsense',
+   'type': 'tag'},
+  {'auth': [{'facebook_uid': 394090223,
+             'name': 'abbey aardvaark',
+             'service': 'facebook'},
+            {'email': 'aaardvaark@gmail.com',
+             'language': 'en',
+             'name': 'abbey aardvaark',
+             'service': 'google',
+             'username': 'aaardvaark'}],
+   'displayname': 'abbey aardvaark',
+   'id': 'user:1',
+   'type': 'user'},
+  {'author': 'user:1',
+   'contentType': 'text/plain',
+   'contents': 'hello world!',
+   'id': 'post1',
+   'published': '',
+   'tags': ['tag:foo'],
+   'type': 'post'},
+  {'displayname': 'billy billygoat',
+   'id': 'user:2',
+   'type': 'user'},
+  {'id': 'tag:foo',
+   'label': 'foo',
+   'subcategoryOf': 'tag:nonsense',
+   'type': 'tag'}]
+
+
+
+Multiple values and nulls
+------------------
+* list construction -- multiple values are represented as lists
+* force list, list even when one item and empty lists instead on null
+
+ >>> model1.query(
+ ... '''
+ ... { auth
+ ... WHERE (type='user')
+ ... }
+ ... ''')
+ None
+
+
+
+Nested constructs
+-----------------
+
+cross joins 
+
+
 Filtering (the WHERE() clause)
 ==============================
 
-Note: Unlike SQL the WHERE expression must be in a parentheses.
+..note Note: Unlike SQL the WHERE expression must be in a parentheses.
 
+* property references in construct
+* matching lists 
 
 
 joins
 =====
+
+join expressions
+----------------
+
+labels
+------
 
 You can create a reference to an object creating object labels, which look this this syntax: `?identifier`. 
 
@@ -197,32 +296,30 @@ find all tag, include child tags in result
 
 
 
-Objects, id and anonymous objects
-=================================
+object references and anonymous objects
+=======================================
 
 If an object is anonymous it will be expanded, otherwise the object's id will be output. This behaviour can be overridden using DEPTH directive, which will force object references to be expanded, even if objects are duplicated. 
 
 
-Property Names and `id`
------------------------
 
-Name tokens not used elsewhere in the grammar are treated as a reference to object properties.
-You can specify properties whose name match reserved keywords or have invalid characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
+.. rubric:: Footnotes
 
-`id` is a reserved name that always refers to the id of the object, not a property named "id".
-Such a property can written as `<id>`.
+.. [#f1] Note this simplified example isn't very useful since it will merge all user's logins together. Here's a similar query that  returns the login object per user:
 
- >>> model2 = app.createStore(
- ... '''[{'a property with spaces': 'this property name has spaces',
- ...   'id': 'a property named id',
- ...   'key': '1',
- ...   'namemap': {'id': 'key'}}]''')
-
- >>> model2.query(
- ... '''{ 'key' : id, <id>, <a property with spaces>}''')
- [{'a property with spaces': 'this property name has spaces',
-   'id': 'a property named id',
-   'key': '1'}]
+ >>> model1.query(
+ ... '''
+ ... { "userid" : id, 
+ ...   "logins" : {?login 
+ ...               service : maybe facebook_uid or maybe email
+ ...               MERGEALL
+ ...              }
+ ...   where (auth = ?login)  
+ ... }
+ ... ''')
+ [{'logins': {'facebook': 394090223,
+              'google': 'aaardvaark@gmail.com'},
+   'userid': 'user:1'}]
 
 
 ..  colophon: this doc was generated with "python tests/jsonqlDocTest.py --printdoc > doc/source/spec.rst"

@@ -121,6 +121,7 @@ def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
         #print 'gb', groupby, row
         if debug: validateRowShape(tupleset.columns, row)
         for key, outputrow in getColumns(groupby, row, outerjoin=outerjoin):
+            #if isinstance(key, list): debugp('unhashable!', debug, key, groupby, row, tupleset.columns)
             vals = resources.get(key)
             if vals is None:
                 vals = MutableTupleset()
@@ -639,8 +640,10 @@ class SimpleQueryEngine(object):
                             
                             #if id label is set use that 
                             label = prop.value.construct.id.getLabel()
-                            assert label
-                            col = tupleset.findColumnPos(label, True)                            
+                            if label:
+                                col = tupleset.findColumnPos(label, True)
+                            else:
+                                col = None                                
                             if not col:
                                 #assume we're doing a cross join:
                                 ccontext.currentTupleset = ccontext.initialModel
@@ -778,7 +781,6 @@ class SimpleQueryEngine(object):
         assert position is not None, 'could find %r in %s %s' % (
                     joincond.position, tupleset, tupleset.columns)
         coltype = object
-        #print 'groupby', joincond.parent.name, joincond.parent        
         columns = [
             ColumnInfo(joincond.parent.name or '', coltype),
             ColumnInfo(joincond.getPositionLabel(),
@@ -1117,7 +1119,7 @@ class SimpleQueryEngine(object):
         # range of types we could first project on type and use that result to
         # choose the type index. On the other hand, if that projection uses an
         # iteration join it might be nearly expensive as doing the iteration join
-        # on the subject only.        
+        # on the subject only.
         if context.projectValues: #already evaluated
             return context.projectValues[op.name]
         

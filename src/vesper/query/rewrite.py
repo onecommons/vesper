@@ -117,7 +117,7 @@ class _ParseState(object):
                     for a in prop.args:
                         a.maybe = True
         
-        if groupby:
+        if groupby and not isinstance(groupby.args[0], Label):
             project = copy.copy(groupby.args[0])
             project._parent = None
             assert isinstance(project, Project), 'groupby currently only supports single property name'
@@ -393,14 +393,14 @@ class _ParseState(object):
                 join.name = self.nextAnonJoinId()
             join.parent.construct.id.appendArg( Label(join.name) )
 
-    def joinLabeledJoins(self):
+    def _joinLabeledJoins(self):
         '''
         Combine joins that share the same join label
         '''
         labeledjoins = {}
         for label, joins in sorted(self.labeledjoins.items(),
                      key=lambda a: self.labeledjoinorder.index(a[0]) ):
-            if not joins:
+            if not joins or not label: #don't combine unlabeled joins
                 continue
             #construct that only have id labels will not have a join
             #we only want to add the join if there are no another joins for the label
@@ -413,14 +413,14 @@ class _ParseState(object):
             firstjoin.name = label
         return labeledjoins
 
-    def findJoinsInDocOrder(self, root, joinsInDocOrder):
+    def _findJoinsInDocOrder(self, root, joinsInDocOrder):
         for child in root.depthfirst():
             if isinstance(child, ResourceSetOp):
                 joinsInDocOrder.append(child)
                 for orphan in self.orphanedJoins.get(child,[]):                    
-                    self.findJoinsInDocOrder(orphan, joinsInDocOrder)
+                    self._findJoinsInDocOrder(orphan, joinsInDocOrder)
 
-    def analyzeJoinPreds(self, join, preds):
+    def _analyzeJoinPreds(self, join, preds):
         remainingPreds = []
         joinPreds = []
         aliasingPreds = []
@@ -490,7 +490,7 @@ class _ParseState(object):
                 raise QueryException("only equijoins currently supported")
         return aliases, joinPreds, remainingPreds
 
-    def getJoinPreds(self, joins):
+    def _getJoinPreds(self, joins):
         predMap = {}
         for join in joins:
             preds = []
@@ -508,11 +508,11 @@ class _ParseState(object):
                     parent = parent.parent
                 assert pred
                 preds.append((pred, label))
-            aliases, joinPreds, remainingPreds = self.analyzeJoinPreds(join, preds)
+            aliases, joinPreds, remainingPreds = self._analyzeJoinPreds(join, preds)
             predMap[join] = (join, aliases, joinPreds)
         return predMap
 
-    def makeJoin(self, join, followingJoins, joinReferences, joinPredicates):
+    def _makeJoin(self, join, followingJoins, joinReferences, joinPredicates):
         """
         Join refs
         we want to build joins deepest first so that the top level join stays
@@ -601,18 +601,18 @@ class _ParseState(object):
     def buildJoins(self, root):
         #first join together any joins that share the same name:
         validateTree(root)
-        self.labeledjoins = self.joinLabeledJoins() #XXX
+        self.labeledjoins = self._joinLabeledJoins() #XXX
         validateTree(root)
         joinsInDocOrder = []
-        self.findJoinsInDocOrder(root, joinsInDocOrder)
+        self._findJoinsInDocOrder(root, joinsInDocOrder)
         #build a list of predicates that the join participate in
-        joinPredicates = self.getJoinPreds(joinsInDocOrder)
+        joinPredicates = self._getJoinPreds(joinsInDocOrder)
         #next, in reverse document order (i.e. start with the most nested joins)
         #join together joins that reference each other
         refs = []
         validateTree(*joinsInDocOrder)
         for i in xrange(len(joinsInDocOrder)-1, -1, -1):
-            self.makeJoin(joinsInDocOrder[i], joinsInDocOrder[i+1:], refs, joinPredicates)
+            self._makeJoin(joinsInDocOrder[i], joinsInDocOrder[i+1:], refs, joinPredicates)
 
 def consolidateFilter(filter, projections):
     '''

@@ -984,6 +984,11 @@ id, type,
 }
 '''
 
+#t.group = 'owner'
+#idea: add a owner() function that return the owner of the current object (or None if not owned)
+#then enable groupby(owner()) a very useful construct for embedded objects
+#also allow owner(?label), enabling {?embedded ... where({?owner id = owner(?embedded) and ...}) }
+
 t.group = 'outer'
 
 #XXX join from foo property masks outer join 
@@ -999,6 +1004,15 @@ t.model = modelFromJson([
         { "id" : "2", "type" : "post", "tags" : "tag1"},
         { "id" : "3", "type" : "post"}
     ])
+
+#bug: when the label name is the same as the property name
+#property references construct the label value (the id) instead of the property value
+#e.g. this returns [{'tags': '2'}] instead of [{'tags': 'tag1'}]
+skip('''
+{ ?tags 
+  tags
+}
+''', [{'tags': 'tag1'}])
 
 t('''
 {   id, 

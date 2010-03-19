@@ -826,7 +826,7 @@ class GroupBy(QueryOp):
     aggregateShape = None
     
     def __init__(self, arg, **options):
-        assert isinstance(arg, Project)
+        assert isinstance(arg, (Project, Label))
         self.args = []
         self.appendArg(arg)
 
