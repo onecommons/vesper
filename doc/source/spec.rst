@@ -1,7 +1,7 @@
 
 
-Informal Specification
-~~~~~~~~~~~~~~~~~~~~~~
+jsonQL Reference 
+~~~~~~~~~~~~~~~~
 
 jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
@@ -9,34 +9,54 @@ The examples here are based on the following example. You can cut an paste or yo
 
 
  >>> model1 = app.createStore(
- ... '''[{'author': 'user:1',
- ...   'contentType': 'text/plain',
- ...   'contents': 'hello world!',
- ...   'id': 'post1',
- ...   'published': '',
- ...   'tags': ['tag:foo'],
- ...   'type': 'post'},
- ...  {'id': 'tag:foo',
- ...   'label': 'foo',
- ...   'subcategoryOf': 'tag:nonsense',
- ...   'type': 'tag'},
- ...  {'id': 'tag:nonsense',
- ...   'label': 'Nonsense',
- ...   'type': 'tag'},
- ...  {'auth': [{'facebook_uid': 394090223,
- ...             'name': 'abbey aardvaark',
- ...             'service': 'facebook'},
- ...            {'email': 'aaardvaark@gmail.com',
- ...             'language': 'en',
- ...             'name': 'abbey aardvaark',
- ...             'service': 'google',
- ...             'username': 'aaardvaark'}],
- ...   'displayname': 'abbey aardvaark',
- ...   'id': 'user:1',
- ...   'type': 'user'},
- ...  {'displayname': 'billy billygoat',
- ...   'id': 'user:2',
- ...   'type': 'user'}]''')
+ ... '''[
+ ...   {
+ ...     "contentType": "text/plain", 
+ ...     "author": "user:1", 
+ ...     "tags": [
+ ...       "tag:foo"
+ ...     ], 
+ ...     "published": "", 
+ ...     "type": "post", 
+ ...     "id": "post1", 
+ ...     "contents": "hello world!"
+ ...   }, 
+ ...   {
+ ...     "subcategoryOf": "tag:nonsense", 
+ ...     "type": "tag", 
+ ...     "id": "tag:foo", 
+ ...     "label": "foo"
+ ...   }, 
+ ...   {
+ ...     "type": "tag", 
+ ...     "id": "tag:nonsense", 
+ ...     "label": "Nonsense"
+ ...   }, 
+ ...   {
+ ...     "displayname": "abbey aardvaark", 
+ ...     "type": "user", 
+ ...     "id": "user:1", 
+ ...     "auth": [
+ ...       {
+ ...         "name": "abbey aardvaark", 
+ ...         "service": "facebook", 
+ ...         "facebook_uid": 394090223
+ ...       }, 
+ ...       {
+ ...         "username": "aaardvaark", 
+ ...         "language": "en", 
+ ...         "name": "abbey aardvaark", 
+ ...         "service": "google", 
+ ...         "email": "aaardvaark@gmail.com"
+ ...       }
+ ...     ]
+ ...   }, 
+ ...   {
+ ...     "displayname": "billy billygoat", 
+ ...     "type": "user", 
+ ...     "id": "user:2"
+ ...   }
+ ... ]''')
 
 
 Basic Grammar
@@ -49,19 +69,18 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
         :| `constructarray` 
         :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `objectpair` [","])+ 
+                 :    (`objectitem` | `propertypair` [","])+ 
                  :     [`query_criteria`] 
                  :  "}"
  constructarray  : "[" [`label`]
-                 :  (`arrayitem` [","])+ [`query_criteria`] 
+                 :  (`propertyvalue` [","])+ [`query_criteria`] 
                  : "]"
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- objectitem      : `propertyname` | "ID" | "*"
- objectpair      : `expression` ":" (`expression` 
-                 : | "*" | `nestedconstruct`)
- arrayitem       : `expression` | "*" | `nestedconstruct`                 
+ objectitem      : | "ID" | "*" | ["["] ["omitnull" | "maybe"] `propertyname` ["]"]
+ propertypair    : ["omitnull"] `expression` ":" (`propertyvalue` | [`propertyvalue`])
+ propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
  query_criteria  : ["WHERE(" `expression` ")"]
@@ -107,10 +126,16 @@ JQL query consists of a pattern describes a JSON object (dictionary), a list (ar
  ...     "type" : type
  ...     }
  ... ''')
- [{'displayname': 'abbey aardvaark',
-   'type': 'user'},
-  {'displayname': 'billy billygoat',
-   'type': 'user'}]
+ [
+   {
+     "type": "user", 
+     "displayname": "abbey aardvaark"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "billy billygoat"
+   }
+ ]
 
 
 
@@ -122,24 +147,34 @@ more complex expression. It uses the MERGEALL option to return a single dictiona
  ...   service : maybe facebook_uid or maybe email
  ...   MERGEALL 
  ... }''')
- [{'facebook': 394090223,
-   'google': 'aaardvaark@gmail.com'}]
+ [
+   {
+     "google": "aaardvaark@gmail.com", 
+     "facebook": 394090223
+   }
+ ]
 
 
 
-:token:`objectitem`
------------------------
+Abbreviated properties: :token:`objectitem`
+----------------------------------------
 When a single property name appears instead of a name-value pair, it is 
-treated as name-value pair where the name is the name of the property and 
-the value expression is a reference to property. So the following example is 
+treated as a name-value pair where the name is the name of the property and 
+the value is a reference to the property. So the following example is 
 equivalent to the first query: 
 
  >>> model1.query(
  ... '''{ displayname, type }''')
- [{'displayname': 'abbey aardvaark',
-   'type': 'user'},
-  {'displayname': 'billy billygoat',
-   'type': 'user'}]
+ [
+   {
+     "type": "user", 
+     "displayname": "abbey aardvaark"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "billy billygoat"
+   }
+ ]
 
 
 
@@ -149,8 +184,16 @@ You can also construct results as arrays (lists) instead of objects. This query 
 
  >>> model1.query(
  ... '''[displayname, type]''')
- [['abbey aardvaark', 'user'],
-  ['billy billygoat', 'user']]
+ [
+   [
+     "abbey aardvaark", 
+     "user"
+   ], 
+   [
+     "billy billygoat", 
+     "user"
+   ]
+ ]
 
 
 
@@ -161,7 +204,10 @@ You can select individual values (strings or numbers) by wrapping an :token:`exp
 
  >>> model1.query(
  ... '''(displayname)''')
- ['abbey aardvaark', 'billy billygoat']
+ [
+   "abbey aardvaark", 
+   "billy billygoat"
+ ]
 
 
 
@@ -175,16 +221,26 @@ You can specify properties whose name match reserved keywords or have invalid ch
 Such a property can written as `<id>`.
 
  >>> model2 = app.createStore(
- ... '''[{'a property with spaces': 'this property name has spaces',
- ...   'id': 'a property named id',
- ...   'key': '1',
- ...   'namemap': {'id': 'key'}}]''')
+ ... '''[
+ ...   {
+ ...     "a property with spaces": "this property name has spaces", 
+ ...     "namemap": {
+ ...       "id": "key"
+ ...     }, 
+ ...     "key": "1", 
+ ...     "id": "a property named id"
+ ...   }
+ ... ]''')
 
  >>> model2.query(
  ... '''{ 'key' : id, <id>, <a property with spaces>}''')
- [{'a property with spaces': 'this property name has spaces',
-   'id': 'a property named id',
-   'key': '1'}]
+ [
+   {
+     "id": "a property named id", 
+     "key": "1", 
+     "a property with spaces": "this property name has spaces"
+   }
+ ]
 
 
 
@@ -194,49 +250,302 @@ The "*" will expand to all properties defined for the object. For example, this 
 
  >>> model1.query(
  ... '''{*}''')
- [{'id': 'tag:nonsense',
-   'label': 'Nonsense',
-   'type': 'tag'},
-  {'auth': [{'facebook_uid': 394090223,
-             'name': 'abbey aardvaark',
-             'service': 'facebook'},
-            {'email': 'aaardvaark@gmail.com',
-             'language': 'en',
-             'name': 'abbey aardvaark',
-             'service': 'google',
-             'username': 'aaardvaark'}],
-   'displayname': 'abbey aardvaark',
-   'id': 'user:1',
-   'type': 'user'},
-  {'author': 'user:1',
-   'contentType': 'text/plain',
-   'contents': 'hello world!',
-   'id': 'post1',
-   'published': '',
-   'tags': ['tag:foo'],
-   'type': 'post'},
-  {'displayname': 'billy billygoat',
-   'id': 'user:2',
-   'type': 'user'},
-  {'id': 'tag:foo',
-   'label': 'foo',
-   'subcategoryOf': 'tag:nonsense',
-   'type': 'tag'}]
+ [
+   {
+     "type": "tag", 
+     "id": "tag:nonsense", 
+     "label": "Nonsense"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "abbey aardvaark", 
+     "id": "user:1", 
+     "auth": [
+       {
+         "name": "abbey aardvaark", 
+         "service": "facebook", 
+         "facebook_uid": 394090223
+       }, 
+       {
+         "username": "aaardvaark", 
+         "service": "google", 
+         "email": "aaardvaark@gmail.com", 
+         "language": "en", 
+         "name": "abbey aardvaark"
+       }
+     ]
+   }, 
+   {
+     "contentType": "text/plain", 
+     "tags": [
+       "tag:foo"
+     ], 
+     "author": "user:1", 
+     "published": "", 
+     "type": "post", 
+     "id": "post1", 
+     "contents": "hello world!"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "billy billygoat", 
+     "id": "user:2"
+   }, 
+   {
+     "type": "tag", 
+     "subcategoryOf": "tag:nonsense", 
+     "id": "tag:foo", 
+     "label": "foo"
+   }
+ ]
 
 
 
-Multiple values and nulls
-------------------
+Multiple values and lists
+-------------------------
 * list construction -- multiple values are represented as lists
-* force list, list even when one item and empty lists instead on null
+* force list, list even when one item and empty lists instead on null (should distinguish between a null value and outer join null?)
+
+Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
+does inserted a property that already exists on an object might add a new value or replace the current one.
+
+ >>> model3 = app.createStore(
+ ... '''[
+ ...   {
+ ...     "a_list": [
+ ...       "a", 
+ ...       "b"
+ ...     ], 
+ ...     "id": "1"
+ ...   }, 
+ ...   {
+ ...     "a_list": "c", 
+ ...     "id": "1"
+ ...   }, 
+ ...   {
+ ...     "mixed": [
+ ...       "a", 
+ ...       "b"
+ ...     ], 
+ ...     "a_list": null, 
+ ...     "id": "1"
+ ...   }, 
+ ...   {
+ ...     "mixed": "c", 
+ ...     "id": "2"
+ ...   }, 
+ ...   {
+ ...     "mixed": null, 
+ ...     "id": "3"
+ ...   }
+ ... ]''')
+
+ >>> model3.query(
+ ... '''{ id, a_list }''')
+ [
+   {
+     "a_list": [
+       "a", 
+       "b", 
+       "c", 
+       null
+     ], 
+     "id": "1"
+   }
+ ]
+
+
+
+"forcelist" syntax
+------------------
+You can use wrap the property value with brackets to force the value of a property to always be a list.
+If the value is `null`, an empty list (`[]`) will be used. For example, compare the results of the following two examples which are identical except for the second one's use of "forcelist":
+
+ >>> model3.query(
+ ... '''{ id, mixed }''')
+ [
+   {
+     "mixed": [
+       "a", 
+       "b"
+     ], 
+     "id": "1"
+   }, 
+   {
+     "mixed": null, 
+     "id": "3"
+   }, 
+   {
+     "mixed": "c", 
+     "id": "2"
+   }
+ ]
+
+
+
+
+
+ >>> model3.query(
+ ... '''{ id, [mixed] }''')
+ [
+   {
+     "mixed": [
+       "a", 
+       "b"
+     ], 
+     "id": "1"
+   }, 
+   {
+     "mixed": [], 
+     "id": "3"
+   }, 
+   {
+     "mixed": [
+       "c"
+     ], 
+     "id": "2"
+   }
+ ]
+
+
+
+Null values and optional properties
+-----------------------------------
+
+results will only include objects that contain the property referenced in the construct list,
+For example, the next example just returns one object because only one has a both a displayname and auth property.
 
  >>> model1.query(
- ... '''
- ... { auth
- ... WHERE (type='user')
- ... }
- ... ''')
- None
+ ... '''{displayname, auth}''')
+ [
+   {
+     "displayname": "abbey aardvaark", 
+     "auth": [
+       {
+         "name": "abbey aardvaark", 
+         "service": "facebook", 
+         "facebook_uid": 394090223
+       }, 
+       {
+         "username": "aaardvaark", 
+         "service": "google", 
+         "email": "aaardvaark@gmail.com", 
+         "language": "en", 
+         "name": "abbey aardvaark"
+       }
+     ]
+   }
+ ]
+
+
+
+If property references are modified "maybe" before them then objects without that property will be included in the result. For example:
+
+ >>> model1.query(
+ ... '''{displayname, maybe auth}''')
+ [
+   {
+     "displayname": "abbey aardvaark", 
+     "auth": [
+       {
+         "name": "abbey aardvaark", 
+         "service": "facebook", 
+         "facebook_uid": 394090223
+       }, 
+       {
+         "username": "aaardvaark", 
+         "service": "google", 
+         "email": "aaardvaark@gmail.com", 
+         "language": "en", 
+         "name": "abbey aardvaark"
+       }
+     ]
+   }, 
+   {
+     "displayname": "billy billygoat", 
+     "auth": null
+   }
+ ]
+
+
+
+This query still specifies that "auth" property appears in every object in the result -- objects that doesn't have a "auth" property defined have that property value set to null. If you do not want the property included in that case, you can use the the `OMITNULL` modifier instead:
+
+ >>> model1.query(
+ ... '''{displayname, omitnull auth}''')
+ [
+   {
+     "displayname": "abbey aardvaark", 
+     "auth": [
+       {
+         "name": "abbey aardvaark", 
+         "service": "facebook", 
+         "facebook_uid": 394090223
+       }, 
+       {
+         "username": "aaardvaark", 
+         "service": "google", 
+         "email": "aaardvaark@gmail.com", 
+         "language": "en", 
+         "name": "abbey aardvaark"
+       }
+     ]
+   }, 
+   {
+     "displayname": "billy billygoat"
+   }
+ ]
+
+
+
+The above examples illustrate using MAYBE and OMITNULL on appreviated properties. 
+Specifically `maybe property` is an abbreviation for  `'property' : maybe property`
+and `omitnull property` is an abbreviation for `omitnull 'property' : maybe property`.
+
+`omitnull` must appear before the property name and takes effect when any property value expression returns null.
+For example, here's a silly query that has a "nullproperty" property with a constant value
+but it will never be included in the result because of the "omitnull".
+
+ >>> model1.query(
+ ... '''{displayname, omitnull "nullproperty" : null}''')
+ [
+   {
+     "displayname": "abbey aardvaark"
+   }, 
+   {
+     "displayname": "billy billygoat"
+   }
+ ]
+
+
+
+The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
+
+ >>> model1.query(
+ ... '''{displayname, [maybe auth]}''')
+ [
+   {
+     "displayname": "abbey aardvaark", 
+     "auth": [
+       {
+         "name": "abbey aardvaark", 
+         "service": "facebook", 
+         "facebook_uid": 394090223
+       }, 
+       {
+         "username": "aaardvaark", 
+         "service": "google", 
+         "email": "aaardvaark@gmail.com", 
+         "language": "en", 
+         "name": "abbey aardvaark"
+       }
+     ]
+   }, 
+   {
+     "displayname": "billy billygoat", 
+     "auth": []
+   }
+ ]
 
 
 
@@ -280,7 +589,7 @@ This is example, value of the contains property will be any object that
  ...     'contains' : { * where (subsumedby = ?parent)}
  ...     }
  ... ''')
- None
+ null
 
 
 find all tag, include child tags in result
@@ -292,7 +601,7 @@ find all tag, include child tags in result
  ...     'contains' : { where(subsumedby = ?parent)}
  ...     }
  ... ''')
- None
+ null
 
 
 
@@ -317,9 +626,15 @@ If an object is anonymous it will be expanded, otherwise the object's id will be
  ...   where (auth = ?login)  
  ... }
  ... ''')
- [{'logins': {'facebook': 394090223,
-              'google': 'aaardvaark@gmail.com'},
-   'userid': 'user:1'}]
+ [
+   {
+     "logins": {
+       "google": "aaardvaark@gmail.com", 
+       "facebook": 394090223
+     }, 
+     "userid": "user:1"
+   }
+ ]
 
 
 ..  colophon: this doc was generated with "python tests/jsonqlDocTest.py --printdoc > doc/source/spec.rst"

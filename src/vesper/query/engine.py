@@ -678,7 +678,9 @@ class SimpleQueryEngine(object):
                         
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
-                            name = flatten(prop.nameFunc.evaluate(self, ccontext))                            
+                            name = flatten(prop.nameFunc.evaluate(self, ccontext))
+                            if not name: #don't include property in result
+                                continue
                         else:
                             name = prop.name or prop.value.name                            
                         pattern = _setConstructProp(shape, pattern, prop, v, name)                        
@@ -812,14 +814,17 @@ class SimpleQueryEngine(object):
             rows = pjson.findPropList(context.initialModel, subject, pred)
             ordered = []
             rows = list(rows)
-            if rows:
+            if rows:                
                 for row in rows:
                     predicate = row[1]
                     if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
                         ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
-                        assert row[2] in listval, '%s not in %s' % (row[2], listval)
+                        #this assert isn't valid if duplicate values are in the sequence
+                        #assert row[2] in listval, '%s not in %s' % (row[2], listval)
+                        ordered.append( (ordinal, row[2]) )
                         if row[2] in listval:
-                            ordered.append( (ordinal, row[2]) )                        
+                            listval.remove(row[2])
+                leftovers = listval
             else:
                 return (False, listval)
         else:
@@ -827,18 +832,25 @@ class SimpleQueryEngine(object):
                 listposLabel = LIST_POS
             else:
                 listposLabel = propname+':pos'
+            #XXX this is expensive, just reuse the getColumn results used by build listval
             listcol = context.currentTupleset.findColumnPos(listposLabel) 
             assert listcol
             listpositions = flatten(c[0] for c in getColumn(listcol, context.currentRow))
             if not listpositions: #no position info, so not a json list
                 return (False, listval)
             ordered = []
+            leftovers = []
             for i, positions in enumerate(listpositions):
-                for p in positions:
-                    ordered.append( (p, listval[i]) )
+                if positions:
+                    for p in positions:
+                        ordered.append( (p, listval[i]) )
+                else:
+                    leftovers.append( listval[i] )
+                    
         
-        ordered.sort()        
-        return (True, [v for p, v in ordered])
+        ordered.sort()
+        #include any values left-over in listval
+        return (True, [v for p, v in ordered] + leftovers)
 
     def evalJoin(self, op, context):
         return self._evalJoin(op, context)

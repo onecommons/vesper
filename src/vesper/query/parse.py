@@ -57,7 +57,7 @@ import ply.yacc
 
 reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NAMEMAP', 
            'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
-           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'INCLUDE', 'EXCLUDE', 'WHEN')
+           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'OMITNULL')#'INCLUDE', 'EXCLUDE', 'WHEN')
 
 tokens = reserved + (
     # Literals (identifier, integer constant, float constant, string constant)
@@ -214,8 +214,8 @@ def p_construct0(p):
                 | listconstruct
                 | valueconstruct
 
-    construct : dictconstruct
-                | listconstruct
+    nestedconstruct : dictconstruct
+                    | listconstruct
     '''
     assert isinstance(p[1], T.construct)
     shape = {
@@ -374,7 +374,7 @@ def p_constructitem6(p):
     '''
     constructitem : ID
     '''    
-    p[0] = _makeConstructProp(p[1], Project(0), True, False)
+    p[0] = _makeConstructProp(p[1], Project(0), True, False, False)
 
 def p_atom_id(p):
     """
@@ -479,7 +479,7 @@ def p_join(p):
         p[0] = ErrorOp(p[2], "Invalid Join")
         p.parser.errorlog.error("invalid join: "  +  str(e) + ' ' + repr(p[2]))
 
-def _makeConstructProp(n, v, nameIsFilter, derefName = False):
+def _makeConstructProp(n, v, nameIsFilter, derefName, omit):
     if n == '*':
         n = None
         nameIsFilter = False
@@ -488,30 +488,74 @@ def _makeConstructProp(n, v, nameIsFilter, derefName = False):
         derefName = n
         n = None
     
+    if omit:
+        omit = PropShape.omit
+    print 'omit', omit, n, v
     if isinstance(v, T.forcelist):
-        return ConstructProp(n, v[0],
-                PropShape.uselist, PropShape.uselist, nameIsFilter, nameFunc=derefName)
+        return ConstructProp(n, v[0], omit or PropShape.uselist, 
+                    PropShape.uselist, nameIsFilter, nameFunc=derefName)
     else:
-        return ConstructProp(n, v, nameIsFilter=nameIsFilter, nameFunc=derefName)
+        return ConstructProp(n, v, omit or PropShape.usenull,
+                            nameIsFilter=nameIsFilter, nameFunc=derefName)
 
 def p_constructitem3(p):
     '''
     constructitem : expression COLON dictvalue
     '''
-    p[0] = _makeConstructProp(p[1], p[3], False, True)
+    p[0] = _makeConstructProp(p[1], p[3], False, True, False)
+
+def p_constructitem3b(p):
+    '''
+    constructitem : OMITNULL expression COLON dictvalue
+    '''
+    #omitnull implies maybe, see rewrite.joinFromConstruct()
+    p[0] = _makeConstructProp(p[2], p[4], False, True, True)
 
 def p_constructitem4(p):
     '''
     constructitem : barecolumnref
     '''    
-    p[0] = _makeConstructProp(p[1], Project(p[1]), True, False)
+    p[0] = _makeConstructProp(p[1], Project(p[1]), True, False, False)
+
+def p_constructitem4b(p):
+    '''
+    constructitem : OMITNULL barecolumnref
+    '''
+    #omitnull implies maybe, see rewrite.joinFromConstruct()
+    p[0] = _makeConstructProp(p[2], Project(p[2]), True, False, True)
+
+def p_constructitem4c(p):
+    '''
+    constructitem : MAYBE barecolumnref
+    '''
+    op = Project(p[2])
+    op.maybe = True
+    print 'MAYBE barecolumnref'
+    p[0] = _makeConstructProp(p[2], op, True, False, False)
 
 def p_constructitem5(p): 
     '''
     constructitem : LBRACKET barecolumnref RBRACKET
     '''
-    p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False)
+    p[0] = _makeConstructProp(p[2], T.forcelist(Project(p[2])), True, False, False)
 
+def p_constructitem5b(p): 
+    '''
+    constructitem : LBRACKET OMITNULL barecolumnref RBRACKET
+    '''
+    #omitnull implies maybe, see rewrite.joinFromConstruct()
+    p[0] = _makeConstructProp(p[3], T.forcelist(Project(p[3])), True, False, True)
+
+def p_constructitem5c(p): 
+    '''
+    constructitem : LBRACKET MAYBE barecolumnref RBRACKET  
+    '''
+    op = Project(p[3])
+    op.maybe = True
+    p[0] = _makeConstructProp(p[3], T.forcelist(op), True, False, False)
+
+#XXX
+"""
 def p_constructitem_include(p): 
     '''
     constructitem : INCLUDE dictconstruct
@@ -534,6 +578,7 @@ def p_constructitem_exclude2(p):
     '''
     exp = p[4] #XXX
     p[0] = p[2] #_makeConstructProp(None, p[2], False)
+"""
 
 def p_arrayindex(p):
     '''
@@ -573,9 +618,10 @@ def p_columnref(p):
 
 def p_dictvalue(p): 
     '''
-    dictvalue : LBRACKET construct RBRACKET
-              | construct
-              | expression              
+    dictvalue : expression
+              | LBRACKET expression RBRACKET
+              | nestedconstruct
+              | LBRACKET nestedconstruct RBRACKET
     '''
     if len(p) == 4:
         p[0] = T.forcelist(p[2])
@@ -682,7 +728,7 @@ def p_valueconstruct(p):
                     | LPAREN expression COMMA constructoplist RPAREN
                     | LPAREN expression COMMA constructoplist COMMA RPAREN
     '''
-    props = [_makeConstructProp(None, p[2], False)]
+    props = [_makeConstructProp(None, p[2], False, False, False)]
     
     if len(p) == 5:
         p[0] = T.construct('(', None, props, p[3])
@@ -693,7 +739,7 @@ def p_listconstructitem(p):
     '''
     listconstructitem : expression
     '''
-    p[0] = _makeConstructProp(None, p[1], False)
+    p[0] = _makeConstructProp(None, p[1], False, False, False)
 
 def p_error(p):
     #print "p_error:", p.lexpos, p.lineno, p.type, p.value

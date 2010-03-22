@@ -759,7 +759,6 @@ class ConstructProp(QueryOp):
             return
         raise QueryException('replaceArg failed: not a child')
 
-
     def __eq__(self, other):
         return (super(ConstructProp,self).__eq__(other)
          and self.ifEmpty == other.ifEmpty and self.ifSingle == self.ifSingle)

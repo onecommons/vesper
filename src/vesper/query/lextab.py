@@ -1,6 +1,6 @@
 # lextab.py. This file automatically created by PLY (version 3.2). Don't edit!
 _tabversion   = '3.2'
-_lextokens    = {'BINDVAR': 1, 'IN': 1, 'LABEL': 1, 'LBRACKET': 1, 'DEPTH': 1, 'COLON': 1, 'LIMIT': 1, 'NULL': 1, 'TRUE': 1, 'GROUPBY': 1, 'DIVIDE': 1, 'LE': 1, 'RPAREN': 1, 'EQ': 1, 'WHEN': 1, 'NE': 1, 'MINUS': 1, 'ASC': 1, 'LT': 1, 'PLUS': 1, 'MERGEALL': 1, 'EXCLUDE': 1, 'ORDERBY': 1, 'GT': 1, 'STRING': 1, 'MAYBE': 1, 'IS': 1, 'PERIOD': 1, 'RBRACE': 1, 'TIMES': 1, 'GE': 1, 'LPAREN': 1, 'OFFSET': 1, 'INCLUDE': 1, 'WHERE': 1, 'ID': 1, 'PROPSTRING': 1, 'DESC': 1, 'AND': 1, 'LBRACE': 1, 'FALSE': 1, 'NAME': 1, 'INT': 1, 'FLOAT': 1, 'NAMEMAP': 1, 'NOT': 1, 'RBRACKET': 1, 'COMMA': 1, 'OR': 1, 'MOD': 1}
+_lextokens    = {'BINDVAR': 1, 'IN': 1, 'OMITNULL': 1, 'LABEL': 1, 'LBRACKET': 1, 'DEPTH': 1, 'COLON': 1, 'LIMIT': 1, 'NULL': 1, 'TRUE': 1, 'GROUPBY': 1, 'DIVIDE': 1, 'LE': 1, 'RPAREN': 1, 'EQ': 1, 'NE': 1, 'MINUS': 1, 'ASC': 1, 'LT': 1, 'PLUS': 1, 'MERGEALL': 1, 'COMMA': 1, 'ORDERBY': 1, 'GT': 1, 'STRING': 1, 'MAYBE': 1, 'IS': 1, 'PERIOD': 1, 'RBRACE': 1, 'TIMES': 1, 'GE': 1, 'LPAREN': 1, 'OFFSET': 1, 'WHERE': 1, 'ID': 1, 'PROPSTRING': 1, 'DESC': 1, 'AND': 1, 'LBRACE': 1, 'FALSE': 1, 'NAME': 1, 'INT': 1, 'FLOAT': 1, 'NAMEMAP': 1, 'NOT': 1, 'RBRACKET': 1, 'OR': 1, 'MOD': 1}
 _lexreflags   = 0
 _lexliterals  = ''
 _lexstateinfo = {'INITIAL': 'inclusive'}

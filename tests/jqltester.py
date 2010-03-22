@@ -97,15 +97,19 @@ def modelFromJson(modelsrc, modelname=None):
     _models[id(model)] = (modelsrc, modelname)
     return model
 
-import logging
+import logging, textwrap
 logging.basicConfig() 
 
 from string import Template
 
 _printedmodels = []
 
+def _pprintjson(src, width=50):
+    #return pprint.pformat(src, width=width)    
+    return pjson.json.dumps(src, indent=2) #textwrap.fill(, width)
+    
 def formatmodel(modelsrc, modelname):
-    modelformatted = pprint.pformat(modelsrc, width=50).replace('\n', '\n ... ')  
+    modelformatted = _pprintjson(modelsrc).replace('\n', '\n ... ')  
     return Template("""
  >>> $modelname = app.createStore(
  ... '''$modelformatted''')
@@ -127,7 +131,7 @@ def printdocs(test):
         _printedmodels.append(id(test.model))        
         createmodel = formatmodel(modelsrc, modelname)
     doc = test.doc
-    result = pprint.pformat(test.results, width=50).replace('\n', '\n ')     
+    result = _pprintjson(test.results).replace('\n', '\n ')     
     queryformatted = test.query.replace('\n', '\n ... ')  
     print Template("""
 $doc$createmodel

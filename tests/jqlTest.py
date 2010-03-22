@@ -260,16 +260,14 @@ syntaxtests = [
 '''
 (<rdfs:comment> where(<rdfs:label>='foo'))
 ''',
+#force list
+'''
+{ 'blah' : [foo] }
+'''
 ]
 
 #XXX fix failing queries!
 failing = [
-#triggers listconstruct not forcelist, so different semantics than {'blah' : foo}
-#and leads to AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
-'''
-{ 'blah' : [foo] }
-'''
-,
 '''{ 'ok': */1 }''',
 #throws join in filter not yet implemented:
 '''{* where (foo = { id = 'd' }) }''',
@@ -972,15 +970,38 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
 
 #XXX t.group = 'exclude'
 #html5 json microdata representation:
-#issue: @ in type's value, need a way to control that (by prop)
 '''
 {
 ?parent
 id, type,
 'properties' : { 
-   *, exclude(id, type) 
+   * exclude(id, type) 
    where (id=?parent)
   }
+}
+'''
+
+'''
+{
+
+foo : [maybe foo]
+
+maybe foo, #omits 'foo' if null
+'foo' : maybe foo #'foo' : null
+
+#omits 'foo' if value is null
+isnull(prop()) and 'foo'
+
+maybe 'foo' : bar or baz #omits 'foo' if value is null
+val and 'foo' : 
+}
+'''
+
+'''
+{
+include {*}
+exclude(0,2) [when]
+exclude(*) [when]
 }
 '''
 

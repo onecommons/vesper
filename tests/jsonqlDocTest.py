@@ -12,8 +12,8 @@ skip = Suite()
 ###################################
 
 t % '''
-Informal Specification
-~~~~~~~~~~~~~~~~~~~~~~
+jsonQL Reference 
+~~~~~~~~~~~~~~~~
 
 jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
@@ -79,19 +79,18 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
         :| `constructarray` 
         :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `objectpair` [","])+ 
+                 :    (`objectitem` | `propertypair` [","])+ 
                  :     [`query_criteria`] 
                  :  "}"
  constructarray  : "[" [`label`]
-                 :  (`arrayitem` [","])+ [`query_criteria`] 
+                 :  (`propertyvalue` [","])+ [`query_criteria`] 
                  : "]"
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- objectitem      : `propertyname` | "ID" | "*"
- objectpair      : `expression` ":" (`expression` 
-                 : | "*" | `nestedconstruct`)
- arrayitem       : `expression` | "*" | `nestedconstruct`                 
+ objectitem      : | "ID" | "*" | ["["] ["omitnull" | "maybe"] `propertyname` ["]"]
+ propertypair    : ["omitnull"] `expression` ":" (`propertyvalue` | [`propertyvalue`])
+ propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
  query_criteria  : ["WHERE(" `expression` ")"]
@@ -161,11 +160,11 @@ t("""{
 )
 
 t %'''
-:token:`objectitem`
------------------------
+Abbreviated properties: :token:`objectitem`
+----------------------------------------
 When a single property name appears instead of a name-value pair, it is 
-treated as name-value pair where the name is the name of the property and 
-the value expression is a reference to property. So the following example is 
+treated as a name-value pair where the name is the name of the property and 
+the value is a reference to the property. So the following example is 
 equivalent to the first query: 
 '''
 t("{ displayname, type }", [
@@ -263,18 +262,148 @@ t("{*}", [{'id': 'tag:nonsense', 'label': 'Nonsense', 'type': 'tag'},
 )
 
 t.group = 'lists'
+
 t%'''
-Multiple values and nulls
+Multiple values and lists
 -------------------------
 * list construction -- multiple values are represented as lists
-* force list, list even when one item and empty lists instead on null
+
+Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
+does inserted a property that already exists on an object might add a new value or replace the current one.
 '''
 
-t('''
-{ auth
-WHERE (type='user')
+listModel = modelFromJson([
+{ "id" : "1",
+  "a_list" : ["a", "b"]
+},
+{ "id" : "1",
+  "a_list" : "c"
+},
+{ "id" : "1",
+  "a_list" : None,
+  "mixed" : ['a', 'b']
+},
+{ "id" : "2",
+  "mixed" : "c"
+},
+{ "id" : "3",
+  "mixed" : None
 }
-''')
+])
+#print listModel.getStatements()
+
+t("{ id, a_list }",
+[{'a_list': ['a', 'b', 'c', None], 'id': '1'}]
+,model = listModel
+)
+
+t % '''
+"forcelist" syntax
+------------------
+You can use wrap the property value with brackets to force the value of a property to always be a list, even when the value just as one value or is `null`. If the value is `null`, an empty list (`[]`) will be used. For example, compare the results of the following two examples which are identical except for the second one's use of "forcelist":
+'''
+
+t("{ id, mixed }",
+[{'id': '1', 'mixed': ['a', 'b']},
+ {'id': '3', 'mixed': None},
+ {'id': '2', 'mixed': 'c'}]
+,model = listModel
+)
+
+t % '''
+
+'''
+
+t("{ id, [mixed] }",
+[{'id': '1', 'mixed': ['a', 'b']},
+ {'id': '3', 'mixed': []},
+ {'id': '2', 'mixed': ['c']}]
+,model = listModel
+)
+
+t%'''
+Null values and optional properties
+-----------------------------------
+
+results will only include objects that contain the property referenced in the construct list,
+For example, the next example just returns one object because only one has a both a displayname and auth property.
+'''
+t('{displayname, auth}',
+[{'auth': [{'facebook_uid': 394090223,
+            'name': 'abbey aardvaark',
+            'service': 'facebook'},
+           {'email': 'aaardvaark@gmail.com',
+            'language': 'en',
+            'name': 'abbey aardvaark',
+            'service': 'google',
+            'username': 'aaardvaark'}],
+  'displayname': 'abbey aardvaark'}]
+)
+
+t%'''
+If property references are modified "maybe" before them then objects without that property will be included in the result. For example:
+'''
+t('{displayname, maybe auth}',
+[{'auth': [{'facebook_uid': 394090223,
+            'name': 'abbey aardvaark',
+            'service': 'facebook'},
+           {'email': 'aaardvaark@gmail.com',
+            'language': 'en',
+            'name': 'abbey aardvaark',
+            'service': 'google',
+            'username': 'aaardvaark'}],
+  'displayname': 'abbey aardvaark'},
+ {'displayname': 'billy billygoat',
+ 'auth': None}]
+)
+
+t % '''
+This query still specifies that "auth" property appears in every object in the result -- objects that doesn't have a "auth" property defined have that property value set to null. If you do not want the property included in that case, you can use the the `OMITNULL` modifier instead:
+''' 
+t('{displayname, omitnull auth}',
+[{'auth': [{'facebook_uid': 394090223,
+            'name': 'abbey aardvaark',
+            'service': 'facebook'},
+           {'email': 'aaardvaark@gmail.com',
+            'language': 'en',
+            'name': 'abbey aardvaark',
+            'service': 'google',
+            'username': 'aaardvaark'}],
+  'displayname': 'abbey aardvaark'},
+ {'displayname': 'billy billygoat'}]
+)
+
+t % '''
+The above examples illustrate using MAYBE and OMITNULL on appreviated properties. 
+Specifically `maybe property` is an abbreviation for  `'property' : maybe property`
+and `omitnull property` is an abbreviation for `omitnull 'property' : maybe property`.
+
+`omitnull` must appear before the property name and takes effect when any property value expression returns null.
+For example, here's a silly query that has a "nullproperty" property with a constant value
+but it will never be included in the result because of the "omitnull".
+'''
+
+t('{displayname, omitnull "nullproperty" : null}',
+[{ 'displayname': 'abbey aardvaark'},
+ { 'displayname': 'billy billygoat'}]
+)
+
+t%'''
+The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
+'''
+
+t('{displayname, [maybe auth]}',
+[{'auth': [{'facebook_uid': 394090223,
+            'name': 'abbey aardvaark',
+            'service': 'facebook'},
+           {'email': 'aaardvaark@gmail.com',
+            'language': 'en',
+            'name': 'abbey aardvaark',
+            'service': 'google',
+            'username': 'aaardvaark'}],
+  'displayname': 'abbey aardvaark'},
+ {'auth': [], 'displayname': 'billy billygoat'}]
+)
 
 t%'''
 Nested constructs
@@ -350,7 +479,7 @@ t%'''
 object references and anonymous objects
 =======================================
 
-If an object is anonymous it will be expanded, otherwise the object's id will be output. This behaviour can be overridden using DEPTH directive, which will force object references to be expanded, even if objects are duplicated. 
+If an object is anonymous it will be expanded, otherwise an object reference object will be output. This behavior can be overridden using the `DEPTH` directive, which will force object references to be expanded, even if objects are duplicated. 
 
 '''
 
