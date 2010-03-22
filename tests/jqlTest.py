@@ -490,10 +490,14 @@ t('''{
   ''',
 [{'count': 2, 'count2': 2, 'subject': 'commons'}, {'count': 1, 'count2': 1, 'subject': 'rhizome'}])
 
-#XXX re-enable!
 #expression needs to be evaluated on each item
 #XXX consolidate filters -- multiple references to the same property create 
 #duplicate filters and joins
+
+groupbymodel = [dict(key=key, type=type, 
+  val=(type%2 and -1 or 1) * key * val)
+for key in 1,10 for type in 1,2 for val in 2,4]
+
 t('''
 {
 key,
@@ -515,11 +519,32 @@ groupby(key)
   'differenceOfSums': -120.0,
   'valTimesTypeDoubled': [-40.0, -80.0, 80.0, 160.0]}
 ],  
-model = [dict(key=key, type=type, 
-  val=(type%2 and -1 or 1) * key * val)
-for key in 1,10 for type in 1,2 for val in 2,4]
+model = groupbymodel
 )
 
+t('''{key, type, val groupby(key)}''',
+model = [{'key': 1, 'type': [1, 1, 2, 2], 'val': [-2, -4, 2, 4]},
+ {'key': 10, 'type': [1, 1, 2, 2], 'val': [-20, -40, 20, 40]}]
+)
+
+t('''
+{
+id,
+'valTimesTypeDoubled' : val*2, #(-2*1, -4*1, 2*2, 4*2)*2
+'sumOfType1' : sum(val), #-2 + -4 = -6
+#'sumOfType2' : sum(if(type==2, val, 0)),  # 2 + 4  = 6
+#'differenceOfSums' : sum(if(type==1, val, 0)) - sum(if(type==2, val, 0))
+}
+''',
+[{'id': '1', 'sumOfType1': 6, 'valTimesTypeDoubled': [4.0, 8.0]},
+ {'id': '10', 'sumOfType1': 60, 'valTimesTypeDoubled': [40.0, 80.0]},
+ {'id': '2', 'sumOfType1': 1, 'valTimesTypeDoubled': 2.0}],
+model = [{ 'id': 1, 'type': [1, 1, 2, 2], 'val': [2, 4]},
+ {'id' : 10, 'type': [1, 1, 2, 2], 'val': [20, 40]},
+ {'id': 2, 'val' : 1}
+ #{'id': 3, 'val' : None} # functions and operator that expect numbers explode
+ ]
+)
 
 t.group = 'in'
 

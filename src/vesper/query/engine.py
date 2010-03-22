@@ -294,6 +294,7 @@ def ifFunc(context, ifArg, thenArg, elseArg):
 
 def aggFunc(context, arg, func=None):
     groupbyrow = False
+    groupby = None
     if isinstance(arg, jqlAST.Project):
         if arg.name == '*':
             groupbyrow = True
@@ -305,15 +306,15 @@ def aggFunc(context, arg, func=None):
                     break
                 parent = parent.parent
             
-            if arg.name == groupby.args[0].name:
+            if groupby and arg.name == groupby.args[0].name:
                 groupbyrow = True
         
     if groupbyrow:
         #special case to support constructions like count(*)
         #groupby rows look like [key, groupby]
         v = context.currentRow[1]
-    else:
-        v = context.engine._evalAggregate(context, arg, True)
+    else:        
+        v = context.engine._evalAggregate(context, arg, True, groupby)
     return func(v)
 
 def isBnode(context, v):    
@@ -512,27 +513,31 @@ class SimpleQueryEngine(object):
         else:
             return result
 
-    def _evalAggregate(self, context, op, keepSeq=False):
+    def _evalAggregate(self, context, op, keepSeq, groupby):
         v = []
-        #currrentRow is [key, values]
+        #if groupby then currrentRow is [key, values] else currrentRow is [key] + values
         currentRow = context.currentRow
         currentTupleset = context.currentTupleset
-        #print 'currentRow', debugp(currentRow), 'currentTp', debugp(currentTupleset.columns)
-        columns = currentTupleset.columns[1].type.columns
-        currentProjects = context.currentProjects
+        #print 'currentRow', debugp(currentRow), 'currentTp', debugp(currentTupleset.columns)        
+        currentProjects = context.currentProjects        
+        if True:#groupby: #XXX!
+            row = currentRow[1]
+            columns = currentTupleset.columns[1].type.columns
+        else:
+            row = currentRow[1:]
+            columns = currentTupleset.columns[1:]
         
-        for cell in currentRow[1]:
+        for cell in row:
             context.currentTupleset = SimpleTupleset(cell,
                 columns=columns, 
                 hint=currentTupleset, 
-                op='evalAggregate', debug=context.debug)            
+                op='evalAggregate', debug=context.debug)
             context.currentRow = cell
             context.projectValues = None
             projectValues = {}             
             for project in currentProjects:
                 projectValues[project.name] = project.evaluate(self, context)
-            context.projectValues = projectValues 
-            #print 'projects', projectValues
+            context.projectValues = projectValues
             v.append( flatten(op.evaluate(self, context), flattenTypes=Tupleset) )
         
         context.projectValues = None
@@ -673,8 +678,8 @@ class SimpleQueryEngine(object):
                                 #don't bother with all the expression-in-list handling below
                                 v = flatten(prop.value.evaluate(self, ccontext),
                                                             flattenTypes=Tupleset)                                
-                            else:                                
-                                v = self._evalAggregate(ccontext, prop.value)
+                            else:
+                                v = self._evalAggregate(ccontext, prop.value, False, op.parent.groupby)
                         
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
@@ -811,7 +816,7 @@ class SimpleQueryEngine(object):
                 #(instead it'll create a nested list resource)
                 return (False, listval)
             #XXX handle scope here?
-            rows = pjson.findPropList(context.initialModel, subject, pred)
+            rows = pjson.findPropList(context.initialModel, str(subject), pred)
             ordered = []
             rows = list(rows)
             if rows:                

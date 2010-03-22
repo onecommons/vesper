@@ -73,6 +73,7 @@ NullType = type(None)
 class QueryException(Exception):    
 
     def __init__(self, msg, op=None):
+        Exception.__init__(self, msg)
         self.op = None
 
 def runQuery(query, model):

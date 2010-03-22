@@ -430,6 +430,8 @@ joins
 join expressions
 ----------------
 
+A expression can be wrapped in a 
+
 labels
 ------
 

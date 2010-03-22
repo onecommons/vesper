@@ -489,8 +489,7 @@ def _makeConstructProp(n, v, nameIsFilter, derefName, omit):
         n = None
     
     if omit:
-        omit = PropShape.omit
-    print 'omit', omit, n, v
+        omit = PropShape.omit    
     if isinstance(v, T.forcelist):
         return ConstructProp(n, v[0], omit or PropShape.uselist, 
                     PropShape.uselist, nameIsFilter, nameFunc=derefName)
@@ -530,7 +529,6 @@ def p_constructitem4c(p):
     '''
     op = Project(p[2])
     op.maybe = True
-    print 'MAYBE barecolumnref'
     p[0] = _makeConstructProp(p[2], op, True, False, False)
 
 def p_constructitem5(p): 

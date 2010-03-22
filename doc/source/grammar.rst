@@ -2,9 +2,10 @@
 .. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 .. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
-JsonQL grammar
+Formal Grammar
 ===================
 
+This grammar file is machine generated.
 
 .. productionlist::
      root           : `topconstruct`
@@ -37,6 +38,7 @@ JsonQL grammar
                     : |"depth" INT
                     : |"orderby" "(" `sortexplist` ")"
                     : |"mergeall"
+                    : |"namemap" "=" `jsondict`
      listconstructitemlist : `listconstructitemlist` "," `listconstructitem`
                     : |`listconstructitem`
                     : |`empty`
@@ -65,8 +67,7 @@ JsonQL grammar
                     : |"not" `expression`
                     : |"-" `expression` 
                     : |"+" `expression` 
-     exprlist       : `exprlist` "," `expression`
-                    : |`expression`
+     jsondict       : "{" `jsondictlist` "}"
      arglist        : `arglist` "," `expression`
                     : |`arglist` "," `keywordarg`
                     : |`keywordarg`
@@ -78,21 +79,10 @@ JsonQL grammar
      sortexplist    : `sortexplist` "," `sortexp`
                     : |`sortexp`
                     : |`empty`
-     listconstructitem : "exclude" `arrayindexlist`
-                    : |"exclude" `arrayindexlist` "when" `expression`
-                    : |"include" `listconstruct`
+     listconstructitem : `expression`
+     exprlist       : `exprlist` "," `expression`
                     : |`expression`
-     constructitem  : `expression` ":" `dictvalue`
-                    : |`barecolumnref`
-                    : |"[" `barecolumnref` "]"
-                    : |"id"
-                    : |"exclude" `barecolumnreflist`
-                    : |"exclude" `barecolumnreflist` "when" `expression`
-                    : |"include" `dictconstruct`
      keywordarg     : `name` "=" `expression`  
-     dictvalue      : "[" `construct` "]"
-                    : |`construct`
-                    : |`expression`
      atom           : `columnref`
                     : |`funccall`
                     : |`constant`
@@ -106,31 +96,42 @@ JsonQL grammar
                     : |"null"
                     : |"true"
                     : |"false"
+     jsondictlist   : `jsondictlist` "," `jsondictitem`
+                    : |`jsondictitem`
+                    : |`empty`
+     constructitem  : `expression` ":" `dictvalue`
+                    : |"omitnull" `expression` ":" `dictvalue`
+                    : |`barecolumnref`
+                    : |"omitnull" `barecolumnref`
+                    : |"maybe" `barecolumnref`
+                    : |"[" `barecolumnref` "]"
+                    : |"[" "omitnull" `barecolumnref` "]"
+                    : |"[" "maybe" `barecolumnref` "]"
+                    : |"id"
      barecolumnref  : `name`
-                    : |`qname`
                     : |"*"
                     : |`propstring`
-                    : |`qstar`
      sortexp        : `expression`
                     : |`expression` "asc"
                     : |`expression` "desc"
      join           : "{" `expression` "}"
+                    : |"{" `label` "," `expression` "}"
+                    : |"{" `label` `expression` "}"
      funccall       : `funcname` "(" `arglist` ")"
-     arrayindexlist : `arrayindexlist` "," `arrayindex`
-                    : |`arrayindex`
-                    : |`empty`
-     barecolumnreflist : `barecolumnreflist` "," `barecolumnref`
-                    : |`barecolumnref`
-                    : |`empty`
-     arrayindex     : INT
-                    : |"*"
-     construct      : `dictconstruct`
-                    : |`listconstruct`
-     funcname       : `name`
-                    : |`qname`
-                    : |`propstring`
      columnref      : `label` "." `columnreftrailer`
                     : |`columnreftrailer`
+     jsondictitem   : `string` ":" `string`
+                    : |`string` ":" `jsondict`
+                    : |`name` ":" `string`
+                    : |`name` ":" `jsondict`
+     funcname       : `name`
+                    : |`propstring`
+     dictvalue      : `expression`
+                    : |"[" `expression` "]"
+                    : |`nestedconstruct`
+                    : |"[" `nestedconstruct` "]"
+     nestedconstruct : `dictconstruct`
+                    : |`listconstruct`
      columnreftrailer : `barecolumnref`
                     : |`columnreftrailer` "." `barecolumnref`
      qstar          : `name` ":*"
@@ -141,3 +142,7 @@ JsonQL grammar
      label          : "?" `name`
      propstring     : "<" jsonchars+ ">"
      name           : [A-Za-z_$][A-Za-z0-9_$]*
+
+
+..  colophon: this doc was generated with "python doc/source/gengrammardoc.py > doc/source/grammar.rst"
+
