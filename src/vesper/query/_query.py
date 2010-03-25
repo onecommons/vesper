@@ -159,6 +159,8 @@ class QueryContext(object):
     shapes = { dict : utils.defaultattrdict }
     currentProjects = None
     projectValues = None
+    finalizedAggs = False
+    groupby = None
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False):
         self.initialModel = initModel
@@ -168,9 +170,10 @@ class QueryContext(object):
         self.bindvars = bindvars or {}
         self.debug=debug
         self.depth=depth
-        self.constructStack = []
-        self.engine = None
         self.forUpdate = forUpdate
+        self.constructStack = []
+        self.engine = None        
+        self.accumulate = {}
 
     def __copy__(self):
         copy = QueryContext(self.initialModel, self.ast, self.explain, self.bindvars,
@@ -180,6 +183,7 @@ class QueryContext(object):
         copy.currentRow = self.currentRow
         copy.constructStack = self.constructStack
         copy.engine = self.engine
+        #don't copy other attributes
         return copy
 
     def __repr__(self):

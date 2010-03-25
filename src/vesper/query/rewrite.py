@@ -109,7 +109,7 @@ class _ParseState(object):
                         else:
                             left = And(left, child)                        
                     elif isinstance(child, AnyFuncOp) and child.isAggregate():
-                        prop.hasAggFunc = True
+                        construct.hasAggFunc = prop.hasAggFunc = True
                 #if isinstance(child, ResourceSetOp):
                 #    print '!!!child', child
                 #treat ommittable properties as outer joins:

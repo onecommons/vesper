@@ -100,6 +100,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
                  : ["OFFSET" number]
                  : ["DEPTH" number]
                  : ["MERGEALL"]
+                 : ["NAMEMAP" "=" `jsondict`]
  expression : `expression` "and" `expression`
             : | `expression` "or" `expression`
             : | "maybe" `expression`
