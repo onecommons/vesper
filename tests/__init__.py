@@ -29,4 +29,9 @@ else:
 if __name__ == '__main__':
     suites = unittest.TestLoader().loadTestsFromNames(__all__)
     suites.addTests(docTest.suite)
-    unittest.TextTestRunner().run(suites)
+    result = unittest.TextTestRunner().run(suites)
+    if result.wasSuccessful():
+        exit_code = 0
+    else:
+        exit_code = 1
+    sys.exit(exit_code)
