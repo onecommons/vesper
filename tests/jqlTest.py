@@ -501,6 +501,8 @@ for key in 1,10 for type in 1,2 for val in 2,4]
 t('''
 {
 key,
+'sum' : sum(val),
+'val' : val, 
 'valTimesTypeDoubled' : val*type*2, #(-2*1, -4*1, 2*2, 4*2)*2
 'sumOfType1' : sum(if(type==1, val, 0)), #-2 + -4 = -6
 'sumOfType2' : sum(if(type==2, val, 0)),  # 2 + 4  = 6
@@ -508,12 +510,16 @@ key,
 groupby(key) 
 }
 ''',
-[{'key': 1,
+[{'key': 1, 
+  'sum': 4,  
+  'val': [-2, -4, 2, 4],
   'sumOfType1': -6,
   'sumOfType2': 6,
   'differenceOfSums': -12.0,
   'valTimesTypeDoubled': [-4.0, -8.0, 8.0, 16.0]},
  {'key': 10,
+  'sum': 40,
+  'val': [-20, -40, 20, 40],
   'sumOfType1': -60,
   'sumOfType2': 60,
   'differenceOfSums': -120.0,
@@ -527,24 +533,113 @@ model = [{'key': 1, 'type': [1, 1, 2, 2], 'val': [-2, -4, 2, 4]},
  {'key': 10, 'type': [1, 1, 2, 2], 'val': [-20, -40, 20, 40]}]
 )
 
+#no group by
+
+groupbymodel2 = [{ 'id': 1, 'type': [1, 1, 2, 2], 'val': [2, 4]},
+ {'id' : 10, 'type': [1, 1, 2, 2], 'val': [20, 40]},
+ {'id': 2, 'val' : 1},
+ # XXX functions and operator that expect numbers explode
+ {'id': 3, 'val' : None} 
+ ]
+
 t('''
 {
-id,
-'valTimesTypeDoubled' : val*2, #(-2*1, -4*1, 2*2, 4*2)*2
-'sumOfType1' : sum(val), #-2 + -4 = -6
-#'sumOfType2' : sum(if(type==2, val, 0)),  # 2 + 4  = 6
+id, val, type,
+'sumOfVal' : sum(val),#-2 + -4 = -6
+'valTimesTypeDoubled' : if(val, val, 'null'), #(-2*1, -4*1, 2*2, 4*2)*2
+'valIfType': if(type==2, val, 3),
+'sumOfValIfType' : sum(if(type==2, val, 3)),  # 2 + 4  = 6
+
+#XXX differenceOfSums raises
+#self.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
+#TypeError: float() argument must be a string or a number
 #'differenceOfSums' : sum(if(type==1, val, 0)) - sum(if(type==2, val, 0))
 }
 ''',
-[{'id': '1', 'sumOfType1': 6, 'valTimesTypeDoubled': [4.0, 8.0]},
- {'id': '10', 'sumOfType1': 60, 'valTimesTypeDoubled': [40.0, 80.0]},
- {'id': '2', 'sumOfType1': 1, 'valTimesTypeDoubled': 2.0}],
-model = [{ 'id': 1, 'type': [1, 1, 2, 2], 'val': [2, 4]},
- {'id' : 10, 'type': [1, 1, 2, 2], 'val': [20, 40]},
- {'id': 2, 'val' : 1}
- #{'id': 3, 'val' : None} # functions and operator that expect numbers explode
- ]
+[{'id': '1',
+  'sumOfVal': 66,
+  'sumOfValIfType': 78,
+  'type': [1, 1, 2, 2],
+  'val': [2, 4],
+  'valIfType': [3, 2, 3, 4],
+  'valTimesTypeDoubled': [2, 4, 2, 4]},
+ {'id': '10',
+  'sumOfVal': 66,
+  'sumOfValIfType': 78,
+  'type': [1, 1, 2, 2],
+  'val': [20, 40],
+  'valIfType': [3, 20, 3, 40],
+  'valTimesTypeDoubled': [20, 40, 20, 40]},
+ {'id': '1',
+  'sumOfVal': 66,
+  'sumOfValIfType': 78,
+  'type': [1, 1, 2, 2],
+  'val': [2, 4],
+  'valIfType': [3, 2, 3, 4],
+  'valTimesTypeDoubled': [2, 4, 2, 4]},
+ {'id': '10',
+  'sumOfVal': 66,
+  'sumOfValIfType': 78,
+  'type': [1, 1, 2, 2],
+  'val': [20, 40],
+  'valIfType': [3, 20, 3, 40],
+  'valTimesTypeDoubled': [20, 40, 20, 40]}]
+, model = groupbymodel2
 )
+
+t('''
+[count(val), count(*), sum(val), avg(val)]
+''', 
+[[5, 4, 67, 13.4]],
+model = groupbymodel2
+)
+
+t('''
+[count(val), count(*), sum(val), avg(val)]
+''', [[8, 8, 4, 0]],
+model=groupbymodel)
+
+t('''
+[id, count(val), sum(val)]
+''', 
+[['_:j:t:object:1', 8, 4],
+ ['_:j:t:object:2', 8, 4],
+ ['_:j:t:object:3', 8, 4],
+ ['_:j:t:object:4', 8, 4],
+ ['_:j:t:object:5', 8, 4],
+ ['_:j:t:object:6', 8, 4],
+ ['_:j:t:object:7', 8, 4],
+ ['_:j:t:object:8', 8, 4],
+ ['_:j:t:object:1', 8, 4],
+ ['_:j:t:object:2', 8, 4],
+ ['_:j:t:object:3', 8, 4],
+ ['_:j:t:object:4', 8, 4],
+ ['_:j:t:object:5', 8, 4],
+ ['_:j:t:object:6', 8, 4],
+ ['_:j:t:object:7', 8, 4],
+ ['_:j:t:object:8', 8, 4]],
+model=groupbymodel)
+
+t('''
+[val, count(val), sum(val)]
+''', 
+[[-2, 8, 4],
+ [-4, 8, 4],
+ [2, 8, 4],
+ [4, 8, 4],
+ [-20, 8, 4],
+ [-40, 8, 4],
+ [20, 8, 4],
+ [40, 8, 4],
+ [-2, 8, 4],
+ [-4, 8, 4],
+ [2, 8, 4],
+ [4, 8, 4],
+ [-20, 8, 4],
+ [-40, 8, 4],
+ [20, 8, 4],
+ [40, 8, 4]],
+model=groupbymodel)
 
 t.group = 'in'
 

@@ -17,6 +17,7 @@ from vesper.utils import flattenSeq, flatten, debugp
 from vesper import pjson
 from vesper.query import *
 from vesper.query.operations import validateRowShape, SimpleTupleset, MutableTupleset, IterationJoin
+from vesper.backports import product
 
 #############################################################
 ####################  Grouping  #############################
@@ -216,7 +217,8 @@ class QueryFuncs(object):
     }
 
     def addFunc(self, name, func, type=None, opFactory=None, cost=None, 
-                            needsContext=False, lazy=False, isAggregate=False):
+                            needsContext=False, lazy=False, isAggregate=False,
+                            initialValue=None, finalFunc=None):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         if cost is None or callable(cost):
@@ -225,7 +227,8 @@ class QueryFuncs(object):
             costfunc = lambda *args: cost
         self.SupportedFuncs[name] = jqlAST.QueryFuncMetadata(func, type, 
                     opFactory, costFunc=costfunc, needsContext=needsContext, 
-                    lazy=lazy, isAggregate=isAggregate)
+                    lazy=lazy, isAggregate=isAggregate, 
+                    initialValue=initialValue, finalFunc=finalFunc)
 
     def getOp(self, name, *args):
         if isinstance(name, (unicode, str)):
@@ -291,31 +294,6 @@ def ifFunc(context, ifArg, thenArg, elseArg):
     else:
         elseval = elseArg.evaluate(context.engine, context)
         return elseval
-
-def aggFunc(context, arg, func=None):
-    groupbyrow = False
-    groupby = None
-    if isinstance(arg, jqlAST.Project):
-        if arg.name == '*':
-            groupbyrow = True
-        else:
-            parent = arg.parent
-            while parent:
-                if isinstance(parent, jqlAST.Select):
-                    groupby = parent.groupby
-                    break
-                parent = parent.parent
-            
-            if groupby and arg.name == groupby.args[0].name:
-                groupbyrow = True
-        
-    if groupbyrow:
-        #special case to support constructions like count(*)
-        #groupby rows look like [key, groupby]
-        v = context.currentRow[1]
-    else:        
-        v = context.engine._evalAggregate(context, arg, True, groupby)
-    return func(v)
 
 def isBnode(context, v):    
     return hasattr(v, 'startswith') and (
@@ -407,6 +385,55 @@ def _getList(idvalue, rows):
         rdfprop = RDF_MS_BASE+'_'+str(i)
         yield rdfprop, (idvalue, rdfprop) + row                    
 
+def hasNonAggregateDependentOps(op):
+    '''
+    Return True if there are any ConstructProps that having dependent 
+    expressions excluding aggregate functions and any of their arguments.
+    '''            
+    test = (lambda op: isinstance(op, (jqlAST.Select, jqlAST.ConstructSubject))
+        or (isinstance(op, jqlAST.AnyFuncOp) and op.isAggregate()) )
+    return not op.isIndependent(exclude=test)
+
+def aggFloat(n):
+    try:
+        return float(n)
+    except ValueError:
+        return 0.0
+    except TypeError:
+        return 0.0
+
+def _aggMin(x, y):
+    if y is not None and x is not None:
+        return min(x,y)
+    return x
+
+def _aggMax(x, y):
+    if y is not None and x is not None:
+        return max(x,y)
+    return x
+
+def _aggAvg(x, y):
+    if y is None: 
+        return x
+    else:
+        return len(x) and (x[0]+aggFloat(y), x[1]+1.0) or (aggFloat(y),1.0)
+
+def _aggCount(context, x, y):
+    if context.groupby:
+        if y == jqlAST.Project('*') or context.groupby.args[0] == y:
+            #count(*) or count(key) and groupby(key)
+            #groupby rows look like [key, groupby]
+            return len(context.currentRow[1])
+        else:
+            v = context.engine.evalAggregate(context, y, True)
+            return len(filter(lambda x: x is not None, v))
+    elif y == jqlAST.Project('*'):
+        return x+1
+    elif y.evaluate(context.engine, context) is not None:
+        return x+1
+    else:
+        return x
+
 class SimpleQueryEngine(object):
     
     queryFunctions = QueryFuncs() 
@@ -414,13 +441,20 @@ class SimpleQueryEngine(object):
     queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
     queryFunctions.addFunc('if', ifFunc, ObjectType, lazy=True)
     queryFunctions.addFunc('isref', lambda a: isinstance(a, base.ResourceUri), BooleanType)
-    for name, func in [('count', lambda a: len(a)), 
-                        ('sum', lambda a: sum(a)),
-                       ('avg', lambda a: sum(a)/len(a)), 
-                       ('min', lambda a: min(a)),
-                       ('max', lambda a: max(a))]:        
-        queryFunctions.addFunc(name, partial(aggFunc, func=func), NumberType, 
-                                                 lazy=True, isAggregate=True)
+    #aggregate funcs follow the semantics described here:
+    #http://www.sqlite.org/lang_aggfunc.html
+    for name, func, initialValue, finalFunc in [
+        ('sum', lambda x,y: y is not None and (
+                x and x+aggFloat(y) or aggFloat(y)) or x, None, None),
+        ('total', lambda x,y: y is not None and (
+                x and x+float(y) or aggFloat(y)) or x, 0, None),
+        ('avg', _aggAvg, (), lambda n, *a: len(n) and n[0]/n[1] or 0),
+        ('min', _aggMin, None, None),
+        ('max', _aggMax, None, None)]:
+        queryFunctions.addFunc(name, func, NumberType, lazy=False, 
+            isAggregate=True, initialValue=initialValue, finalFunc=finalFunc)
+    queryFunctions.addFunc('count', _aggCount, NumberType, lazy=True,
+        needsContext=True, isAggregate=True, initialValue=0)
 
     def isPropertyList(self, context, idvalue):
         '''
@@ -480,11 +514,12 @@ class SimpleQueryEngine(object):
 
     def getShape(self, context, shape):
         return context.shapes.get(shape, shape)()
-
+        
     def evalSelect(self, op, context):
         context.engine = self
         if op.isIndependent(): #constant expression
-            context.currentTupleset = MutableTupleset([ColumnInfo('', object)], ([1],))
+            context.currentTupleset = MutableTupleset(
+                        [ColumnInfo('', object)], ([1],))
         else: 
             if op.where:
                 context.currentTupleset = op.where.evaluate(self, context)
@@ -493,10 +528,21 @@ class SimpleQueryEngine(object):
             if op.orderby:            
                 context.currentTupleset = op.orderby.evaluate(self, context)
 
+        if not op.groupby and op.construct.hasAggFunc:
+            #reduce all the rows to an aggregate result
+            #and set context so that finalFunc is called during construct below
+            perRow = hasNonAggregateDependentOps(op.construct)
+            tuplecopy = self._evalAggFuncs(op.construct,context, perRow)            
+            if perRow:
+                context.currentTupleset = tuplecopy
+            else: #one dummy row
+                context.currentTupleset = MutableTupleset(
+                                [ColumnInfo('', object)], ([1],))
+            context.finalizedAggs = True
+        
         if op.depth is not None:
             context.depth = op.depth
                                                 
-        #print 'where ct', context.currentTupleset
         result = op.construct.evaluate(self, context)
         if op.mergeall:
             def merge():
@@ -513,19 +559,17 @@ class SimpleQueryEngine(object):
         else:
             return result
 
-    def _evalAggregate(self, context, op, keepSeq, groupby):
+    def evalAggregate(self, context, op, keepSeq):
         v = []
-        #if groupby then currrentRow is [key, values] else currrentRow is [key] + values
+        #if groupby then currrentRow is [key, values] (with each value grouped into a list) 
+        #else currrentRow is [key] + values
         currentRow = context.currentRow
         currentTupleset = context.currentTupleset
-        #print 'currentRow', debugp(currentRow), 'currentTp', debugp(currentTupleset.columns)        
-        currentProjects = context.currentProjects        
-        if True:#groupby: #XXX!
-            row = currentRow[1]
-            columns = currentTupleset.columns[1].type.columns
-        else:
-            row = currentRow[1:]
-            columns = currentTupleset.columns[1:]
+        currentProjects = context.currentProjects
+        row = currentRow[1]
+        columns = currentTupleset.columns[1].type.columns
+        
+        #group by [ [v1, v2], [v1, v2] ]
         
         for cell in row:
             context.currentTupleset = SimpleTupleset(cell,
@@ -549,11 +593,65 @@ class SimpleQueryEngine(object):
         else:
             return v
 
-    def evalConstruct(self, op, context):
-        '''
-        Construct ops operate on currentValue (a cell -- that maybe multivalued)
-        '''
+    def _evalList(self, context, op):        
+        #context is the currentRow
+        projectValues = {}             
+        listVals = []
+        listNames = []
+        for project in context.currentProjects:
+            val = project.evaluate(self, context)
+            if isinstance(val, list) and len(val) > 1:
+                listNames.append(project.name)
+                listVals.append(val)
+            else:
+                projectValues[project.name] = val
+        context.projectValues = projectValues
+        if not listVals:
+            return flatten(op.evaluate(self, context), flattenTypes=Tupleset)
+        
+        v = []
+        for pv in product(*listVals):
+            context.projectValues.update( dict(zip(listNames, pv)) )
+            v.append( flatten(op.evaluate(self, context), flattenTypes=Tupleset) )
+        assert len(v) > 1
+        return v
+    
+    def _evalAggFuncs(self, op, context, copyInput):
+        assert not op.parent.groupby
         tupleset = context.currentTupleset
+        subjectcol, subjectlabel, rowcolumns = self._findSubject(op, tupleset)
+        if copyInput:
+            tuplecopy = MutableTupleset(tupleset.columns, tupleset)
+        else:
+            tuplecopy = None
+        for outerrow in tupleset:
+            #print 'outerrow', subjectlabel, subjectcol, hex(id(tupleset)), outerrow
+            for idvalue, row in getColumns(subjectcol, outerrow):
+                context.currentRow = [idvalue] + row
+                for prop in op.args:
+                    if not isinstance(prop, jqlAST.ConstructProp) or not prop.hasAggFunc:
+                        continue                    
+                    ccontext = copy.copy(context)
+                    ccontext.accumulate = context.accumulate
+                    v = context.currentRow
+                    ccontext.currentTupleset = SimpleTupleset(v,
+                        columns=rowcolumns, 
+                        hint=tupleset, 
+                        op='eval agg on '+subjectlabel, debug=context.debug)
+                    
+                    ccontext.currentProjects = prop.projects
+                    ccontext.currentProjects = prop.projects
+                    if not row or len(row[0]) <= 1:
+                        #don't bother with all the expression-in-list handling below
+                        prop.value.evaluate(self, ccontext)
+                    else:
+                        self._evalList(ccontext, prop.value)
+                                
+            if copyInput:
+                tuplecopy.append(outerrow)
+        return tuplecopy
+                                            
+    def _findSubject(self, op, tupleset):
         assert isinstance(tupleset, Tupleset), type(tupleset)
         if not op.parent.groupby and not op.id.getLabel(): 
             subjectcol = (0,) 
@@ -575,6 +673,14 @@ class SimpleQueryEngine(object):
                 col = colTupleset.columns[subjectcol[-1]] 
                 rowcolumns = ([ColumnInfo(subjectlabel, col.type)]
                                     + getColumnsColumns(subjectcol,tupleset.columns))
+        return subjectcol, subjectlabel, rowcolumns
+        
+    def evalConstruct(self, op, context):
+        '''
+        Construct ops operate on currentValue (a cell -- that maybe multivalued)
+        '''
+        tupleset = context.currentTupleset
+        subjectcol, subjectlabel, rowcolumns = self._findSubject(op, tupleset)
 
         def construct():
           count = 0
@@ -666,6 +772,9 @@ class SimpleQueryEngine(object):
                             v = prop.value.evaluate(self, ccontext)
                             v = flatten(v, flattenTypes=Tupleset)
                         else:
+                            ccontext.finalizedAggs = context.finalizedAggs
+                            ccontext.accumulate = context.accumulate
+                            ccontext.groupby = op.parent.groupby
                             v = context.currentRow
                             ccontext.currentTupleset = SimpleTupleset(v,
                                 columns=rowcolumns, 
@@ -675,11 +784,13 @@ class SimpleQueryEngine(object):
                             ccontext.currentProjects = prop.projects
                             if (not prop.projects or prop.projects[0] is prop.value
                                 or prop.hasAggFunc or not row or len(row[0]) <= 1):
-                                #don't bother with all the expression-in-list handling below
+                                #don't bother with all the expression-in-list handling below                                
                                 v = flatten(prop.value.evaluate(self, ccontext),
                                                             flattenTypes=Tupleset)                                
+                            elif op.parent.groupby:
+                                v = self.evalAggregate(ccontext, prop.value, False)
                             else:
-                                v = self._evalAggregate(ccontext, prop.value, False, op.parent.groupby)
+                                v = self._evalList(ccontext, prop.value)
                         
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
@@ -1293,7 +1404,41 @@ class SimpleQueryEngine(object):
         assert len(op.args) == 2
         return op.args[0].cost(self, context) + op.args[1].cost(self, context)
 
+    def evalAggFuncOp(self, op, context):
+        if context.finalizedAggs:
+            result = context.accumulate.get(id(op), op.metadata.initialValue)
+            func = op.metadata.finalFunc
+            if func:
+                return func(result, *op.args)
+            else:
+                return result
+        elif context.groupby:
+            if op.metadata.lazy:
+                #if lazy is set on an aggfunc, it needs to handle all the logic
+                #see _aggCount for an example
+                return op.execFunc(context, op.metadata.initialValue, *op.args)
+            
+            v = context.engine.evalAggregate(context, op.args[0], True)
+            assert isinstance(v, list)
+            reduction = reduce(op.metadata.func, v, op.metadata.initialValue)
+            if op.metadata.finalFunc:
+                return finalFunc(reduction)
+            else:
+                return reduction
+        else:
+            if op.metadata.lazy:
+                values = op.args
+            else:
+                values = [arg.evaluate(self, context) for arg in op.args]            
+            last = context.accumulate.get(id(op), op.metadata.initialValue)
+            result = op.execFunc(context, last, *values)
+            context.accumulate[id(op)] = result
+            return None
+        
     def evalAnyFuncOp(self, op, context):
+        if op.metadata.isAggregate:
+            return self.evalAggFuncOp(op, context)
+        
         if op.metadata.lazy:
             values = op.args
         else:

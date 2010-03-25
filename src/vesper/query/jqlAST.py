@@ -106,9 +106,11 @@ class QueryOp(object):
             return False
         return self.args == other.args
 
-    def isIndependent(self):
+    def isIndependent(self, exclude=None):
         for a in self.args:
-            if not a.isIndependent():
+            if exclude and exclude(a):
+                continue
+            if not a.isIndependent(exclude):
                 return False
         return True
 
@@ -469,7 +471,7 @@ class Label(QueryOp):
     def __init__(self, name):
         self.name = name
 
-    def isIndependent(self):
+    def isIndependent(self, exclude=None):
         return False
 
 class BindVar(QueryOp):
@@ -532,8 +534,8 @@ class AnyFuncOp(QueryOp):
     def getType(self):
         return self.metadata.type
 
-    def isIndependent(self):
-        independent = super(AnyFuncOp, self).isIndependent()
+    def isIndependent(self, exclude=None):
+        independent = super(AnyFuncOp, self).isIndependent(exclude)
         if independent: #the args are independent
             return self.metadata.isIndependent
         else:
@@ -556,7 +558,7 @@ class AnyFuncOp(QueryOp):
         return engine.evalAnyFuncOp(self, context)
 
     def execFunc(self, context, *args, **kwargs):
-        if self.metadata.needsContext:
+        if self.metadata.needsContext:            
             return self.metadata.func(context, *args, **kwargs)
         else:
             return self.metadata.func(*args, **kwargs)
@@ -660,7 +662,8 @@ class QueryFuncMetadata(object):
       }
 
     def __init__(self, func, type=None, opFactory=None, isIndependent=True,
-                        costFunc=None, needsContext=False, lazy=False, isAggregate=False):
+            costFunc=None, needsContext=False, lazy=False, isAggregate=False,
+            initialValue=None, finalFunc=None):
         self.func = func
         self.type = type or ObjectType
         self.isIndependent = isIndependent
@@ -669,6 +672,8 @@ class QueryFuncMetadata(object):
         self.needsContext = needsContext or lazy
         self.lazy = lazy
         self.isAggregate = isAggregate
+        self.initialValue = initialValue
+        self.finalFunc = finalFunc
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
@@ -695,7 +700,7 @@ class Project(QueryOp):
 
         self.fields = [resolve(name) for name in self.fields]
 
-    def isIndependent(self):
+    def isIndependent(self, exclude=None):
         return False
 
     def __eq__(self, other):
@@ -799,6 +804,7 @@ class Construct(QueryOp):
     offset = None
     limit = None
     id = None
+    hasAggFunc = False
     
     def __init__(self, props, shape=dictShape):
         self.args = []
