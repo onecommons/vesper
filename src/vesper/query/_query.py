@@ -138,10 +138,10 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     
     return response
 
-def buildAST(query):
+def buildAST(query, namemap=None):
     "parse a query, returning (ast, [error messages])"
     from vesper.query import parse, engine
-    return parse.parse(query, engine.SimpleQueryEngine.queryFunctions)
+    return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, namemap)
     
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, forUpdate=False):
     #rewriteAST(ast)

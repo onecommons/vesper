@@ -4,7 +4,7 @@ import sys, unittest, docTest
 
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
-  'pjsonTest', 'jqlTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
+  'pjsonTest', 'jqlTest', 'jsonqlDocTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
 
 if sys.version_info[:2] >= (2,5):
     __all__.append('python25Test')

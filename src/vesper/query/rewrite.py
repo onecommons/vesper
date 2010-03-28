@@ -56,7 +56,6 @@ class _ParseState(object):
                     % (name, join.name, join))
         else:
             join.name = name
-
         self.labeledjoins.setdefault(name,[]).append(join)
 
         if name in self.labeledjoinorder:
@@ -236,8 +235,7 @@ class _ParseState(object):
         if project.varref:
             op.addLabel(project.varref)
             op = Join(op)
-            self.addLabeledJoin(project.varref, op)
-        
+            self.addLabeledJoin(project.varref, op)        
         return op
 
     def replaceJoinWithLabel(self, child):
@@ -404,10 +402,12 @@ class _ParseState(object):
                 continue
             #construct that only have id labels will not have a join
             #we only want to add the join if there are no another joins for the label
-            firstjoin = joins.pop()
+            firstjoin = joins.pop(0)
             for join in joins:
                 self.prepareJoinMove(join)
-                firstjoin.appendArg(join)
+                for child in join.args:
+                    firstjoin.appendArg(child)
+                join.parent = None
 
             labeledjoins[label] = firstjoin
             firstjoin.name = label
@@ -417,7 +417,7 @@ class _ParseState(object):
         for child in root.depthfirst():
             if isinstance(child, ResourceSetOp):
                 joinsInDocOrder.append(child)
-                for orphan in self.orphanedJoins.get(child,[]):                    
+                for orphan in self.orphanedJoins.get(child,[]):
                     self._findJoinsInDocOrder(orphan, joinsInDocOrder)
 
     def _analyzeJoinPreds(self, join, preds):
@@ -589,7 +589,8 @@ class _ParseState(object):
             if label.name in aliases:
                 #reference to current join, join now
                 topjoin = getTopJoin(refjoin, join)
-                #filter = pred.parent
+                if topjoin not in followingJoins:
+                    continue                
                 assert isinstance(filter.parent, JoinConditionOp)
                 jointype = filter.parent.join
                 self.prepareJoinMove(topjoin)
