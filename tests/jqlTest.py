@@ -51,11 +51,7 @@ t("(id)",['3', '2', '_:2', '_:1'])
 
 t("('constant')", ['constant'])
 
-#XXX not treating as constant
-#raises File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 614, in groupbyUnordered
-#    vals = resources.get(key)
-#TypeError: list objects are unhashable
-skip('''
+t('''
 { "staticprop" : ["foo"] }
 ''',[{ "staticprop" : ["foo"] }])
 
@@ -79,6 +75,15 @@ t("{ id, 'parent' : child }",
 
 t("{ parent : child, id }",
    [{'1': '2', 'id': '_:2'}, {'1': '3', 'id': '_:1'},])
+
+t("[:b1, :b2]", 
+[['1', '2']],
+bindvars={'b1':'1', 'b2':'2'})
+
+#use [[]] because { 'emptylist' : []} => {'emptylist': None}]
+t("{ 'emptylist' : [[]]}",
+[{'emptylist': []}]
+)
 
 t.group = 'joins'
 
@@ -221,6 +226,8 @@ t('''{ * orderby(child desc, id asc) }''', res)
 
 t.group = 'parse'
 
+t('''{ 'foo' : ?bar.baz.id }''')
+
 t('''
 { 'id' : ID, 'blah' : foo }
 ''',
@@ -263,14 +270,18 @@ syntaxtests = [
 #force list
 '''
 { 'blah' : [foo] }
-'''
+''',
+'''{* where (foo = { id = 'd' }) }'''
 ]
 
 #XXX fix failing queries!
 failing = [
+#  File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 236, in _getASTForProject
+#    op.addLabel(project.varref)
+#AttributeError: 'JoinConditionOp' object has no attribute 'addLabel'
+'''{ 'foo' : ?bar.baz.biff }''',
+
 '''{ 'ok': */1 }''',
-#throws join in filter not yet implemented:
-'''{* where (foo = { id = 'd' }) }''',
 
 #XXX there's ambguity here: construct vs. join (wins)
 # throws AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
@@ -303,7 +314,7 @@ for s in syntaxtests:
 #XXX test broken, AST seems wrong
 #XXX there's ambguity here: construct vs. forcelist (see similar testcase above)
 skip("{'foo': [*]}", 
-ast = Select( Construct([
+skipast = Select( Construct([
   ConstructProp('foo', Project('*'),
         PropShape.uselist, PropShape.uselist)
       ]), Join())
@@ -408,7 +419,7 @@ t.model = modelFromJson([
 'subject': 'rhizome',
 'content' : 'some text about rhizome'
 }
-
+,{'id':'post1','tags' : ['commons', 'toread']}
 ])
 
 t.group = 'namemap'
@@ -755,6 +766,17 @@ model=modelFromJson([{
 )
 
 t.group = 'follow'
+
+t('''
+{ ?tag, id, label, 
+ "othertags":?posts.tags,
+ where ({?tag1 :tagid1 in follow(?tag1, subsumedby)} 
+  and {?posts ?tag = tags and tags = ?tag1} 
+  and ?tag not in (:tagid1) )}
+''',
+[{'id': 'toread', 'label': 'to read', 'othertags': ['commons', 'toread']}], 
+bindvars = { 'tagid1' : 'commons'})
+
 #find all the entries that implicitly or explicitly are tagged 'projects'
 t('''
     {
@@ -869,6 +891,7 @@ where (not subsumedby)
   'id': 'subsumedby'},
  {u'http://www.w3.org/2000/01/rdf-schema#subClassOf': u'http://www.w3.org/2000/01/rdf-schema#Class',
   'id': 'Tag'},
+ {'id': 'post1', 'tags': ['commons', 'toread']},
  {'id': 'projects', 'type': 'Tag'}]
 )
 
@@ -1101,6 +1124,18 @@ id, type,
 }
 '''
 
+#better:
+#need parser support for ?label.* at construct-level
+'''
+{
+?parent
+id, type,
+'properties' : { 
+   ?parent.* exclude(id, type)
+  }
+}
+'''
+
 '''
 {
 
@@ -1145,7 +1180,7 @@ t.model = modelFromJson([
         { "id" : "2", "type" : "post", "tags" : "tag1"},
         { "id" : "3", "type" : "post"}
     ])
-
+    
 #bug: when the label name is the same as the property name
 #property references construct the label value (the id) instead of the property value
 #e.g. this returns [{'tags': '2'}] instead of [{'tags': 'tag1'}]
@@ -1249,6 +1284,7 @@ t('''
 [{'id': '3', 'tags': None}, {'id': '2', 'tags': ['tag1']}]
 , unordered=True)
 
+t.group = 'onetomany'
 
 #XXX throws jql.QueryException: reference to unknown label(s): tag
 #'tags' : ?tag should be treated like 'tags' : {?tag}  
@@ -1260,7 +1296,64 @@ skip('''
 '''
 )
 
-t.group = 'onetomany'
+#XXX error: inner construct not joining on outer
+#we need to make isConstant check in evalSelect exclude references to outer joins
+#in construct props
+skip('''
+{
+?tag, label,
+'attributes' : { 'itemid' : ?tag.id }
+where (label = 'tag 1')
+}
+''')
+
+#XXX fails: File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 446, in addAlias
+#   assert join is pred.parent.parent.parent, pred.parent.parent.parent
+# pred.parent.parent.parent is none
+skip('''
+{
+?tag, label,
+'attributes' : { ?inner 'itemid' : ?tag where (?inner = ?tag)}
+where (label = 'tag 1')
+}
+''')
+
+#fails, erroneously returns: 
+#{'attributes': [{'itemid': None},
+#                 {'itemid': None},
+#                 {'itemid': None},
+#                 {'itemid': None}],
+#  'label': 'tag 1'}]
+skip('''
+{
+?tag, label,
+'attributes' : { 'itemid' : ?tag }
+where (label = 'tag 1')
+}
+''')
+
+#XXX fails
+#toplevel join is missing
+#vesper.query._query.QueryException: construct: could not find subject label "tag" in (ColInfo('subject', <type 'unicode'>),
+#ColInfo('predicate', <type 'unicode'>), ColInfo('object', <type 'unicode'>), ColInfo('objecttype', <type 'unicode'>),
+#ColInfo('context', <type 'object'>), ColInfo('listpos', <type 'unicode'>))
+skip('''
+{
+?tag, label,
+'attributes' : { 'itemlabel' : ?tag.label }
+where (label = 'tag 1')
+}
+''')
+
+t('''
+    { ?tag, id,
+    'shared' : ?posts.tags
+     where({ ?posts ?tag = tags} and ?tag = 'tag1')
+    }
+''',
+[{'id': 'tag1', 'shared': 'tag1'}]
+)
+
 t.model = modelFromJson([
         { "label": "tag 1", 'id': 'tag1'},
         { "label": "tag 2", 'id': 'tag2'},

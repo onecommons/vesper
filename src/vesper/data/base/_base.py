@@ -30,19 +30,24 @@ class Tupleset(object):
     '''
     columns = None
 
-    def findColumnPos(self, label, rowinfo=False, pos=()):
+    def findColumnPos(self, label, rowinfo=False, shallow=False, pos=()):
         if not self.columns:
             return None
 
         for i, col in enumerate(self.columns):
+            isTuple = isinstance(col.type, Tupleset)
             if label == col.label:
+                if not shallow and isTuple: #look deeper
+                    match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,))
+                    if match:
+                        return match
                 pos = pos+(i,)
                 if rowinfo:
                     return pos, self
                 else:
                     return pos
-            if isinstance(col.type, Tupleset):
-                match = col.type.findColumnPos(label, rowinfo, pos+(i,))
+            elif isTuple:
+                match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,))
                 if match:
                     return match
         return None

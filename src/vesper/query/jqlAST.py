@@ -679,7 +679,7 @@ AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
 class Project(QueryOp):  
     
-    def __init__(self, fields, var=None, constructRefs = False):
+    def __init__(self, fields, var=None, constructRefs = None):
         self.varref = var 
         if not isinstance(fields, list):
             self.fields = [ fields ]
@@ -745,7 +745,8 @@ class ConstructProp(QueryOp):
     def appendArg(self, value):
         if isinstance(value, Project):
             #hack: if this is a standalone project expand object references
-            if value.name != 0: #but not for id
+            #but not for id
+            if value.name != 0 and value.constructRefs is None: 
                 value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self

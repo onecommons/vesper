@@ -111,7 +111,7 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
             : | "(" `expression` ")"
  operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
             : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
- join       : "{" `expression` "}"
+ join       : "{" [`label`] `expression` "}"
  atom       : `label` | `bindvar` | `constant` 
             : | `functioncall` | `propertyreference`
  label      : "?"NAME
@@ -231,8 +231,8 @@ t("{ 'key' : id, <id>, <a property with spaces>}",
 )
 
 t%'''
-Property wildcards
-------------------
+Property wildcard ('*')
+-----------------------
 The "*" will expand to all properties defined for the object. For example, this query retrieves all objects in the store:
 '''
 t.model = mainmodel
@@ -407,10 +407,12 @@ t('{displayname, [maybe auth]}',
 )
 
 t%'''
-Nested constructs
------------------
+Sub-queries (nested constructs)
+-------------------------------
 
-cross joins 
+The value of a property or array item can be another object or list construct instead of an expression. 
+If a nested query references an object in the outer query (via `labels`) it will be correlated with the outer query.
+If it is independent it will be evaluated for each result, so the result set will equivalent to a cross-join.
 '''
 
 t%'''
@@ -423,15 +425,18 @@ Filtering (the WHERE() clause)
 * matching lists 
 '''
 
-
 t%'''
 joins
 =====
 
-join expressions
-----------------
+object references
+-----------------
 
-A expression can be wrapped in a 
+When a filter expression is surrounded by braces (`{` and `}`) the filter is applied 
+separately from the rest of the expression, and is evaluated as an object reference
+to the object that met that criteria. These object references have the same semantics 
+as label references. The object references can optionally be labeled and are typically 
+used to create joins.
 
 labels
 ------
@@ -454,10 +459,6 @@ t('''
 ''')
 
 '''
-You can also 
-Braces "{}" that occur within the where clause indicate that 
-where ( { foo = 1 } ) 
-
 You can also declare object name inside  
 `{ id = ?foo }`
 '''
@@ -479,6 +480,11 @@ t('''
 ''')
 
 t%'''
+`maybe` and outer joins
+-----------------------
+'''
+
+t%'''
 object references and anonymous objects
 =======================================
 
@@ -486,11 +492,14 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
 
 '''
 
-
-
 '''
 Expressions
 ===========
+'''
+
+'''
+Groupby and aggregate Functions
+===============================
 '''
 
 t.group = 'footnotes'

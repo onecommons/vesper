@@ -53,7 +53,7 @@ class glockTestCase(unittest.TestCase):
         l.obtain()
         print ' done.'
         thread.start()
-        time.sleep(3)
+        time.sleep(1)
         print '\nmain: unlocking...',
         l.release()
         print ' done.'
@@ -66,7 +66,7 @@ class glockTestCase(unittest.TestCase):
 def threadMain(self, lock):
     print 'thread started(%s).' % lock
     self.failUnless(not lock.attempt(), 'should not have gotten the lock')
-    print 'thread: locking (should stay blocked for ~ 3 sec)...',
+    print 'thread: locking (should stay blocked for ~ 1 sec)...',
     lock.obtain()
     print 'thread: locking done.'
     print 'thread: unlocking...',

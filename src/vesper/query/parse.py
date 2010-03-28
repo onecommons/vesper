@@ -369,6 +369,12 @@ def p_atom_label(p):
     """
     p[0] = Label(p[1][0])
 
+def p_label_id(p):
+    '''
+    columnref : LABEL PERIOD ID
+    '''
+    p[0] = Label(p[1][0])
+
 #next one must come after above rule so that it takes priority
 def p_constructitem6(p):
     '''
@@ -473,6 +479,7 @@ def p_join(p):
         p[0] = p.parser.jqlState.makeJoinExpr(expr)
         if label:
             p[0].name = label
+            p.parser.jqlState.addLabeledJoin(label, p[0])
     except QueryException, e:
         import traceback
         traceback.print_exc()#file=sys.stdout)
@@ -613,6 +620,16 @@ def p_columnref(p):
         p[0] = Project(p[1])
     else: #?var.column
         p[0] = Project(p[3], p[1][0])
+
+def p_columnref_id(p):
+    '''
+    columnref : LABEL PERIOD columnreftrailer PERIOD ID
+              | columnreftrailer PERIOD ID
+    '''
+    if len(p) == 2:
+        p[0] = Project(p[1], constructRefs=False)
+    else: #?var.column
+        p[0] = Project(p[3], p[1][0], constructRefs=False)
 
 def p_dictvalue(p): 
     '''
@@ -821,7 +838,7 @@ def parse(query, functions, debug=False, namemap=None):
     errorlog.addHandler(log_messages)    
     try:
         from vesper.query import rewrite
-        parseState = rewrite._ParseState(functions, namemap)        
+        parseState = rewrite._ParseState(functions, namemap)
         parser.jqlState = parseState
         
         #XXX only turn tracking on if there's an error
