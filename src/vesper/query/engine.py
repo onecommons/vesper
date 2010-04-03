@@ -324,18 +324,18 @@ def getNullRows(columns):
 #     else:
 #         return context.serializer.serializeValue(v, objectType, scope)
         
-def _setConstructProp(shape, pattern, prop, v, name):
+def _setConstructProp(shape, pattern, prop, v, name, listCtor):
     isSeq = isinstance(v, (list,tuple))
     #print '_setConstructProp', v, isSeq, prop.ifEmpty
     if v == RDF_MS_BASE+'nil': #special case to force empty list
-        val = []
+        val = listCtor() #[]
     elif v is None or (isSeq and not len(v)):
         if prop.ifEmpty == jqlAST.PropShape.omit:            
             return pattern
         elif prop.ifEmpty == jqlAST.PropShape.uselist:
             if not isSeq:
                 assert v is None
-                val = []
+                val = listCtor()#[]
             else:
                 val = v
         elif prop.ifEmpty == jqlAST.PropShape.usenull:
@@ -348,9 +348,9 @@ def _setConstructProp(shape, pattern, prop, v, name):
     #    val = flatten(v[0])
     else: #uselist
         if isSeq:
-            val = v
+            val = listCtor(v)
         else:
-            val = [v]
+            val = listCtor([v])
     
     if shape is jqlAST.Construct.dictShape:
         pattern[name] = val
@@ -681,10 +681,12 @@ class SimpleQueryEngine(object):
         '''
         tupleset = context.currentTupleset
         subjectcol, subjectlabel, rowcolumns = self._findSubject(op, tupleset)
-
+        listCtor = context.shapes.get(jqlAST.Construct.listShape, jqlAST.Construct.listShape)
+        
         def construct():
           count = 0
           i = 0
+          
           assert context.currentTupleset is tupleset
           #print 'construct cols', tupleset.columns
           for outerrow in tupleset:
@@ -797,12 +799,12 @@ class SimpleQueryEngine(object):
                         
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
-                            name = flatten(prop.nameFunc.evaluate(self, ccontext))
+                            name = flatten(prop.nameFunc.evaluate(self, ccontext), to=listCtor)
                             if not name: #don't include property in result
                                 continue
                         else:
                             name = prop.name or prop.value.name                            
-                        pattern = _setConstructProp(shape, pattern, prop, v, name)                        
+                        pattern = _setConstructProp(shape, pattern, prop, v, name, listCtor)
                         if prop.value.name and isinstance(prop.value, jqlAST.Project):
                             propsAlreadyOutput.add(prop.value.name)
                 
@@ -826,7 +828,7 @@ class SimpleQueryEngine(object):
                             debug=context.debug)
                         ccontext.currentRow = proprows
                         value = jqlAST.Project(OBJECT, constructRefs=True).evaluate(self, ccontext)
-                        _setConstructProp(shape, pattern, allpropsOp, value, propname)                    
+                        _setConstructProp(shape, pattern, allpropsOp, value, propname, listCtor)
 
                 currentIdvalue = context.constructStack.pop()
                 assert idvalue == currentIdvalue

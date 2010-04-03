@@ -43,6 +43,8 @@ t('''
 #id keys only
 t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}, ])
 
+t("{id : foo MERGEALL}", [{'2': 'bar', '3': 'bar'}])
+
 t("{}", [{}]) 
 
 t("(foo)",['bar', 'bar']) 
@@ -1117,9 +1119,11 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
 {
 ?parent
 id, type,
-'properties' : { 
-   * exclude(id, type) 
-   where (id=?parent)
+'properties' : {
+   ?parent
+   * omit id, omit type
+   #* exclude(id, type)   
+   # where (id=?parent)
   }
 }
 '''
@@ -1628,11 +1632,11 @@ class JQLTestCase(unittest.TestCase):
     def testAll(self):
         main(t, ['--quiet'])
 
-    def XXXtestSerializationClassOveride(self):
+    def testSerializationClassOveride(self):
         '''
         test that query results always use the user specified list and dict classes
         '''
-        #broken: evalProject and _setConstructProp don't create user-specified list shape
+        #XXX user-defined list used for nested lists
         
         #some hacky classes so we can call set() on the query results
         class hashabledict(dict):
@@ -1651,11 +1655,14 @@ class JQLTestCase(unittest.TestCase):
                 return 'HashableList'+super(hashablelist, self).__repr__()
 
         try:
-            save =jql.QueryContext.shapes
-            jql.QueryContext.shapes = { dict:hashabledict, list:hashablelist}            
-            set(jql.getResults("{*}", t.model).results)            
+            save =jql.QueryContext.defaultShapes
+            jql.QueryContext.defaultShapes = { dict:hashabledict, list:hashablelist}
+            #will raise TypeError: unhashable if a list or dict is in the results:
+            set(jql.getResults("{*}", t.model).results)
+        except:
+            self.fail()
         finally:
-            jql.QueryContext.shapes = save
+            jql.QueryContext.defaultShapes = save
                     
 if __name__ == "__main__":
     import sys

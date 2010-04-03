@@ -55,18 +55,12 @@ OBJECT = 2
 OBJTYPE_POS = 3
 LIST_POS = 5
 
-class ResourceSet(Tupleset):
-    '''
-    (resource uri, {varname : [values+]}),*
-    or maybe: tuples, collabels = []
-    '''
-
 BooleanType = bool
 ObjectType = object
 NumberType = float
 StringType = unicode
 
-QueryOpTypes = ( Tupleset, ResourceSet, ObjectType, StringType, NumberType,
+QueryOpTypes = ( Tupleset, ObjectType, StringType, NumberType,
     BooleanType )
 NullType = type(None)
 
@@ -80,21 +74,38 @@ def runQuery(query, model):
     (ast, err) = buildAST(query)
     return evalAST(ast, model)
 
-def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=False, captureErrors=False):
+def getResults(query, model, bindvars=None, explain=None, debug=False,
+    forUpdate=False, captureErrors=False, contextShapes=None):
     '''
     Returns a dict with the following keys:
         
     - `results`: the result of the query (either a list or None if the query failed)
-    - `errors`: An error string if the query failed or None if it succeeded
-    - `resource`: a list describing the resources (used for track changes)
+    - `errors`: An error string if the query failed or an empty list if it succeeded.
     
     :Parameters:
      query
        the query
      model
-       the store       
+       the store upon which to execute the query
+    bindvars
+       a dictionary used to resolve any `bindvars` in the query
+    explain
+       if True, the result will include a key named `explain` whose value is a 
+       string "explaining" the query plan to execute it.
+    debug
+       if True, the result will include a very verbose trace of the query execution.
+    forUpdate
+       include in the query results enough information so that the response 
+       objects can be modified and those changes saved back into the store.
+    captureErrors
+       if True, exceptions raise during query execution will be caught and appended 
+       to the `errors` key. By default, such exceptions will be propagated when they occur.
+    contextShapes
+       A dictionary that specifies alternative constructors used when creating
+       `dicts` and `lists` in the query results.
     '''
-    #XXX this method still under construction
+    #XXX? add option to include `resources` in the result,
+    # a list describing the resources (used for track changes)
     response = utils.attrdict()
     errors = []
     
@@ -111,7 +122,7 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,forUpdate=
     
     if ast != None:        
         try:
-            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate))
+            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate, contextShapes))
             #XXX: if forUpdate add a pjson header including namemap
             #this we have a enough info to reconstruct refs and datatypes without guessing
             #if forUpdate: 
@@ -143,10 +154,12 @@ def buildAST(query, namemap=None):
     from vesper.query import parse, engine
     return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, namemap)
     
-def evalAST(ast, model, bindvars=None, explain=None, debug=False, forUpdate=False):
+def evalAST(ast, model, bindvars=None, explain=None, debug=False, 
+                                    forUpdate=False, contextShapes=None):
     #rewriteAST(ast)
     from vesper.query import engine
-    queryContext = QueryContext(model, ast, explain, bindvars, debug, forUpdate=forUpdate)
+    queryContext = QueryContext(model, ast, explain, bindvars, debug, 
+                            forUpdate=forUpdate, shapes=contextShapes)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
@@ -156,13 +169,13 @@ def evalAST(ast, model, bindvars=None, explain=None, debug=False, forUpdate=Fals
 class QueryContext(object):
     currentRow = None
     currentValue = None
-    shapes = { dict : utils.defaultattrdict }
+    defaultShapes = {}
     currentProjects = None
     projectValues = None
     finalizedAggs = False
     groupby = None
     
-    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False):
+    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False, shapes=None):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
@@ -174,10 +187,11 @@ class QueryContext(object):
         self.constructStack = []
         self.engine = None        
         self.accumulate = {}
+        self.shapes = shapes or self.defaultShapes.copy()
 
     def __copy__(self):
-        copy = QueryContext(self.initialModel, self.ast, self.explain, self.bindvars,
-                                              self.debug, self.depth, self.forUpdate)
+        copy = QueryContext(self.initialModel, self.ast, self.explain, 
+            self.bindvars, self.debug, self.depth, self.forUpdate, self.shapes)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow

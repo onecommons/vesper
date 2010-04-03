@@ -504,9 +504,11 @@ class BasicStore(DataStore):
 
         return addStmts, removals
 
-    def query(self, query=None, bindvars=None, explain=None, debug=False, forUpdate=False, captureErrors=False):
+    def query(self, query=None, bindvars=None, explain=None, debug=False, 
+                forUpdate=False, captureErrors=False, contextShapes=None):
         import vesper.query
-        return vesper.query.getResults(query, self.model,bindvars,explain,debug,forUpdate,captureErrors)
+        return vesper.query.getResults(query, self.model, bindvars, explain,
+                              debug, forUpdate, captureErrors, contextShapes)
 
     def merge(self,changeset): 
         if not self.join(self.requestProcessor.txnSvc, False):

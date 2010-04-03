@@ -19,6 +19,8 @@ mako.runtime.Undefined.__str__ = lambda self: ''#'<undefined>'
 
 import vesper.utils
 vesper.utils.defaultattrdict.UNDEFINED = mako.runtime.UNDEFINED
+import vesper.query
+vesper.query.QueryContext.defaultShapes = { dict : vesper.utils.defaultattrdict }
 
 @Route('datarequest')#, REQUEST_METHOD='POST')
 def datarequest(kw, retval): 
