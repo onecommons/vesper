@@ -799,11 +799,12 @@ class SimpleQueryEngine(object):
                         
                         #print '####PROP', prop.name or prop.value.name, 'v', v
                         if prop.nameFunc:
-                            name = flatten(prop.nameFunc.evaluate(self, ccontext), to=listCtor)
+                            name = flatten(prop.nameFunc.evaluate(self, context), to=listCtor)
                             if not name: #don't include property in result
                                 continue
                         else:
-                            name = prop.name or prop.value.name                            
+                            name = prop.name or prop.value.name
+                                               
                         pattern = _setConstructProp(shape, pattern, prop, v, name, listCtor)
                         if prop.value.name and isinstance(prop.value, jqlAST.Project):
                             propsAlreadyOutput.add(prop.value.name)

@@ -1374,6 +1374,15 @@ t('''
 }''',
 [{'id': '2', 'tags': [['tag1'], ['tag2']]}])
 
+
+t('''
+{   ?post,  
+    id : [id where (id=?tag)]
+    where (tags = ?tag and type='post')
+}''',
+[{'2': [['tag1'], ['tag2']]}]
+)
+
 t('''
 {   ?post, id, 
     'tags' : [id where (id=?tag)]
