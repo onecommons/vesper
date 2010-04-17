@@ -224,9 +224,7 @@ ${call(caller).style}
    <div class='preview-contents'></div>   
   </div>
   <div class='item${i%2 and " altband" or ""}'>${call(caller).renderItemProperties}
-      <!--
-      contents are block elements (p) so bullet doesnt appear inline as we want
-      -->
+      ## contents are block elements (p) so bullet doesnt appear inline as we want
       <span class='item-bullet'>&bull;</span>
       <div class='item-contents'>
       ${caller.body()}      
@@ -344,7 +342,7 @@ function initItems(context) {
        textarea.val( textarea.data('originalValue') );
        textarea[0].blur();
        setModified(textarea, false);
-       toggleEditEntry.call(this);
+       toggleEditEntry.call(this);       
    });
 
    $('.entry-cancelcreate-button', context).click(function(event) {
@@ -356,7 +354,8 @@ function initItems(context) {
        }
        $entry.find('.preview-contents').html('');
        $entry[0].reset();        
-       $entry.find('.tagfield,.bit-box').remove();       
+       $entry.find('.tagfield,.bit-box').remove();
+       $entry.parent('.outline').hide();
    });
    
    $('.entry-save-button', context).click(function(event) {
@@ -364,7 +363,7 @@ function initItems(context) {
      $(this).closest('.entry').dbBegin().dbSave().dbQuery(gItemSaveQuery,
        function(data) {
          console.log('saved entry', data);
-         if (!data.errors || !data.errors.length) { //query action returns errors             
+         if (!data.error) { //query action returns errors             
              var textarea = $(this).find('.entry-edit textarea');         
              textarea.data('originalValue', textarea.val());         
              setModified($(this), false);
@@ -385,7 +384,7 @@ function initItems(context) {
      //XXX really delete!
      var data = { id : entry.attr('itemid'), type : '@deleted-post'};
      entry.dbSave(data, function(data) {
-        if (!data.errors) {
+        if (!data.error) {
             loadPanel();
         }
      });

@@ -37,30 +37,35 @@ Txn.prototype = {
         }
         */
         
+        //JSON-RPC 2.0 see http://groups.google.com/group/json-rpc/web/json-rpc-2-0
         this.requests.push( {
-            requestid : requestId,
-            action : action,
-            data : data            
+            jsonrpc : '2.0',
+            method : action, 
+            params : data, 
+            id : requestId
         });
                 
         if (callback) {
             var $this = $(elem); //note: elem is undefined will bind on doc
-            var thisCallback = function(event, data) {
-                console.log('thiscallback', event, data);
-                if (data.errors) {
-                    callback(data);                    
-                } else {                         
-                    var responses = data.responses;
-                    for (var i=0; i < responses.length; i++) {
-                        var response = responses[i];
-                        if (response.requestid == requestId) {
+            var thisCallback = function(event) {
+                //the response is a list and jquery turns that into arguments  
+                console.log('thiscallback', arguments);
+                var responses = arguments; //first item is the event
+                for (var i=1; i < responses.length; i++) {
+                    var response = responses[i];
+                    if (response.id == null && response.error) {
+                        callback(response);
+                        break
+                    } else if (response.id == requestId) {
+                        if (response.error)
                             callback.call(elem, response);
-                        }
+                        else
+                            callback.call(elem, response.result);
                     }
-                }
+                }                
                 $this.unbind('dbdata', thisCallback);                  
             };
-            console.log('bind',$this)
+            //console.log('bind',$this)
             $this.bind('dbdata', thisCallback);
         }
     
@@ -78,16 +83,16 @@ Txn.prototype = {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
             console.log('saved!', data, textStatus);
-            if (textStatus == 'success' && !data.errors) {                
-                $.event.trigger('dbdata', data);            
+            if (textStatus == 'success') {
+                $.event.trigger('dbdata', data);
             } else {
-                //note: when textStatus != 'success', data param will be a XMLHttpRequest obj                
-                $.event.trigger('dbdata', {
-                        'errors': (data && data.errors) || data.statusText || textStatus,
-                        'errorDetails' : data.responseText || null,
-                        'responses':(data && data.responses) || null,      
-                        //'msg': clientErrorMsg
-                        });
+                //when textStatus != 'success', data param will be a XMLHttpRequest obj                
+                $.event.trigger('dbdata', {"jsonrpc": "2.0", "id": null,
+                  "error": {"code": -32000, 
+                        "message": data.statusText || textStatus,
+                        'data' : data.responseText
+                  } 
+                });
             }
          };
     
@@ -107,7 +112,9 @@ Txn.prototype = {
             $.ajax({
               type: 'POST',
               url: 'datarequest',
-              data: {requests: requests},
+              data: requests,
+              processData: false, 
+              contentType: 'application/json',
               success: callback,
               error: callback,
               dataType: "json"

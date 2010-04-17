@@ -24,50 +24,68 @@ vesper.query.QueryContext.defaultShapes = { dict : vesper.utils.defaultattrdict 
 
 @Route('datarequest')#, REQUEST_METHOD='POST')
 def datarequest(kw, retval): 
+    '''
+    Accepts a JSON-RPC 2.0 (see http://groups.google.com/group/json-rpc/web/json-rpc-2-0)
+    request (including a batch request).
+    '''
     from vesper import pjson
     if kw._environ.REQUEST_METHOD != 'POST':
         raise RuntimeError('POST expected')
 
-    def handleRequest(requestid=0, action=0, data=0):
-        if not requestid:
-            raise RuntimeError('datarequest missing requestid')
+    def handleRequest(id=None, method=0, params=0, jsonrpc=None):
+        requestid = id; action = method; data = params
+        response = dict(id=requestid, jsonrpc='2.0')
+        if requestid is None or jsonrpc != '2.0':
+            response['error'] = dict(code=-32600, message='Invalid Request')
+            return response
         
         #don't catch exceptions for write operations because we want 
         #the whole request transaction to be aborted
         if action == 'update':
             addStmts, removeStmts = dataStore.update(data)
-            addJson = pjson.tojson(addStmts)
-            results = dict(results=addJson)
+            result = pjson.tojson(addStmts)
         elif action == 'add':
             addJson = dataStore.add(data)
-            results = dict(results=addJson)#pjson.tojson(addStmts))
+            result = addJson #pjson.tojson(addStmts))
         elif action == 'query':
             #returns { errors, results }
             if isinstance(data, (str, unicode)):
-                results = dataStore.query(data) 
+                result = dataStore.query(data) 
             else:
-                results = dataStore.query(**data) 
+                result = dataStore.query(**data)
+            if result.errors:
+                response['error'] = dict(code=0, message='query failed', 
+                                                    data = result.errors)
+                return response
         elif action == 'remove':
             #returns None
-            results = dataStore.remove(data)
+            result = dataStore.remove(data)
             #XXX return better result?
-            results = dict(results=results)
         else:
-            raise RuntimeError('unexpected datarequest action: '+ action)
-
-        results['requestid']=requestid
-        results['action']=action
-        return results
+            response['error'] = dict(code=-32601, message='Method not found')
+            return response
+        
+        response['result'] = result
+        return response
 
     dataStore = kw.__server__.dataStore
-    postdata = kw._params.requests
+    postdata = kw._postContent
     # some json libs return unicode keys, which causes problems with **dict usages
-    requests = json.loads(postdata, object_hook=lambda x: dict([(str(k),v) for (k,v) in x.items()]))
-    #XXX raccoon needs default content-type 
-    kw._responseHeaders['Content-Type'] = 'application/json'
-    response = dict(responses = [handleRequest(**x) for x in requests])
-    #may add an "errors" field in the future instead of just raising exception
-    return json.dumps(response, indent=4) # XXX
+    try:
+        requests = json.loads(postdata, object_hook=lambda x: 
+                            dict([(str(k),v) for (k,v) in x.items()]))
+    except:
+        response = dict(id=None, jsonrpc='2.0', error=dict(code=-32700, 
+                                                  message='Parse error'))
+    else:
+        if not isinstance(requests, list):
+           requests = [requests] 
+        #XXX raccoon needs default content-type 
+        kw._responseHeaders['Content-Type'] = 'application/json'
+        response = [isinstance(x, dict) and handleRequest(**x) or 
+dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
+                                                            for x in requests]
+    return json.dumps(response, indent=4) 
 
 @Route('static/{file:.+}')
 def servefile(kw, retval):
