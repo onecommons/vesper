@@ -255,36 +255,52 @@ class QueryFuncs(object):
         self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType)
         self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType)        
 
-def followFunc(context, startid, propname=None):
+def followFunc(context, startid, propname=None, excludeInitial=False, 
+                                                        edgesOnly=False):
     '''
     Starting with the given id, follow the given property
     '''
-    #XXX expand propname
     #XXX add unittest for circularity
     if isinstance(startid, (list, tuple)):
         tovisit = list(startid)
+        startList = startid
     else:
         tovisit = [startid]
-
+        startList = [startid]
+                
     def getRows():
         while tovisit:
-            startid = tovisit.pop()
-            yield [startid]            
-            for row in context.initialModel.filter({0:startid, 1:propname}):
+            visitId = tovisit.pop()            
+            if not edgesOnly: 
+                if not excludeInitial or visitId not in startList:
+                    #we need to yield a MutableTuplset instead of a list so that
+                    #so that flatten called during property construction flattens 
+                    #this result allowing follow() to be used as a property expression.
+                    yield MutableTupleset(columns, [visitId] )
+            found = not edgesOnly
+            for row in context.initialModel.filter({0:visitId, 1:propname}):
+                found = True
                 obj = row[2]
                 if obj not in tovisit:
-                    yield [obj]
+                    if not edgesOnly: yield MutableTupleset(columns, [obj])
                     tovisit.append(obj)
+            if not found:
+                if not excludeInitial or visitId not in startList:
+                    assert edgesOnly
+                    yield MutableTupleset(columns, [visitId])
 
     columns = [ColumnInfo('', object)]
-    return SimpleTupleset(getRows, columns=columns, op='follow', hint=startid, debug=context.debug)
+    return SimpleTupleset(getRows, columns=columns, op='follow', hint=startid, 
+                                                          debug=context.debug)
 
-def followOpFactory(key, metadata, startOp, propnameOp):
+def followOpFactory(key, metadata, startOp, propnameOp, 
+    excludeInitial=jqlAST.Constant(False), edgesOnly=jqlAST.Constant(False)):
     if isinstance(propnameOp, jqlAST.Project):
         propnameOp = jqlAST.PropString(propnameOp.name)
     else:
         raise QueryException("argument must be a property reference", propnameOp)
-    return jqlAST.AnyFuncOp(key, metadata, startOp, propnameOp)
+    return jqlAST.AnyFuncOp(key, metadata, startOp, propnameOp, excludeInitial,
+                                                                     edgesOnly)
 
 def ifFunc(context, ifArg, thenArg, elseArg):
     ifval = ifArg.evaluate(context.engine, context)
@@ -674,6 +690,29 @@ class SimpleQueryEngine(object):
                 rowcolumns = ([ColumnInfo(subjectlabel, col.type)]
                                     + getColumnsColumns(subjectcol,tupleset.columns))
         return subjectcol, subjectlabel, rowcolumns
+
+    def _setAllProps(self, context, islist, propsAlreadyOutput, idvalue, allPropsShape, 
+                                                    allPropsPattern, propsetOp):
+        #XXX what about scope -- should initialModel just filter by scope if set?
+        rows = context.initialModel.filter({ SUBJECT: idvalue })
+        if islist:
+            propset = _getList(idvalue, rows)
+        else:
+            propset = _getAllProps(idvalue, rows, propsAlreadyOutput)
+        
+        listCtor = context.shapes.get(jqlAST.Construct.listShape, jqlAST.Construct.listShape)
+                    
+        for propname, proprows in propset:
+            ccontext = copy.copy(context)
+            ccontext.currentTupleset = SimpleTupleset([proprows],
+                columns=context.initialModel.columns,
+                op='allprop project on %s'% propname, 
+                debug=context.debug)
+            ccontext.currentRow = proprows
+            value = jqlAST.Project(OBJECT, constructRefs=True
+                                        ).evaluate(self, ccontext)
+            _setConstructProp(allPropsShape, allPropsPattern, 
+                        propsetOp, value, propname, listCtor)
         
     def evalConstruct(self, op, context):
         '''
@@ -744,93 +783,89 @@ class SimpleQueryEngine(object):
                             pattern.append(idvalue)
                         else:
                             pattern = idvalue
-                    elif isinstance(prop.value, jqlAST.Project) and prop.value.name == '*':
-                        if shape is op.valueShape:
-                            raise QueryException("value construct can not specify '*'")
-                        allpropsOp = prop
                     else:
-                        ccontext = copy.copy(context)
-                        if isinstance(prop.value, jqlAST.Select):
-                            #evaluate the select using a new context with the
-                            #the current column as the tupleset
+                        isAllProp = isinstance(prop.value, jqlAST.Project
+                                                ) and prop.value.name == '*'
+                        if isAllProp and not prop.nameFunc:
+                            #* is free standing (no name expression), 
+                            #find allprops after we've processed the other properties
+                            if shape is op.valueShape:
+                                raise QueryException("value construct can not specify '*'")
+                            allpropsOp = prop
+                        else:
+                            ccontext = copy.copy(context)
+                            if isinstance(prop.value, jqlAST.Select):
+                                #evaluate the select using a new context with the
+                                #the current column as the tupleset
                             
-                            #if id label is set use that 
-                            label = prop.value.construct.id.getLabel()
-                            if label:
-                                col = tupleset.findColumnPos(label, True)
-                            else:
-                                col = None                                
-                            if not col:
-                                #assume we're doing a cross join:
-                                ccontext.currentTupleset = ccontext.initialModel
-                            else:
-                                pos, rowInfoTupleset = col
-                                v = list([irow for cell, i, irow in getColumn(pos, outerrow)])
-                                #print '!!!v', col, label, len(v), v#, 'row', row
-                                #assert isinstance(col.type, Tupleset)
-                                ccontext.currentTupleset = SimpleTupleset(v,
-                                columns=rowInfoTupleset.columns,
-                                hint=v,
-                                op='nested construct value', debug=context.debug)
+                                #if id label is set use that 
+                                label = prop.value.construct.id.getLabel()
+                                if label:
+                                    col = tupleset.findColumnPos(label, True)
+                                else:
+                                    col = None                                
+                                if not col:
+                                    #assume we're doing a cross join:
+                                    ccontext.currentTupleset = ccontext.initialModel
+                                else:
+                                    pos, rowInfoTupleset = col
+                                    v = list([irow for cell, i, irow in getColumn(pos, outerrow)])
+                                    #print '!!!v', col, label, len(v), v#, 'row', row
+                                    #assert isinstance(col.type, Tupleset)
+                                    ccontext.currentTupleset = SimpleTupleset(v,
+                                    columns=rowInfoTupleset.columns,
+                                    hint=v,
+                                    op='nested construct value', debug=context.debug)
                                 
-                            #print '!!v eval', prop, ccontext.currentRow, rowcolumns
-                            v = prop.value.evaluate(self, ccontext)
-                            v = flatten(v, flattenTypes=Tupleset)
-                        else:
-                            ccontext.finalizedAggs = context.finalizedAggs
-                            ccontext.accumulate = context.accumulate
-                            ccontext.groupby = op.parent.groupby
-                            v = context.currentRow
-                            ccontext.currentTupleset = SimpleTupleset(v,
-                                columns=rowcolumns, 
-                                hint=tupleset, 
-                                op='construct on '+subjectlabel, debug=context.debug)
-                            
-                            ccontext.currentProjects = prop.projects
-                            if (not prop.projects or prop.projects[0] is prop.value
-                                or prop.hasAggFunc or not row or len(row[0]) <= 1):
-                                #don't bother with all the expression-in-list handling below                                
-                                v = flatten(prop.value.evaluate(self, ccontext),
-                                                            flattenTypes=Tupleset)                                
-                            elif op.parent.groupby:
-                                v = self.evalAggregate(ccontext, prop.value, False)
+                                #print '!!v eval', prop, ccontext.currentRow, rowcolumns
+                                v = prop.value.evaluate(self, ccontext)
+                                v = flatten(v, flattenTypes=Tupleset)
+                            elif isAllProp:
+                                assert prop.nameFunc
+                                if ccontext.depth < 1:
+                                    ccontext.depth = 1
+                                v = self.buildObject(ccontext, ResourceUri.new(idvalue), True)
                             else:
-                                v = self._evalList(ccontext, prop.value)
+                                ccontext.finalizedAggs = context.finalizedAggs
+                                ccontext.accumulate = context.accumulate
+                                ccontext.groupby = op.parent.groupby
+                                v = context.currentRow
+                                ccontext.currentTupleset = SimpleTupleset(v,
+                                    columns=rowcolumns, 
+                                    hint=tupleset, 
+                                    op='construct on '+subjectlabel, debug=context.debug)
+                            
+                                ccontext.currentProjects = prop.projects
+                                if (not prop.projects or prop.projects[0] is prop.value
+                                    or prop.hasAggFunc or not row or len(row[0]) <= 1):
+                                    #don't bother with all the expression-in-list handling below                                    
+                                    v = flatten(prop.value.evaluate(self, ccontext),
+                                                                flattenTypes=Tupleset)            
+                                elif op.parent.groupby:
+                                    v = self.evalAggregate(ccontext, prop.value, False)
+                                else:
+                                    v = self._evalList(ccontext, prop.value)                          
                         
-                        #print '####PROP', prop.name or prop.value.name, 'v', v
-                        if prop.nameFunc:
-                            name = flatten(prop.nameFunc.evaluate(self, context), to=listCtor)
-                            if not name: #don't include property in result
-                                continue
-                        else:
-                            name = prop.name or prop.value.name
+                            #print '####PROP', prop.name or prop.value.name, 'v', v
+                            if prop.nameFunc:
+                                name = flatten(prop.nameFunc.evaluate(self, context), to=listCtor)
+                                if not name: #don't include property in result
+                                    continue
+                            else:
+                                name = prop.name or prop.value.name
                                                
-                        pattern = _setConstructProp(shape, pattern, prop, v, name, listCtor)
-                        if prop.value.name and isinstance(prop.value, jqlAST.Project):
-                            propsAlreadyOutput.add(prop.value.name)
+                            pattern = _setConstructProp(shape, pattern, prop, v, name, listCtor)
+                            if prop.value.name and isinstance(prop.value, jqlAST.Project):
+                                propsAlreadyOutput.add(prop.value.name)
                 
                 if allpropsOp:
                     if shape is op.dictShape: 
                         #don't overwrite keys already created
                         propsAlreadyOutput.update(pattern)
-
-                    #XXX what about scope -- should initialModel just filter by scope if set?
-                    rows = context.initialModel.filter({ SUBJECT: idvalue })
-                    if islist:
-                        propset = _getList(idvalue, rows)
-                    else:
-                        propset = _getAllProps(idvalue, rows, propsAlreadyOutput)
+                    
+                    self._setAllProps(context, islist, propsAlreadyOutput, 
+                                        idvalue, shape, pattern, allpropsOp)                    
                         
-                    for propname, proprows in propset:
-                        ccontext = copy.copy(context)
-                        ccontext.currentTupleset = SimpleTupleset([proprows],
-                            columns=context.initialModel.columns,
-                            op='allprop project on %s'% propname, 
-                            debug=context.debug)
-                        ccontext.currentRow = proprows
-                        value = jqlAST.Project(OBJECT, constructRefs=True).evaluate(self, ccontext)
-                        _setConstructProp(shape, pattern, allpropsOp, value, propname, listCtor)
-
                 currentIdvalue = context.constructStack.pop()
                 assert idvalue == currentIdvalue
                 yield pattern

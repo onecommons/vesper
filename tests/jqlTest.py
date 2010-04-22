@@ -45,6 +45,18 @@ t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}, ])
 
 t("{id : foo MERGEALL}", [{'2': 'bar', '3': 'bar'}])
 
+t('''
+{
+ id : *
+ MERGEALL
+}
+''',
+[{'2': {'foo': 'bar', 'id': '2'},
+  '3': {'foo': 'bar', 'id': '3'},
+  '_:1': {'child': {'foo': 'bar', 'id': '3'}, 'id': '_:1', 'parent': '1'},
+  '_:2': {'child': {'foo': 'bar', 'id': '2'}, 'id': '_:2', 'parent': '1'}}]
+)
+
 t("{}", [{}]) 
 
 t("(foo)",['bar', 'bar']) 
@@ -768,6 +780,35 @@ model=modelFromJson([{
 )
 
 t.group = 'follow'
+
+t("""
+{ id, 'top' : follow(id, subsumedby, true, true)
+}
+""", [{'id': 'anotherparent', 'top': None},
+ {'id': 'noparents', 'top': None},
+ {'id': 'parentsonly', 'top': 'noparents'},
+ {'id': 'hasgrandparents3', 'top': ['noparents', 'anotherparent']},
+ {'id': 'hasgrandparents2', 'top': 'noparents'},
+ {'id': 'hasgrandparents1', 'top': 'noparents'}], 
+ model=modelFromJson([
+  { "id" : "noparents", 'type' : 'tag'
+  },
+  { "id" : "anotherparent", 'type' : 'tag'
+  },
+  { "id" : "parentsonly",
+    "subsumedby" : "noparents",
+  },
+  { "id" : "hasgrandparents1",
+    "subsumedby" : "parentsonly",
+  },  
+  { "id" : "hasgrandparents2",
+    "subsumedby" : ["parentsonly","noparents"]
+  },
+  { "id" : "hasgrandparents3",
+    "subsumedby" : ["parentsonly","anotherparent"]
+  }  
+])
+)
 
 t('''
 { ?tag, id, label, 
