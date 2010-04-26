@@ -248,6 +248,8 @@ t('''
 [{'blah': 'bar', 'id': '3'}, {'blah': 'bar', 'id': '2'}]
 )
 
+t(u'("\u2019\\x0a")', [u'\u2019\n']) #\u2019 is RIGHT SINGLE QUOTATION MARK
+
 t(r'''
 ("unicode\x0alinefeed")
 ''', ["unicode\nlinefeed"])

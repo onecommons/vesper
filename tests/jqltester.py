@@ -220,7 +220,7 @@ def main(t, cmdargs=None):
         
         if not options.quiet:
             print '*** running test:', name
-            print 'query', test.query
+            print 'query', test.query.strip().encode('unicode_escape')
 
         if options.printmodel and id(test.model) != lastmodelid:
             lastmodelid = id(test.model)

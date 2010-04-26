@@ -125,13 +125,26 @@ def t_FLOAT(t):
     return t
 
 def t_STRING(t):
-    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*')'''
-    t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
+    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*')'''    
+    #support JSON strings which means need to decode escapes like \r and \u0000 
+    #since this is a subset of python literal syntax so we can use the unicode-escape decoding
+    if isinstance(t.value, unicode):
+        #decode on unicode triggers a string encoding with the default encoding
+        #so we need to convert the unicode into a string that looks like Python
+        # unicode literal, hence the encode('ascii', 'backslashreplace')
+        t.value = t.value[1:-1].encode('ascii', 'backslashreplace').decode("unicode-escape")
+        #print 'tv', len(t.value), type(t.value)
+    else:
+        t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
+    #XXX don't do unicode-escape if no escapes appear in string
     return t
 
 def t_PROPSTRING(t):
     r'''(?:<(?:[^<>\n\r\\]|(?:<>)|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*>)'''
-    t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
+    if isinstance(t.value, unicode):        
+        t.value = t.value[1:-1].encode('ascii', 'backslashreplace').decode("unicode-escape")
+    else:
+        t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
     return t
 
 def t_LABEL(t):

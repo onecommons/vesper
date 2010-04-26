@@ -12,7 +12,6 @@ import operator, copy, sys, pprint, itertools
 
 from vesper.query import jqlAST
 from vesper.data import base
-from vesper.data.base import RDF_MS_BASE
 from vesper.utils import flattenSeq, flatten, debugp
 from vesper import pjson
 from vesper.query import *
@@ -22,6 +21,7 @@ from vesper.backports import product
 #############################################################
 ####################  Grouping  #############################
 #############################################################
+RDF_MS_BASE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
 
 def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
     """
