@@ -133,7 +133,6 @@ def t_STRING(t):
         #so we need to convert the unicode into a string that looks like Python
         # unicode literal, hence the encode('ascii', 'backslashreplace')
         t.value = t.value[1:-1].encode('ascii', 'backslashreplace').decode("unicode-escape")
-        #print 'tv', len(t.value), type(t.value)
     else:
         t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
     #XXX don't do unicode-escape if no escapes appear in string

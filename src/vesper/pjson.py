@@ -4,102 +4,13 @@
 pjson (`persistent json`)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-pjson is a set of property names and value patterns designed to make it easy 
-to persist JSON. Its basic elements can be summarized as:
-
-  `id` property 
-     Indicates the id (or key) of the JSON object
-   A JSON object like `{"$ref" : "ref"}` or a value that matches `@ref` pattern.
-      Parses as an object reference
-   A JSON object like `{"datatype": "datatype_name", value : "value" }` 
-      Parses the value is a non-JSON datatype
-  
-`pjson` also defines a header object that can be used to specify alternative 
-names or patterns for those predefined -- the aim is allow the use of 
-existing JSON without having to modify it other than supply a pjson header.
-
-The header object must contain a property is name is *"pjson"* and value is *"0.9"*.
-It may also contain any of the reserved `pjson` property names 
-(i.e. `id`, `$ref`, `namemap`, `id`, `datatype` and `context`) 
-If present the value of the property is used as the reserved name.
-For example, ``{ "psjon": "0.9", "id" : "itemid" }`` will instruct the parser 
-to treat "itemid" as the `id`; properties named "id" will be treated as standard properties.
-
-The header object can also contain a property named `refs`, which can be either a string or a JSON object. 
-If it is a string, it must either be empty or match the following pattern:
-  
-*literal?*'('*regex*')'*literal?*
-
-Where *regex* is a string that will be treated as a regular expression and 
-*literal* are optional strings [1]_. When parsing JSON will treat any property
-value that matches the *regex* as an object reference.
-The *literal*s at the begin or end of the pattern also have to match if specified
-but they are ignored as part of the object reference. Note that the parentheses
-around the *regex* are required to delimitate the regex (even if no *literal* 
-is specified) but ignored when pattern matching the value.
-The regex follows the Javascript regular expressions (but without the leading 
-and trailing "/") except two special values can be included in the regex:
-*ABSURI* and *URIREF*. The former will expand into regular expression matching
-an absolute URL, the latter expands to regular expression that matches 
-relative URLs, which includes most strings that don't contain spaces or most
-punctuation characters.  
-
-The Ref pattern will be applied after any id pattern are 
-applied, including the default "::" id pattern, so the pattern needs to match 
-the results of the id pattern, which might not be the same as data store's 
-representation of the id.
-
-As an example, the default `refs` pattern is @((::)?URIREF).
-
-If `refs` is an empty string, pattern matching will be disabled.
-
-If `refs` is an JSON object it must contain only one property. 
-The property name will be treated as a ref pattern as described above,
-and the property value will be used to generate the object reference.
-The sequence "@@" will be replaced with the value of the regex match.
-For example:
-
-``{"<([-_a-zA-Z0-9])>" : "http://example.com/@@"}``
-
-will treat values with like "<id1>" as an object reference with the value
-"http://example.com/id1".
-
-When serializing to JSON, any object reference that doesn't match the `refs` 
-pattern will be serialized as an explicit ref object.
-Likewise, any value that is not an object reference but *does* match the `refs` 
-pattern will be serialized as an explicit data value.
-
-Advance properties:
-
- `namemap`  
-    The value of the `namemap` property must be a `pjson` header object as 
-    described above. That header will be applied to all properties and descendent objects 
-    contained within the JSON object that contains the `namemap` property.
-    
- `context`
-    The presence of a `context` property will assign that context to all 
-    properties and descendent objects contained within the JSON object.
-    The `context` property can also appear inside a `datatype` or `$ref` object.
-    In that case, the context will be applied to only that value.
-    
-Additional semantics:
-
- * A JSON object without an `id` will be associated with the closest ancestor 
-   (containing) JSON object that has an id. 
-   If the object is at the top level it will be assigned an anonymous id.
- * `datatype` property can be either 'json', 'lang:' + *language code*, or a URI reference.
-    If "json", the value is treated as is. If it begins with "lang:", it labels the value
-    (which should be a string) with the given language code. 
-    Any other value will be treated as non-JSON datatype whose interpretation 
-    is dependent on the data store.
-
-.. [1] Design note: This pattern was chosen because it always reversible 
- -- so that the same `namemap` can be used when serializing `pjson` to generate 
- references from the object ids.
-
-
-Parse and serialize psjon to and from Vesper tuplesets.
+Parse and serialize pjson to and from Vesper tuplesets.
 '''
+#XXX implement 
+#idmap: id : { prop : value }
+#and
+#propmap: propname : { id : value }
+#XXX: replace RuntimeError with custom Exception class
 import re
 
 from vesper.backports import *
@@ -233,7 +144,7 @@ True
 _defaultBNodeGenerator = 'uuid'
 
 def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, 
-                    datatypePropName = 'datatype', contextPropName='context'):
+    datatypePropName = 'datatype', contextPropName='context'):
     assert objectType != OBJECT_TYPE_RESOURCE
     if len(objectType) > 1:
         valueparse = _xsdmap.get(objectType)
@@ -261,8 +172,16 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None,
             literalObj[contextPropName] = scope
             
         return literalObj
-    else:
+    else:  #its literal, just return it
         return data
+
+def pjsonDataTypeToRdfDataType(objectType):
+    if objectType.startswith('lang:'):
+        objectType = objectType[len('lang:'):]
+    elif ':' not in objectType:
+        #make the type look like an URL
+        objectType = 'pjson:' + objectType
+    return objectType
 
 def findPropList(model, subject, predicate, objectValue=None, objectType=None, scope=None):
     #by default search for special proplist bnode pattern
@@ -338,7 +257,15 @@ class Serializer(object):
     def _value(self, objectValue, objectType, context=None):
         datatypeName = self.parseContext.datatypeName
         contextName = self.parseContext.contextName
-        v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo, 
+        datatypeReplacements = self.parseContext.datatypeReplacements
+        v = None
+        if context is None and datatypeReplacements.get(objectType):            
+            for r in datatypeReplacements[objectType]:
+                match = r.serializePattern.match(objectValue)
+                if match:
+                    v = match.expand(r.serializeTemplate)
+        if v is None:
+            v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo,
                                         context, datatypeName, contextName)
 
         if isinstance(v, (str, unicode)):
@@ -362,7 +289,10 @@ class Serializer(object):
         "::" replacement.
         Otherwise, return the property name. 
         '''
-        return _serializeAbbreviations(prop, self.parseContext.propReplacements)
+        prop = _serializeAbbreviations(prop, self.parseContext.propReplacements)
+        if self.parseContext.isReservedPropertyName(prop):
+            prop = "::" + prop
+        return prop        
 
     def serializeId(self, id):
         return _serializeAbbreviations(id, self.parseContext.idReplacements)
@@ -481,7 +411,6 @@ class Serializer(object):
 
         idName = self.parseContext.idName 
         contextName = self.parseContext.contextName 
-        reservedNames = self.parseContext.reservedNames
         for res in nodes: 
             childNodes = root.getProperties(res)           
             if not childNodes:
@@ -525,9 +454,7 @@ class Serializer(object):
                 
                 key = self.serializeProp(prop)
                 if key in currentobj:
-                    #XXX create namemap that remaps ID if conflict
-                    if key in reservedNames:
-                        raise RuntimeError('property with reserved name %s' % key)
+                    assert key not in self.parseContext.reservedNames
                     #must have be already handled by _setPropSeq
                     self._finishPropList(currentobj[key], idrefs, resScope, lists)
                     continue 
@@ -628,6 +555,7 @@ def _serializeAbbreviations(name, replacements):
         if r.parsePattern.match(name):
             #this prop matches an pattern
             return '::' + name
+    #::name => ::::name
     if name.startswith('::'):
         return '::' + name
     return name
@@ -690,6 +618,8 @@ class ParseContext(object):
             self.idsValue = self.nameMap.get('ids', parent.idsValue)
             self.propsValue = self.nameMap.get('props', parent.propsValue)
             self.defaultsValue = self.nameMap.get('defaults',parent.defaultsValue)
+            self.exclude = self.nameMap.get('exclude',parent.exclude)
+            self.datatypes = self.nameMap.get('datatypes', parent.datatypes)
         else:
             self.idName = self.nameMap.get('id', 'id')
             self.contextName = self.nameMap.get('context', 'context')
@@ -700,7 +630,10 @@ class ParseContext(object):
             self.idsValue = self.nameMap.get('ids')
             self.propsValue = self.nameMap.get('props')
             self.defaultsValue = self.nameMap.get('defaults')
-
+            self.exclude = self.nameMap.get('exclude', [])
+            self.datatypes = self.nameMap.get('datatypes', {})
+            
+        self.validateProps()
         self.reservedNames = [self.idName, self.contextName, self.refName, 
             self.datatypeName, 
             #it's the parent context's namemap propery that is in effect:
@@ -710,8 +643,21 @@ class ParseContext(object):
         self._setIdRefPattern(self.refsValue)
         self.propReplacements = self._setReplacements(self.propsValue)
         self.idReplacements = self._setReplacements(self.idsValue)
+        self.datatypeReplacements = self._setDataTypePatterns(self.datatypes)
         self.currentProp = None
     
+    def validateProps(self):
+        for name in 'id', 'context', 'namemap', 'datatype', 'ref':
+            if not isinstance(getattr(self, name+'Name'), (str, unicode)):
+                raise RuntimeError('value of "%s" property must be a string' % name)
+
+        if not isinstance(self.exclude, list):
+            raise RuntimeError('value of "exclude" property must be a list')
+        if not isinstance(self.datatypes, dict):
+            raise RuntimeError('value of "datatypes" property must be an object')
+
+        #XXX: more validation
+        
     def nameMapChanges(self):
         if self.parent and self.nameMap != self.parent.nameMap:
             return True
@@ -760,6 +706,23 @@ class ParseContext(object):
             #if property present but has empty value, remove current pattern
             self.idrefpattern, self.refTemplate = None, None
 
+    def _setDataTypePatterns(self, datatypes):
+        '''
+        { datatype : pattern }
+        or
+        { datatype : [patterns] }
+        '''
+        patterns = {}
+        for datatype, replacements in datatypes.items():
+            if not isinstance(replacements, list):
+                replacements = [_parseIdRefPattern(replacements)]
+            else:
+                replacements = [_parseIdRefPattern(r) for r in replacements]
+                replacements.sort(key=lambda v: v.weight)
+            
+            patterns[pjsonDataTypeToRdfDataType(datatype)] = replacements
+        return patterns
+        
     def lookslikeIdRef(self, s):
         #XXX think about case where if number were ids
         if not isinstance(s, (str,unicode)):
@@ -776,6 +739,16 @@ class ParseContext(object):
             res = self.parseId(res)
             return res
         return False
+
+    def deduceDataType(self, s):
+        datatypes = self.datatypeReplacements
+        if datatypes:
+            for datatype, replacements in datatypes.items():
+                for r in replacements:
+                    match = r.parsePattern.match(s)
+                    if match:
+                        return match.expand(r.parseTemplate), datatype
+        return s, OBJECT_TYPE_LITERAL
 
 class Parser(object):
     
@@ -891,7 +864,7 @@ class Parser(object):
             #print scope
             
             for prop, val in obj.items():
-                if parseContext.isReservedPropertyName(prop):
+                if parseContext.isReservedPropertyName(prop) or prop in parseContext.exclude:
                     continue                
                 prop = parseContext.parseProp(prop)
                 parseContext.currentProp = prop
@@ -1021,12 +994,7 @@ class Parser(object):
                 item = value
                 res = None
             else:
-                if objectType.startswith('lang:'):
-                    objectType = objectType[len('lang:'):]
-                elif ':' not in objectType:
-                    #make the type look like an URL
-                    objectType = 'pjson:' + objectType
-                return value, objectType, context
+                return value, pjsonDataTypeToRdfDataType(objectType), context
         else:
             res = parseContext.lookslikeIdRef(item)
             context = parseContext.context
@@ -1036,13 +1004,14 @@ class Parser(object):
         elif item is None:
             return 'null', JSON_BASE+'null', context
         elif isinstance(item, bool):
-            return (item and 'true' or 'false'), XSD+'boolean', context
+            return (item and u'true' or u'false'), XSD+'boolean', context
         elif isinstance(item, (int, long)):
             return unicode(item), XSD+'integer', context
         elif isinstance(item, float):
             return unicode(item), XSD+'double', context
         elif isinstance(item, (unicode, str)):
-            return item, OBJECT_TYPE_LITERAL, context
+            value, objectType  = parseContext.deduceDataType(item)
+            return value, objectType, context
         else:            
             raise RuntimeError('parse error: unexpected object type: %s (%r)' % (type(item), item)) 
 

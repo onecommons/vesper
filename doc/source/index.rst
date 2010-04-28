@@ -7,7 +7,7 @@ Introducing Vesper
 What is Vesper? 
 ---------------
 
-Vesper is data-persistence framework that enables you to query and update data as `JSON`_, independent of the database that is actually storing the data. 
+Vesper is data-persistence framework that enables you to query and update data as `JSON`_, independent of the type of database that is actually storing the data. 
 
 Datastore Independence
 ~~~~~~~~~~~~~~~~~~~~~~

@@ -30,6 +30,7 @@ def assert_stmts_match(expected_stmts, result_stmts):
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, 
     includesharedrefs=False, intermediateJson=None, serializerOptions=None):
+    global test_counter; test_counter += 1
     serializerOptions = serializerOptions or {}
     if isinstance(src, (str,unicode)):
         test_json = json.loads(src)
@@ -51,11 +52,13 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
         test_json = intermediateJson
     assert_json_match(result_json, test_json)
     if backagain:
+        test_counter -= 1
         assert_stmts_and_back_match(result_stmts,
                         serializerOptions=serializerOptions)
 
 def assert_stmts_and_back_match(stmts, expectedobj = None, 
                         serializerOptions=None, addOrderInfo=True):
+    global test_counter; test_counter += 1                        
     serializerOptions = serializerOptions or {}
     result = Serializer(**serializerOptions).to_pjson( stmts )
     #print 'serialized', result
@@ -235,7 +238,7 @@ def test():
     "namemap" : namemap,
     "data" :[{ "itemid" : "1", "foo" : { 'ref' : "1"}
     }]
-    } 
+    }     
     assert_json_and_back_match(src, serializerOptions= dict(nameMap=namemap,
                                                     explicitRefObjects = True))
 
@@ -278,6 +281,38 @@ def test():
     ]
     assert_json_and_back_match(src, expectedstmts=expectedStmts, serializerOptions= dict(nameMap=namemap))
     
+    stmts = [
+       Statement("1", "id", "a property, not an id", "L")
+    ]
+    src = [{ "id" : "1", 
+            "::id" : "a property, not an id"}]
+    assert_json_and_back_match(src, expectedstmts=stmts)
+
+    namemap = { 
+      "id" : "oid",
+       "refs": "@((::)?URIREF)"
+    }    
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,
+    "data" :[ { "oid" : "1", 
+                 "id" : "a property, not an id"}]
+    }
+    assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
+    
+    namemap = { 
+    "defaults" : { '(type|List)': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' },
+    "refs": "<(URIREF)>"
+    }
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,    
+    "data" : [{
+        'id' : '1',
+        'type' : '<List>'
+        }]
+    }
+    stmts = [Statement("1", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+     'http://www.w3.org/1999/02/22-rdf-syntax-ns#List', OBJECT_TYPE_RESOURCE,'')]
+    assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
     
     #############################################
     ################ scope/context tests
@@ -393,8 +428,44 @@ def test():
      }]
     assert_json_and_back_match(src) 
         
-    print 'tests pass'
+    #test exclude
+    src = [
+     {
+      "pjson": "0.9", 
+      "namemap": {
+         'exclude' : ['prop1']
+      }
+    },
+    {
+      'id' : "1",
+      'prop1': 1,
+      'prop2': 2
+    },    
+    ]
+    intermediateJson = [{ 'id' : "1", 'prop2': 2 }]
+    assert_json_and_back_match(src, intermediateJson=intermediateJson)
 
+    namemap = {
+        "datatypes" : { "date" : r'(\d\d\d\d-\d\d-\d\d)' },
+         "refs": "@((::)?URIREF)"
+    }
+    src = {
+        "pjson": "0.9",
+        "namemap": namemap,
+        "data" : [ {
+            "id" : "1", 
+            "property1" : "2010-04-01",
+            "property2" : "not a date"
+        } ] 
+    }
+    expectedStmts =  [Statement('1', 'property1', '2010-04-01', 'pjson:date', ''),
+        Statement('1', 'property2', 'not a date', 'L', '')]            
+    assert_json_and_back_match(src, serializerOptions=dict(nameMap=namemap), 
+                                                expectedstmts=expectedStmts)
+    
+    print 'ran %d tests, all pass' % test_counter
+
+test_counter = 0
 
 if __name__  == "__main__":
     test()
