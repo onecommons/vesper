@@ -2,7 +2,7 @@
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 @Action
 def testaction(kw, retval):
-    query = "{comment:* where(label='%s')}" % kw._name #XXX qnames are broken
+    query = "{comment where(label='%s')}" % kw._name #XXX qnames are broken
     r = kw.__server__.dataStore.query(query)
     result = r['results']
         
