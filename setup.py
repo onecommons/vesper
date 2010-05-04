@@ -17,7 +17,7 @@ if pyver < (2,4):
     print "Sorry, %s requires version 2.4 or later of Python" % PACKAGE_NAME
     sys.exit(1)        
 if pyver < (2,5):
-  install_requires.extend(['wsgiref'])
+  install_requires.extend(['wsgiref', 'uuid'])
 if pyver < (2,6):
   install_requires.extend(['simplejson'])
 

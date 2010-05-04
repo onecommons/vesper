@@ -27,21 +27,6 @@ def SplitQName(qname):
         return None, l[0]
     return tuple(l)
 
-def GenerateUuid():
-    return random.getrandbits(16*8) #>= 2.4
-
-def UuidAsString(uuid):
-    """
-    Formats a long int representing a UUID as a UUID string:
-    32 hex digits in hyphenated groups of 8-4-4-4-12.
-    """   
-    s = '%032x' % uuid
-    return '%s-%s-%s-%s-%s' % (s[0:8],s[8:12],s[12:16],s[16:20],s[20:])
-
-def CompareUuids(u1, u2):
-    """Compares, as with cmp(), two UUID strings case-insensitively"""
-    return cmp(u1.upper(), u2.upper())
-
 OBJECT_TYPE_RESOURCE = "R"
 OBJECT_TYPE_LITERAL = "L"
 
@@ -60,15 +45,8 @@ RDF_SCHEMA_BASE=u"http://www.w3.org/2000/01/rdf-schema#"
 
 _bNodeCounter  = 0
 #like this so this will be a valid bNode token (NTriples only allows alphanumeric, no _ or - etc.
-try:
-    import uuid
-    _sessionBNodeUUID = 'x'+ uuid.uuid4().hex
-except ImportError:
-    try:
-        from Ft.Lib import Uuid
-        _sessionBNodeUUID = "x%032xx" % Uuid.GenerateUuid()
-    except ImportError:
-        _sessionBNodeUUID = "x%032xx" % random.getrandbits(16*8)
+import uuid
+_sessionBNodeUUID = 'x'+ uuid.uuid4().hex
 
 #todo rename this class to MutableStatement
 #write a Statement class derived from tuple, add a BaseStatement marker class
@@ -470,8 +448,6 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             #XXX generateBnode doesn't detect collisions, maybe gen UUID instead            
             if 'generateBnode' not in options:
                 options['generateBnode']='uuid'            
-            if 'useDefaultRefPattern' not in options:
-                options['useDefaultRefPattern']=False
             if not contents:
                 return [], type
             stmts = pjson.tostatements(contents, **options), type
@@ -574,7 +550,6 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     elif type == 'pjson' or type == 'mjson':
         isMjson = type == 'mjson'
         from vesper import pjson, multipartjson
-        #XXX use uri2prefixMap
         options = options or {}
         objs = pjson.tojson(statements, preserveTypeInfo=True, asList=isMjson)
         if isMjson:
