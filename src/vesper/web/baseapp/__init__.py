@@ -41,11 +41,15 @@ def datarequest(kw, retval):
         
         #don't catch exceptions for write operations because we want 
         #the whole request transaction to be aborted
+        #sendJsonRpcError below it will turn the error into json-rpc error response
         if action == 'update':
             addStmts, removeStmts = dataStore.update(data)
             result = pjson.tojson(addStmts)
         elif action == 'add':
             addJson = dataStore.add(data)
+            result = addJson #pjson.tojson(addStmts))
+        elif action == 'create':
+            addJson = dataStore.create(data)
             result = addJson #pjson.tojson(addStmts))
         elif action == 'query':
             #returns { errors, results }
@@ -80,7 +84,7 @@ def datarequest(kw, retval):
     else:
         if not isinstance(requests, list):
            requests = [requests] 
-        #XXX raccoon needs default content-type 
+        #XXX vesper.app should set a default content-type 
         kw._responseHeaders['Content-Type'] = 'application/json'
         response = [isinstance(x, dict) and handleRequest(**x) or 
 dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
@@ -97,6 +101,18 @@ Route('favicon.ico')(vesper.web.route.servefile)
 actions = { 'http-request' : vesper.web.route.gensequence,
           }
 
+@Action
+def sendJsonRpcError(kw, retVal):
+    if kw._requestHeaders['Content-Type'] != 'application/json':
+        return retVal
+    kw._responseHeaders['Content-Type'] = 'application/json'
+    ei = kw._errorInfo
+    import traceback
+    errordata = traceback.format_exception(ei.type, ei.value, ei.traceback)
+    response = dict(id=None, jsonrpc='2.0', error=dict(code=-32000, 
+                                    data=errordata, message='Server Error'))
+    return json.dumps(response, indent=4)
+    
 try:
     import mako
 
@@ -113,7 +129,7 @@ try:
         except:
             return mako.exceptions.html_error_template().render()#traceback=(type,value,tb))
     
-    actions['http-request-error'] = [displayError]
+    actions['http-request-error'] = [sendJsonRpcError, displayError]
 except ImportError:
     pass
 

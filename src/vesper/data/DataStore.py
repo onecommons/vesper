@@ -18,14 +18,18 @@ from vesper.data.base.schema import defaultSchemaClass
 
 from vesper import pjson
 
+class DataStoreError(Exception):
+    '''Base DataStore error'''
+
 def _toStatements(contents, **kw):
     if not contents:
         return [], None
     if isinstance(contents, (list, tuple)):
         if isinstance(contents[0], (tuple, base.BaseStatement)):
             return contents, None #looks like a list of statements
-    #assume pjson:
-    return pjson.tostatements(contents, setBNodeOnObj=True, **kw), contents
+    #at this point assume contents is pjson
+    kw['setBNodeOnObj']=True #set this option so generated ids are visible
+    return pjson.tostatements(contents, **kw), contents
 
 class DataStore(transactions.TransactionParticipant): # XXX this base class can go away
     '''
@@ -174,7 +178,8 @@ class BasicStore(DataStore):
             self.model = self.schema
 
         #hack!:
-        if self.storage_template_options.get('generateBnode') == 'counter':            
+        if self.model_options.get('parseOptions', self.storage_template_options
+                                           ).get('generateBnode') == 'counter':
             model.bnodePrefix = '_:'
             self.model.bnodePrefix = '_:'
 
@@ -316,9 +321,15 @@ class BasicStore(DataStore):
     
     def _toStatements(self, json):
         #if we parse pjson, make sure we generate the same kind of bnodes as the model
-        return _toStatements(json, generateBnode=self.storage_template_options.get('generateBnode'))
+        parseOptions=self.model_options.get('parseOptions', 
+                                    self.storage_template_options)
+        #XXX add parseOptions parameter that can overrides config settings
+        return _toStatements(json, **parseOptions)
         
     def add(self, adds):
+        return self._add(adds, False)
+        
+    def _add(self, adds, mustBeNewResources):
         '''
         Adds data to the store.
 
@@ -326,19 +337,21 @@ class BasicStore(DataStore):
         '''
         if not self.join(self.requestProcessor.txnSvc):
             #not in a transaction, so call this inside one
-            func = lambda: self.add(adds)
+            func = lambda: self._add(adds, mustBeNewResources)
             return self.requestProcessor.executeTransaction(func)
         
         stmts, jsonrep = self._toStatements(adds)
         resources = set()
         newresources = []
         for s in stmts:
-            if self.newResourceTrigger:
+            if mustBeNewResources or self.newResourceTrigger:
                 subject = s[0]
                 if subject not in resources:
-                    resource.update(subject)
-                    if not self.model.filter(subject=subject, hints=dict(limit=1)): 
+                    resources.update(subject)
+                    if not self.model.getStatements(subject, hints=dict(limit=1)):
                         newresources.append(subject)
+                    elif mustBeNewResources:
+                        raise DataStoreError("id %s already exists" % subject)
         
         if self.newResourceTrigger and newresources:  
             self.newResourceTrigger(newresources)
@@ -347,6 +360,15 @@ class BasicStore(DataStore):
         
         self.model.addStatements(stmts)
         return jsonrep or stmts
+
+    def create(self, adds):
+        '''
+        Adds data to the store. If the id of any resource is already present 
+        in the datastore an exception is raised.
+
+        `adds`: A list of either statements or pjson conforming dicts        
+        '''
+        return self._add(adds, True)
 
     def _removePropLists(self, stmts):
         if not self.model.canHandleStatementWithOrder:

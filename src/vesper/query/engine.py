@@ -753,7 +753,7 @@ class SimpleQueryEngine(object):
                 context.currentRow = [idvalue] + row
                 if context.debug: 
                     validateRowShape(tupleset.columns, outerrow)
-                    print >> context.debug, 'valid outerrow'
+                    #print >> context.debug, 'valid outerrow'
                 #note: right outer joins break the following validateRowShape
                 if context.debug: validateRowShape(rowcolumns, context.currentRow)
                 

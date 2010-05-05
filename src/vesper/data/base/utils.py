@@ -551,7 +551,11 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         isMjson = type == 'mjson'
         from vesper import pjson, multipartjson
         options = options or {}
-        objs = pjson.tojson(statements, preserveTypeInfo=True, asList=isMjson)
+        if 'pjson' in options:
+            pjsonOptions = options.pop('pjson')
+        else:
+            pjsonOptions = {}
+        objs = pjson.tojson(statements, preserveTypeInfo=True, asList=isMjson, **pjsonOptions)
         if isMjson:
             return multipartjson.dump(objs, stream, **options)
         else:
@@ -564,8 +568,14 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         #use default_flow_style: True always flow (json-style output), False always block    
         # default_flow_style=None block if nested collections other flow
         defaultoptions = dict(default_style="'")
-        if options: defaultoptions.update(options)
-        return yaml.safe_dump( pjson.tojson(statements, preserveTypeInfo=True), stream, **defaultoptions)
+        if options: 
+            defaultoptions.update(options)
+        if 'pjson' in defaultoptions:
+            pjsonOptions = defaultoptions.pop('pjson')
+        else:
+            pjsonOptions = {}        
+        return yaml.safe_dump( pjson.tojson(statements, preserveTypeInfo=True, 
+                                     **pjsonOptions), stream, **defaultoptions)
 
 def canWriteFormat(format):
     if format in ('ntriples', 'ntjson', 'json', 'pjson', 'mjson'):

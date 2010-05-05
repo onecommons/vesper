@@ -46,11 +46,11 @@ Txn.prototype = {
         });
                 
         if (callback) {
-            var $this = $(elem); //note: elem is undefined will bind on doc
-            var thisCallback = function(event) {
+            //note: if elem is undefined will bind on doc            
+            $(elem).one('dbdata', function(event) {
                 //the response is a list and jquery turns that into arguments  
                 console.log('thiscallback', arguments);
-                var responses = arguments; //first item is the event
+                var responses = arguments; //note: first item is the event
                 for (var i=1; i < responses.length; i++) {
                     var response = responses[i];
                     if (response.id == null && response.error) {
@@ -62,11 +62,8 @@ Txn.prototype = {
                         else
                             callback.call(elem, response.result);
                     }
-                }                
-                $this.unbind('dbdata', thisCallback);                  
-            };
-            //console.log('bind',$this)
-            $this.bind('dbdata', thisCallback);
+                }
+            });
         }
     
         if (this.autocommit) 
@@ -77,9 +74,14 @@ Txn.prototype = {
 
     /* 
     */
-    commit : function() {   
+    commit : function(callback, elem) {
+        if (callback) { //callback signature: function(event, *responses)
+            //note: if elem is undefined will bind on doc            
+            $(elem).one('dbdata', callback);
+        }
+        
         //var clientErrorMsg = this.clientErrorMsg;
-        function callback(data, textStatus) {
+        function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
             console.log('saved!', data, textStatus);
@@ -115,8 +117,8 @@ Txn.prototype = {
               data: requests,
               processData: false, 
               contentType: 'application/json',
-              success: callback,
-              error: callback,
+              success: ajaxCallback,
+              error: ajaxCallback,
               dataType: "json"
             });
         }
@@ -195,6 +197,9 @@ txn.commit();
      dbAdd : function(a1, a2, a3) {
          return this._executeTxn('add', a1,a2, a3);
      },
+     dbCreate : function(a1, a2, a3) {
+         return this._executeTxn('create', a1,a2, a3);
+     },
      dbSave : function(a1, a2, a3) {
          return this._executeTxn('update', a1,a2, a3);
      },     
@@ -208,10 +213,10 @@ txn.commit();
         this.data('currentTxn', new Txn());
         return this;
      },
-     dbCommit : function() {
+     dbCommit : function(callback) {
         var txn = this.data('currentTxn');
         if (txn)
-            txn.commit();
+            txn.commit(callback, this);
         this.removeData('currentTxn');
         return this;
      },

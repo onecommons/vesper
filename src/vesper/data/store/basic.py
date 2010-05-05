@@ -125,11 +125,11 @@ class FileStore(MemStore):
     '''
 
     def __init__(self, source='', defaultStatements=(), context='',
-                            incrementHook=None, serializeOptions=None, **kw):
+           incrementHook=None, serializeOptions=None, parseOptions=None, **kw):
         self.initialContext = context
         self.defaultStatements = defaultStatements
         ntpath, stmts, format = loadFileStore(source, defaultStatements,
-                                        context, incrementHook=incrementHook)
+                                        context, incrementHook, parseOptions)
         if self.canWriteFormat(format):
             self.path = source
             self.format = format
@@ -151,7 +151,8 @@ class FileStore(MemStore):
             tff = TxnFileFactory(self.path)
             outputfile = tff.create('t')
             stmts = self.getStatements()
-            serializeRDF_Stream(stmts, outputfile, self.format, options=self.serializeOptions)
+            serializeRDF_Stream(stmts, outputfile, self.format, 
+                                            options=self.serializeOptions)
             outputfile.close()
         except:
             tff.abortTransaction(None)
@@ -239,7 +240,7 @@ class IncrementalNTriplesFileStore(TransactionModel, IncrementalNTriplesFileStor
     def _getChangeList(self):
         return self.queue
 
-def loadFileStore(path, defaultStatements,context='', incrementHook=None):
+def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseOptions=None):
     '''
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
@@ -258,10 +259,9 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None):
     if os.path.exists(path):
         from vesper.utils import Uri
         uri = Uri.OsPathToUri(path)
+        options = parseOptions or {}
         if incrementHook:
-            options = dict(incrementHook=incrementHook)
-        else:
-            options = {}
+            options['incrementHook']=incrementHook
         stmts, format = parseRDFFromURI(uri, type=format, scope=context,
                                 options=options, getType=True)
     else:
