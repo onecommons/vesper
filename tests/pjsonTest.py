@@ -183,7 +183,7 @@ def test():
     #they should match
     src = r'''
     { "pjson" : "%s",
-    "namemap" : { "refs" : "ref:(\\w+)"},
+    "namemap" : { "refpattern" : "ref:(\\w+)"},
     "data" :[{ "id" : "test",
      "circular" : "ref:test",
      "not a reference" : "@test",
@@ -192,7 +192,7 @@ def test():
         }]
     }
     ''' % VERSION
-    serializerNameMap={ "refs" : "ref:(\\w+)"}
+    serializerNameMap={ "refpattern" : "ref:(\\w+)"}
     assert_json_and_back_match(src, 
             serializerOptions= {'nameMap' : serializerNameMap})
 
@@ -211,7 +211,7 @@ def test():
     src = dict(namemap = dict(id='itemid', namemap='jsonmap'),
     itemid = 1,
     shouldBeARef = '@hello', #default ref pattern is @(URIREF)
-    value = dict(jsonmap=dict(id='anotherid', refs=''), #disable matching
+    value = dict(jsonmap=dict(id='anotherid', refpattern=''), #disable matching
             anotherid = 2,
             #XXX fix assert key != self.ID, (key, self.ID) when serializing
             #id = 'not an id', #this should be treated as a regular property
@@ -232,7 +232,7 @@ def test():
 
     namemap = {
         "id" : "itemid",
-        "ref" : "ref"
+        "$ref" : "ref"
     }
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,
@@ -244,7 +244,7 @@ def test():
 
     #test ref defaults when a regex and replace pattern isn't specified:
     namemap = { 
-        "refs" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' }
+        "refpattern" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' }
     }    
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,
@@ -255,11 +255,11 @@ def test():
 
     #test props 
     namemap = { 
-        "defaults" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',          
+        "sharedpatterns" : { 'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',          
          },         
-         "props" : { '': 'http://myschema.com#' },
-         "ids" : { '': 'http://example.com/instanceA#' },
-         "refs": "@((::)?URIREF)"
+         "propertypatterns" : { '': 'http://myschema.com#' },
+         "idpatterns" : { '': 'http://example.com/instanceA#' },
+         "refpattern": "@((::)?URIREF)"
     }
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,
@@ -290,7 +290,7 @@ def test():
 
     namemap = { 
       "id" : "oid",
-       "refs": "@((::)?URIREF)"
+       "refpattern": "@((::)?URIREF)"
     }    
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,
@@ -300,8 +300,8 @@ def test():
     assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
     
     namemap = { 
-    "defaults" : { '(type|List)': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' },
-    "refs": "<(URIREF)>"
+    "sharedpatterns" : { '(type|List)': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#' },
+    "refpattern": "<(URIREF)>",
     }
     src = { "pjson" : "%s" % VERSION,
     "namemap" : namemap,    
@@ -314,6 +314,24 @@ def test():
      'http://www.w3.org/1999/02/22-rdf-syntax-ns#List', OBJECT_TYPE_RESOURCE,'')]
     assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
     
+    namemap = { 
+    "refpattern": "<(URIREF)>",
+    "propertypatterns" : { 
+        '': 'http://myschema.com#',
+        'a()' : "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" },
+    }
+    src = { "pjson" : "%s" % VERSION,
+    "namemap" : namemap,        
+    "data" : [{
+        'id' : '1',
+        'a' : '<foo>',
+        'another' : "bar"
+        }]
+    }
+    stmts = [Statement('1', 'http://myschema.com#another', 'bar', 'L', ''),
+     Statement('1', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'foo', 'R', '')]
+    assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
+
     #############################################
     ################ scope/context tests
     #############################################
@@ -351,7 +369,7 @@ def test():
     src = [{
       "pjson": "0.9", 
       "namemap": {
-        "refs": "@(URIREF)"
+        "refpattern": "@(URIREF)"
       },
       'context' : 'scope1'
     },
@@ -446,8 +464,8 @@ def test():
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
 
     namemap = {
-        "datatypes" : { "date" : r'(\d\d\d\d-\d\d-\d\d)' },
-         "refs": "@((::)?URIREF)"
+        "datatypepatterns" : { "date" : r'(\d\d\d\d-\d\d-\d\d)' },
+         "refpattern": "@((::)?URIREF)"
     }
     src = {
         "pjson": "0.9",
@@ -462,7 +480,7 @@ def test():
         Statement('1', 'property2', 'not a date', 'L', '')]            
     assert_json_and_back_match(src, serializerOptions=dict(nameMap=namemap), 
                                                 expectedstmts=expectedStmts)
-    
+
     print 'ran %d tests, all pass' % test_counter
 
 test_counter = 0

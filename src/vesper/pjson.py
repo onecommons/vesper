@@ -11,7 +11,7 @@ Parse and serialize pjson to and from Vesper tuplesets.
 #and
 #propmap: propname : { id : value }
 #XXX: replace RuntimeError with custom Exception class
-import re
+import re, uuid
 
 from vesper.backports import *
 from vesper.data import base
@@ -55,7 +55,7 @@ ABSURI, URIREF = Uri.getURIRegex(allowbnode=True)
 
 _refpatternregex = re.compile(r'''(.*?)
     (?<!\\)\(
-    (.+)
+    (.*)
     (?<!\\)\)
     (.*)
 ''', re.X)
@@ -102,16 +102,18 @@ True
    
     m = re.match(_refpatternregex, pattern)
     if not m:
-        #assume pattern is a prefx and the regex matches everything after that
+        #assume pattern is a prefix and the regex matches everything after that
         before, regex, after = pattern, '.*', ''        
     else:
         before, regex, after = m.groups()
+    #assign weight so that patterns with literal prefixes are evaluated first, 
+    #and patterns that match anything go last
     if before:
         weight = 0
-    elif regex.lstrip('(').startswith('.*'):
-        weight = 1
+    elif regex == '.*' and not after:
+        weight = 2
     else:
-        weight = 2 #matches all
+        weight = 1
     
     #convert backreferences from $1 to \1 (javascript style to perl/python style)
     regex = re.sub(r'(?<!\$)\$(?=\d{1,2}|\&)', r'\\', regex)
@@ -146,7 +148,7 @@ _defaultBNodeGenerator = 'uuid'
 def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None, 
     datatypePropName = 'datatype', contextPropName='context'):
     assert objectType != OBJECT_TYPE_RESOURCE
-    if len(objectType) > 1:
+    if objectType != OBJECT_TYPE_LITERAL:
         valueparse = _xsdmap.get(objectType)
         if not preserveRdfTypeInfo and not valueparse:
             valueparse = _xsdExtendedMap.get(objectType)
@@ -156,16 +158,7 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None,
         elif valueparse:            
             literalObj = {datatypePropName:'json', 'value':valueparse(data)}
         else:
-            if ':' not in objectType:
-                #must be a language tag
-                dataType = 'lang:' + objectType 
-            else: #otherwise its a datatype URI
-                if objectType.startswith('pjson:'): 
-                    #this was tacked on while parsing to make type look like 
-                    #an URI, so strip it out now
-                    dataType = objectType[len('pjson:'):]
-                else:
-                    dataType = objectType
+            dataType = rdfDataTypeToPjsonDataType(objectType)
             literalObj = {datatypePropName : dataType, 'value': data }
     
         if scope is not None:
@@ -174,6 +167,20 @@ def toJsonValue(data, objectType, preserveRdfTypeInfo=False, scope=None,
         return literalObj
     else:  #its literal, just return it
         return data
+
+def rdfDataTypeToPjsonDataType(objectType):
+    if objectType == OBJECT_TYPE_LITERAL:
+        return 'json'    
+    elif ':' not in objectType:
+        #must be a language tag
+        return 'lang:' + objectType 
+    else: #otherwise its a datatype URI
+        if objectType.startswith('pjson:'): 
+            #this was tacked on while parsing to make type look like 
+            #an URI, so strip it out now
+            return objectType[len('pjson:'):]
+        else:
+            return objectType
 
 def pjsonDataTypeToRdfDataType(objectType):
     if objectType.startswith('lang:'):
@@ -198,8 +205,11 @@ def findPropList(model, subject, predicate, objectValue=None, objectType=None, s
 
 def loads(data):
     '''
-    Load a json-like string with either the json or yaml library, 
-    depending which is installed.
+    :param data: A string. 
+       
+    If `data` looks like multipartjson it is loaded with that,
+    otherwise the tries to load it using the yaml library, 
+    if it is installed, otherwise the standard json library is used.
     (Yaml's' "flow"-syntax provides a more forgiving super-set of json, 
     allowing single-quoted strings and trailing commas.)
     '''
@@ -212,7 +222,8 @@ def loads(data):
 
 class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
-            includeObjectMap=False, explicitRefObjects=False, asList=False):
+            includeObjectMap=False, explicitRefObjects=False, asList=False,
+            onlyEmbedBnodes=False):
         '''
         { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
         or if `asList == True`: 
@@ -229,17 +240,18 @@ class Serializer(object):
         self.preserveRdfTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
         self.asList = asList
+        self.onlyEmbedBnodes = onlyEmbedBnodes
         
         self.nameMap = nameMap and nameMap.copy() or {}        
         if explicitRefObjects:
-            if 'refs' in self.nameMap:
-                del self.nameMap['refs']
+            if 'refpattern' in self.nameMap:
+                del self.nameMap['refpattern']
         else:
-            if 'refs' not in self.nameMap:            
-                self.nameMap['refs'] = defaultSerializeRefPattern
+            if 'refpattern' not in self.nameMap:            
+                self.nameMap['refpattern'] = defaultSerializeRefPattern
         self.parseContext = ParseContext(self.nameMap)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = None, None, None
-        idrefpattern = self.nameMap.get('refs')
+        idrefpattern = self.nameMap.get('refpattern')
         if idrefpattern:
             patterns = _parseIdRefPattern(idrefpattern)
             self.outputRefPattern = patterns.parsePattern
@@ -259,20 +271,27 @@ class Serializer(object):
         contextName = self.parseContext.contextName
         datatypeReplacements = self.parseContext.datatypeReplacements
         v = None
-        if context is None and datatypeReplacements.get(objectType):            
-            for r in datatypeReplacements[objectType]:
-                match = r.serializePattern.match(objectValue)
-                if match:
-                    v = match.expand(r.serializeTemplate)
+        falsePositive = False
+        if context is None and datatypeReplacements:
+            for dataType, replacements in datatypeReplacements.items():
+                for r in replacements:
+                    match = r.serializePattern.match(objectValue)
+                    if match:
+                        if objectType == dataType:
+                            v = match.expand(r.serializeTemplate)
+                        else:
+                            falsePositive = True
         if v is None:
             v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo,
                                         context, datatypeName, contextName)
 
         if isinstance(v, (str, unicode)):
-            if context is not None or (self.outputRefPattern 
-                            and self.outputRefPattern.match(v)):
+            if context is not None or falsePositive or (self.outputRefPattern 
+                                          and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
-                literalObj = { datatypeName : 'json', 'value' : v }
+                #or the wrong datatype
+                datatype = rdfDataTypeToPjsonDataType(objectType)
+                literalObj = { datatypeName : datatype, 'value' : v }
                 if context is not None:
                     literalObj[ contextName ] = context
                 return literalObj
@@ -310,7 +329,7 @@ class Serializer(object):
         
         if self.explicitRefObjects or not match or context is not None:
             assert isinstance(uri, (str, unicode))        
-            ref =  { self.parseContext.refName : uri }
+            ref =  { self.parseContext.refName : self.serializeId(uri) }
             if context is not None:
                 ref[self.parseContext.contextName] = context
             return ref
@@ -491,7 +510,7 @@ class Serializer(object):
         #3. iterate through id map, if number of refs == 1, replace the reference with the object
         roots = results.copy()
         for id, refs in idrefs.items():
-            includeObject = len(refs) <= 1
+            includeObject = len(refs) <= 1 and (not self.onlyEmbedBnodes or isBnode(id))
             obj = None
             if id in results:
                 obj = results[id]
@@ -613,37 +632,37 @@ class ParseContext(object):
             self.contextName = self.nameMap.get('context', parent.contextName)
             self.namemapName = self.nameMap.get('namemap', parent.namemapName)
             self.datatypeName = self.nameMap.get('datatype', parent.datatypeName)
-            self.refName = self.nameMap.get('ref', parent.refName)
-            self.refsValue = self.nameMap.get('refs', parent.refsValue)
-            self.idsValue = self.nameMap.get('ids', parent.idsValue)
-            self.propsValue = self.nameMap.get('props', parent.propsValue)
-            self.defaultsValue = self.nameMap.get('defaults',parent.defaultsValue)
+            self.refName = self.nameMap.get('$ref', parent.refName)
+            self.refpatternValue = self.nameMap.get('refpattern', parent.refpatternValue)
+            self.idpatternsValue = self.nameMap.get('idpatterns', parent.idpatternsValue)
+            self.propertypatternsValue = self.nameMap.get('propertypatterns', parent.propertypatternsValue)
+            self.sharedpatternsValue = self.nameMap.get('sharedpatterns',parent.sharedpatternsValue)
             self.exclude = self.nameMap.get('exclude',parent.exclude)
-            self.datatypes = self.nameMap.get('datatypes', parent.datatypes)
+            self.datatypepatternsValue = self.nameMap.get('datatypepatterns', parent.datatypepatternsValue)
         else:
             self.idName = self.nameMap.get('id', 'id')
             self.contextName = self.nameMap.get('context', 'context')
             self.namemapName = self.nameMap.get('namemap', 'namemap')
             self.datatypeName = self.nameMap.get('datatype', 'datatype')
-            self.refName = self.nameMap.get('ref', '$ref')
-            self.refsValue = self.nameMap.get('refs')
-            self.idsValue = self.nameMap.get('ids')
-            self.propsValue = self.nameMap.get('props')
-            self.defaultsValue = self.nameMap.get('defaults')
+            self.refName = self.nameMap.get('$ref', '$ref')
+            self.refpatternValue = self.nameMap.get('refpattern')
+            self.idpatternsValue = self.nameMap.get('idpatterns')
+            self.propertypatternsValue = self.nameMap.get('propertypatterns')
+            self.sharedpatternsValue = self.nameMap.get('sharedpatterns')
             self.exclude = self.nameMap.get('exclude', [])
-            self.datatypes = self.nameMap.get('datatypes', {})
+            self.datatypepatternsValue = self.nameMap.get('datatypepatterns', {})
             
         self.validateProps()
         self.reservedNames = [self.idName, self.contextName, self.refName, 
-            self.datatypeName, 
+            self.datatypeName, 'pjson', 
             #it's the parent context's namemap propery that is in effect:
             parent and parent.namemapName or 'namemap']
                             
         self.idrefpattern, self.refTemplate = None, None
-        self._setIdRefPattern(self.refsValue)
-        self.propReplacements = self._setReplacements(self.propsValue)
-        self.idReplacements = self._setReplacements(self.idsValue)
-        self.datatypeReplacements = self._setDataTypePatterns(self.datatypes)
+        self._setIdRefPattern(self.refpatternValue)
+        self.propReplacements = self._setReplacements(self.propertypatternsValue)
+        self.idReplacements = self._setReplacements(self.idpatternsValue)
+        self.datatypeReplacements = self._setDataTypePatterns(self.datatypepatternsValue)
         self.currentProp = None
     
     def validateProps(self):
@@ -653,7 +672,7 @@ class ParseContext(object):
 
         if not isinstance(self.exclude, list):
             raise RuntimeError('value of "exclude" property must be a list')
-        if not isinstance(self.datatypes, dict):
+        if not isinstance(self.datatypepatternsValue, dict):
             raise RuntimeError('value of "datatypes" property must be an object')
 
         #XXX: more validation
@@ -665,10 +684,13 @@ class ParseContext(object):
     
     def _setReplacements(self, more):
         replacements = []        
-        for d in self.defaultsValue, more:
+        for d in self.sharedpatternsValue, more:            
             if d:
-                for key in d:
-                    replacements.append(_parseIdRefPattern(d, key, True))
+                if isinstance(d, dict):                                    
+                    for key in d:
+                        replacements.append(_parseIdRefPattern(d, key, True))
+                else:
+                    replacements.append(_parseIdRefPattern(d))
         replacements.sort(key=lambda v: v.weight)
         return replacements
             
@@ -710,7 +732,8 @@ class ParseContext(object):
         '''
         { datatype : pattern }
         or
-        { datatype : [patterns] }
+        { datatype : [patterns] } 
+        where pattern is either 'pattern' or { 'pattern' : 'replacement' }
         '''
         patterns = {}
         for datatype, replacements in datatypes.items():
@@ -751,7 +774,9 @@ class ParseContext(object):
         return s, OBJECT_TYPE_LITERAL
 
 class Parser(object):
-    
+    '''
+    Parses pJSON compliant JSON and converts it to RDF statements.
+    '''
     bnodecounter = 0
     bnodeprefix = '_:'
     
@@ -760,17 +785,19 @@ class Parser(object):
             scope = '', 
             setBNodeOnObj=False,
             nameMap=None,
-            useDefaultRefPattern=True):
+            useDefaultRefPattern=True,
+            toplevelBnodes=True):
         generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
             self.bnodeprefix = base.BNODE_BASE
         self.addOrderInfo = addOrderInfo
         self.setBNodeOnObj = setBNodeOnObj
+        self.toplevelBnodes = toplevelBnodes
     
         nameMap = nameMap or {}
-        if useDefaultRefPattern and 'refs' not in nameMap:
-            nameMap['refs'] = defaultParseRefPattern
+        if useDefaultRefPattern and 'refpattern' not in nameMap:
+            nameMap['refpattern'] = defaultParseRefPattern
         self.defaultParseContext = ParseContext(nameMap)
         self.defaultParseContext.context = scope
     
@@ -785,11 +812,14 @@ class Parser(object):
         def getorsetid(obj):
             newParseContext = ParseContext.initParseContext(obj, parseContext)
             objId = newParseContext.getProp(obj, 'id')
-            if objId is None:  
-                #mark bnodes for nested objects differently                
-                prefix = parentid and 'j:e:' or 'j:t:'
-                suffix = parentid and (str(parentid) + ':') or ''
-                objId = self._blank(prefix+'object:'+suffix)
+            if objId is None:
+                if not parentid and not self.toplevelBnodes:
+                    objId = 'uuid:' + str(uuid.uuid4())
+                else:
+                    #mark bnodes for nested objects differently                
+                    prefix = parentid and 'j:e:' or 'j:t:'
+                    suffix = parentid and (str(parentid) + ':') or ''
+                    objId = self._blank(prefix+'object:'+suffix)
                 if self.setBNodeOnObj:
                     obj[ newParseContext.getName('id') ] = objId
                 return objId, newParseContext
@@ -809,8 +839,10 @@ class Parser(object):
                 parseContext = ParseContext.initParseContext(json, parseContext)
             else:
                 start = [json]
-        else:
+        elif isinstance(json, list):
             start = list(json)
+        else:
+            raise RuntimeError("JSON must be an object or array")
         
         todo = []
         for x in start:
@@ -973,7 +1005,7 @@ class Parser(object):
             refName = parseContext.getName('$ref')
             context = item.get('context', parseContext.context)
             if refName in item:
-                ref = item[refName]                
+                ref = parseContext.parseId( item[refName] )
                 #if isBnode(ref): #XXX ensure bnode is serialized consistently
                 #   value = ref[bnode_len]
                 #   return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
@@ -1044,3 +1076,9 @@ def tojson(statements, **options):
 
 def tostatements(contents, **options):
     return Parser(**options).to_rdf(contents)
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) > 1:
+        f = open(sys.argv[1])
+        print tostatements(f.read())

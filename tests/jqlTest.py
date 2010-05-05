@@ -446,7 +446,7 @@ t('''{
 where (<rdfs:range> = 'Tag')
 orderby (<rdfs:range>)
 namemap = {
- "props" : { 
+ "propertypatterns" : { 
       'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
       'rdfs:': 'http://www.w3.org/2000/01/rdf-schema#'
     }
@@ -1688,7 +1688,7 @@ class JQLTestCase(unittest.TestCase):
         '''
         test that query results always use the user specified list and dict classes
         '''
-        #XXX user-defined list used for nested lists
+        #XXX user-defined list not used for nested lists
         
         #some hacky classes so we can call set() on the query results
         class hashabledict(dict):

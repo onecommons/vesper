@@ -89,7 +89,9 @@ def cp(name, *args, **kw):
 
 _models = {}
 def modelFromJson(modelsrc, modelname=None):
-    model = pjson.Parser(generateBnode='counter', nameMap={'refs':'(URIREF)'}).to_rdf(modelsrc)
+    model = pjson.Parser(generateBnode='counter', nameMap={'refpattern':'(URIREF)'},
+        toplevelBnodes=True #set so top-level object use 'counter's
+    ).to_rdf(modelsrc)
     model = vesper.data.store.basic.MemStore(model)
     model.bnodePrefix = '_:'
     if not modelname:
