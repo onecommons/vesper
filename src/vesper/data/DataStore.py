@@ -485,14 +485,15 @@ class BasicStore(DataStore):
                 
         replaceStmts, replaceJson = self._toStatements(replace)
         if replaceJson:
+            if isinstance(replaceJson, dict):
+                replaceJson = [replaceJson]
             for o in replaceJson:
                 #the object is empty so make it for removal
                 #we need to do this here because empty objects won't show up in
                 #replaceStmts
-                if len(o) == 1 and 'id' in o: #XXX what about namemapped pjson?
+                if len(o) == 1 and 'id' in o: #XXX handle namemapped pjson
                     removeid = o['id']
                     removedResources.add(removeid)
-
         #replace:
         #get all statements with the subject and remove them (along with associated lists)
         root = OrderedModel(replaceStmts)
@@ -521,7 +522,7 @@ class BasicStore(DataStore):
                                     if ls.predicate == base.RDF_SCHEMA_BASE+u'next'])                    
             removals.extend(currentStmts)
 
-        self.remove(removals)        
+        self.remove(removals)
         addStmts = self.add(newStatements)
 
         return addStmts, removals

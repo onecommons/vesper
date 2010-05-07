@@ -45,6 +45,9 @@ def datarequest(kw, retval):
         if action == 'update':
             addStmts, removeStmts = dataStore.update(data)
             result = pjson.tojson(addStmts)
+        elif action == 'replace':
+            addStmts, removeStmts = dataStore.replace(data)
+            result = pjson.tojson(addStmts)
         elif action == 'add':
             addJson = dataStore.add(data)
             result = addJson #pjson.tojson(addStmts))
@@ -103,7 +106,7 @@ actions = { 'http-request' : vesper.web.route.gensequence,
 
 @Action
 def sendJsonRpcError(kw, retVal):
-    if kw._requestHeaders['Content-Type'] != 'application/json':
+    if 'CONTENT_TYPE' not in kw._environ or not kw._environ.CONTENT_TYPE.startswith('application/json'):
         return retVal
     kw._responseHeaders['Content-Type'] = 'application/json'
     ei = kw._errorInfo
@@ -117,7 +120,9 @@ try:
     import mako
 
     @Action
-    def displayError(kw, retVal):        
+    def displayError(kw, retVal):
+        if retVal:
+            return retVal #already handled
         kw._responseHeaders._status = 500
         kw._responseHeaders['content-type'] = 'text/html'
         type = kw._errorInfo.type

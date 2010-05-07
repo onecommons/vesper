@@ -3,14 +3,18 @@
 derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder_tests.html (rev. 21)
 -->
   <head>
-    <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.5.2/build/logger/assets/logger.css"> 
-    <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.5.2/build/yuitest/assets/testlogger.css"> 
-    <script type="text/javascript" src="http://yui.yahooapis.com/2.5.2/build/yahoo-dom-event/yahoo-dom-event.js"></script> 
-    <script type="text/javascript" src="http://yui.yahooapis.com/2.5.2/build/logger/logger-min.js"></script> 
-    <script type="text/javascript" src="http://yui.yahooapis.com/2.5.2/build/yuitest/yuitest-min.js"></script>
+    <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/logger/assets/logger.css"> 
+    <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/yuitest/assets/testlogger.css"> 
+    <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yahoo-dom-event/yahoo-dom-event.js"></script> 
+    <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/logger/logger-min.js"></script> 
+    <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yuitest/yuitest-min.js"></script>
     <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.js"></script>
+    <script type="text/javascript" src="js/json2.js"></script>
+    <script type="text/javascript" src="js/data.js"></script>
+<!--    
     <script type="text/javascript" src="../src/vesper/web/baseapp/static/js/json2.js"></script>
     <script type="text/javascript" src="../src/vesper/web/baseapp/static/js/data.js"></script>
+-->
   </head>
   <body>
   
@@ -302,9 +306,22 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
     }));
 
     YAHOO.tool.TestRunner.add( suite );    
+    function testRunComplete(data) {
+      if (window.console) console.log('test run complete', data);
+      var results = JSON.stringify(data.results);
+      $.ajax({
+        type: 'POST',
+        url: '/testresult',
+        data: results,
+        processData: false, 
+        contentType: 'application/json',
+        dataType: "json"
+      }); 
+    }
+    YAHOO.tool.TestRunner.subscribe(YAHOO.tool.TestRunner.COMPLETE_EVENT, testRunComplete); 
     YAHOO.tool.TestRunner.run();
     
-    //$(function() { });
+
   </script> 
 
   <form id="testForm1">

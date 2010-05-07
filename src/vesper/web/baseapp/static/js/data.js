@@ -3,20 +3,28 @@
  * Dual licenced under the GPL or Apache2 licences, see LICENSE.
  */
 if (!window.console) {
-    var console = {
+    var konsole = {
         log : function() {}
     };
+} else {
+    var konsole = window.console;
 }
 
 var Txn = function() {
   this.autocommit = false;
   this.requests = [];
+  this.txnId = ++Txn.prototype.idcounter;
   //this.pendingChanges = {};
   //this.successmsg = '';
   //this.errormsg = '';
 }
 
 Txn.prototype = {
+    
+    idcounter : 0, 
+    
+    url : '/datarequest',
+    
     execute : function(action, data, callback, elem) {
         var requestId = Math.random(); 
         //XXX allow requestid specified to replace a previous request
@@ -47,9 +55,9 @@ Txn.prototype = {
                 
         if (callback) {
             //note: if elem is undefined will bind on doc            
-            $(elem).one('dbdata', function(event) {
+            $(elem).one('dbdata.'+this.txnId, function(event) {
                 //the response is a list and jquery turns that into arguments  
-                console.log('thiscallback', arguments);
+                konsole.log('thiscallback', arguments);
                 var responses = arguments; //note: first item is the event
                 for (var i=1; i < responses.length; i++) {
                     var response = responses[i];
@@ -75,26 +83,30 @@ Txn.prototype = {
     /* 
     */
     commit : function(callback, elem) {
+        var txnId = this.txnId;
         if (callback) { //callback signature: function(event, *responses)
             //note: if elem is undefined will bind on doc            
-            $(elem).one('dbdata', callback);
-        }
+            $(elem).one('dbdata.'+txnId, callback);
+        }        
         
         //var clientErrorMsg = this.clientErrorMsg;
         function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
-            console.log('saved!', data, textStatus);
+            //console.log('saved!', data, textStatus, 'dbdata.'+txnId);
             if (textStatus == 'success') {
-                $.event.trigger('dbdata', data);
+                $(elem).trigger('dbdata.'+txnId, data);
+                $(elem).trigger('dbdata-*', data);
             } else {
                 //when textStatus != 'success', data param will be a XMLHttpRequest obj                
-                $.event.trigger('dbdata', {"jsonrpc": "2.0", "id": null,
+                var errorObj = {"jsonrpc": "2.0", "id": null,
                   "error": {"code": -32000, 
                         "message": data.statusText || textStatus,
                         'data' : data.responseText
                   } 
-                });
+                };
+                $(elem).trigger('dbdata.'+txnId, errorObj);
+                $(elem).trigger('dbdata-*', errorObj);
             }
          };
     
@@ -107,13 +119,13 @@ Txn.prototype = {
         this.pendingChanges = {}; 
         */
         //XXX path should be configurable
-        console.log('requests', this.requests);
+        konsole.log('requests', this.requests);
         if (this.requests.length) {
             var requests = JSON.stringify(this.requests);
             this.requests = [];
             $.ajax({
               type: 'POST',
-              url: 'datarequest',
+              url: this.url,
               data: requests,
               processData: false, 
               contentType: 'application/json',
@@ -162,7 +174,7 @@ txn.commit();
              var data = null;
          }
          var callback = args[0] || null;     
-         console.log('execute', data, callback);                  
+         konsole.log('execute', data, callback);                  
          if (data) {
             if (action == 'query') {
                 if (typeof data == 'string') {
@@ -181,7 +193,7 @@ txn.commit();
          } else {
             this.each(function() {
                 var obj = bindElement(this);
-                console.log('about to', action, 'obj', obj);
+                konsole.log('about to', action, 'obj', obj);
                 txn.execute(action, obj, callback, this);
             });
          }
@@ -203,6 +215,9 @@ txn.commit();
      dbSave : function(a1, a2, a3) {
          return this._executeTxn('update', a1,a2, a3);
      },     
+     dbReplace : function(a1, a2, a3) {
+         return this._executeTxn('replace', a1,a2, a3);
+     },     
      dbQuery : function(a1, a2, a3) {
          return this._executeTxn('query', a1,a2, a3);
      },     
@@ -220,7 +235,21 @@ txn.commit();
         this.removeData('currentTxn');
         return this;
      },
-     dbRollback : function() {     
+     dbRollback : function() {
+        var txn = this.data('currentTxn');
+        if (txn) {
+            konsole.log('rollback with', txn);
+            var errorObj = {"jsonrpc": "2.0", "id": null,
+              "error": {"code": -32001, 
+                  "message": "client-side rollback",
+                  'data' : null
+                } 
+            };
+            this.trigger('dbdata.'+txn.txnId, errorObj);
+            this.trigger('dbdata-*', errorObj);
+        } else {
+            konsole.log('rollback with no txn');
+        }
         this.removeData('currentTxn');
         return this;        
      }
