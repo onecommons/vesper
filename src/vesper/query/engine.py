@@ -565,6 +565,9 @@ class SimpleQueryEngine(object):
                 shape = op.construct.shape
                 merged = self.getShape(context, shape)
                 for row in result:
+                    #XXX constructed results maybe of mixed types
+                    #because we construct a list instead an object if the resource is a list
+                    assert isinstance(row, type(merged)) 
                     if shape is jqlAST.Construct.dictShape:
                         merged.update(row)
                     else:

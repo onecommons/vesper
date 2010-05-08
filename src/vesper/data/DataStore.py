@@ -23,10 +23,11 @@ class DataStoreError(Exception):
 
 def _toStatements(contents, **kw):
     if not contents:
-        return [], None
+        return [], contents
     if isinstance(contents, (list, tuple)):
         if isinstance(contents[0], (tuple, base.BaseStatement)):
             return contents, None #looks like a list of statements
+        
     #at this point assume contents is pjson
     kw['setBNodeOnObj']=True #set this option so generated ids are visible
     return pjson.tostatements(contents, **kw), contents
@@ -357,7 +358,6 @@ class BasicStore(DataStore):
             self.newResourceTrigger(newresources)
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
-        
         self.model.addStatements(stmts)
         return jsonrep or stmts
 
@@ -373,21 +373,75 @@ class BasicStore(DataStore):
     def _removePropLists(self, stmts):
         if not self.model.canHandleStatementWithOrder:
             for stmt in stmts:
-                #check if the statement is part of a json list, remove that list item too
+                #check if the statement is part of a json list, remove that list item too                
                 rows = list(pjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
                 for row in rows:
                     self.model.removeStatement(base.Statement(*row[:5]))
+
+    def _getStatementsForResources(self, resources):
+        stmts = []
+        for r in resources:
+            currentStmts = self.model.getStatements(r)
+            for s in currentStmts:
+                #it's an RDF list, we need to follow all the nodes and remove them too
+                if s.predicate == base.RDF_SCHEMA_BASE+u'next':                    
+                    while s:                        
+                        listNodeStmts = self.model.getStatements(s.object)
+                        stmts.extend(listNodeStmts)
+                        s = flatten([ls for ls in listNodeStmts 
+                                    if ls.predicate == base.RDF_SCHEMA_BASE+u'next'])
+                        assert not isinstance(s, list)
+            stmts.extend(currentStmts)
+        return stmts
         
     def remove(self, removes):
         '''
         Removes data from the store.
-        `removes`: A list of either statements or pjson conforming dicts
+        
+        `removes`: A list of a statements or list containing pjson-conforming dicts and strings.
+        
+        If the item is a string it will be treated as an object reference and
+        the entire resource will be removed. 
+        If the object is a dict, the specified property/value pairs will be removed from the store,
+        unless the value is null. In that case, the property and all associated values
+        will be deleted.
         '''
         if not self.join(self.requestProcessor.txnSvc):
             #not in a transaction, so call this inside one
             func = lambda: self.remove(removes)
             return self.requestProcessor.executeTransaction(func)
+
+        resources = []
+        props = []
+        if isinstance(removes, list):
+            for r in removes:
+                if isinstance(r, (str,unicode)):
+                    #XXX any pjson idproperty patterns will not be applied
+                    resources.append(r)
+                else:
+                    props.append(r)
+            removes = props
         
+        stmts, jsonrep = self._toStatements(removes)
+        if jsonrep is None:
+            #must have just been statements, not pjson
+            assert not resources
+            return self._remove(stmts)
+
+        #for each resource, property where value is null, remove all values
+        for s in [s for s in stmts if s[3] == pjson.JSON_BASE+'null']:
+            stmts.remove(s)
+            self._removePropLists([(s[0], s[1], None, None, None)])
+            currentStmts = self.model.getStatements(s[0], s[1], context = s[4] or None)
+            stmts.extend(currentStmts)
+        #XXX should remove anonymous embedded objects too (in update and replace too)
+        
+        for res in resources:
+            stmts.extend( self._getStatementsForResources(resources) )
+        
+        return self._remove(stmts)
+        
+    def _remove(self, removes):
         stmts, jsonrep = self._toStatements(removes)
 
         if self.removeTrigger and stmts:
@@ -396,7 +450,6 @@ class BasicStore(DataStore):
         self.model.removeStatements(stmts)
         
         return jsonrep or stmts
-
 
     def update(self, updates):
         '''
@@ -469,17 +522,15 @@ class BasicStore(DataStore):
                 continue
             currentStmts = self.model.getStatements(resource, prop)
             if currentStmts:
-                #the new proplist probably have different ids even for values that
-                #don't need to be added so remove all current proplists                
-                self._removePropLists(currentStmts)                
                 for currentStmt in currentStmts:
                     if (currentStmt.object, currentStmt.objectType) not in values:
                         removals.append(currentStmt)
+                        self._removePropLists( (currentStmt,) )
                     else:
                         values.remove((currentStmt.object, currentStmt.objectType))
             for value, valueType in values:                
                 newStatements.append( base.Statement(resource,prop, value, valueType) )
-        
+         
         for listRes in newListResources:            
             newStatements.extend( root.subjectDict[listRes] )
                 
@@ -509,20 +560,9 @@ class BasicStore(DataStore):
             self._removePropLists(currentStmts)
         newStatements.extend(replaceStmts)
         
-        #remove: remove all statements and associated lists        
-        for r in removedResources:
-            currentStmts = self.model.getStatements(r)
-            for s in currentStmts:
-                #it's a list, we need to follow all the nodes and remove them too
-                if s.predicate == base.RDF_SCHEMA_BASE+u'next':                    
-                    while s:                        
-                        listNodeStmts = self.model.getStatements(c.object)
-                        removals.extend(listNodeStmts)
-                        s = flatten([ls for ls in listNodeStmts 
-                                    if ls.predicate == base.RDF_SCHEMA_BASE+u'next'])                    
-            removals.extend(currentStmts)
-
-        self.remove(removals)
+        #remove: remove all statements and associated lists
+        removals.extend( self._getStatementsForResources(removedResources) )
+        self._remove(removals)
         addStmts = self.add(newStatements)
 
         return addStmts, removals

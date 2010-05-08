@@ -431,7 +431,7 @@ class Serializer(object):
         idName = self.parseContext.idName 
         contextName = self.parseContext.contextName 
         for res in nodes: 
-            childNodes = root.getProperties(res)           
+            childNodes = root.getProperties(res)
             if not childNodes:
                 #no properties, don't include
                 continue            
@@ -444,13 +444,15 @@ class Serializer(object):
             
             #deal with sequences first
             resScopes = {}
+            currentobjListprops = {}
             for stmt in childNodes:
                 if stmt.predicate == PROPSEQ:
                     #this will replace sequences
-                    seqprop, childlist = lists[stmt.object]
+                    seqprop, childlist = lists.get(stmt.object, (None,None))
+                    if seqprop is None:
+                        continue #dangling SEQPROP
                     key = self.serializeProp(seqprop)
-                    currentobj[ key ] = childlist
-                    #print 'adding propseq', p.stmt.object
+                    currentobjListprops[key] = childlist, [(s[2],s[3]) for s in childlist]
                 else:
                     pscope = stmt.scope
                     resScopes[pscope] = resScopes.setdefault(pscope, 0) + 1
@@ -472,11 +474,17 @@ class Serializer(object):
                     continue
                 
                 key = self.serializeProp(prop)
-                if key in currentobj:
+                if key in currentobjListprops:
+                    #prop already handled by _setPropSeq
                     assert key not in self.parseContext.reservedNames
-                    #must have be already handled by _setPropSeq
-                    self._finishPropList(currentobj[key], idrefs, resScope, lists)
-                    continue 
+                    childlist, listvalues = currentobjListprops[key]                    
+                    if key not in currentobj:
+                        self._finishPropList(childlist, idrefs, resScope, lists)
+                        currentobj[key] = childlist
+                    if (stmt[2], stmt[3]) in listvalues:
+                        continue
+                    #statement's value not in sequence, have the value added to the list
+                    currentlist = childlist
 
                 nextMatches = next and next.predicate == prop
                 #XXX Test empty and singleton rdf lists and containers

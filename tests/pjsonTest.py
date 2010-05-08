@@ -481,8 +481,42 @@ def test():
     assert_json_and_back_match(src, serializerOptions=dict(nameMap=namemap), 
                                                 expectedstmts=expectedStmts)
 
-    print 'ran %d tests, all pass' % test_counter
+    #assert_stmts_and_back_match(stmts, addOrderInfo=False)
 
+    #these statements are from a model where an empty propseq list was hiding a statement
+    stmts = [Statement(*t) for t in [('bnode:j:proplist:tag:another%20tag;subsumedby', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
+    u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', ''), 
+    ('bnode:j:proplist:tag:another%20tag;subsumedby', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'pjson:schema#propseqtype', 'R', ''), 
+    ('bnode:j:proplist:tag:another%20tag;subsumedby', 'pjson:schema#propseqprop', 'subsumedby', 'R', ''),
+    ('bnode:j:proplist:tag:another%20tag;subsumedby', 'pjson:schema#propseqsubject', 'tag:another%20tag', 'R', ''), 
+    ('scrapple', 'label', 'scrapple', 'L', ''), 
+    ('scrapple', 'type', 'tag', 'R', ''), 
+    ('tag:another%20tag', 'label', 'another tag', 'L', ''), 
+    ('tag:another%20tag', 'pjson:schema#propseq', 'bnode:j:proplist:tag:another%20tag;subsumedby', 'R', ''),
+    ('tag:another%20tag', 'subsumedby', 'tag:more%20tagging', 'R', ''), 
+    ('tag:another%20tag', 'type', 'tag', 'R', ''), 
+    ('tag:more%20tagging', 'label', 'more tagging', 'L', ''), 
+    ('tag:more%20tagging', 'type', 'tag', 'R', '')]]
+    assert tojson(stmts, onlyEmbedBnodes=True) == {'pjson': '0.9',
+    'namemap': {'refpattern': '@((::)?URIREF)'},
+    'data':  [
+    {'subsumedby': '@tag:more%20tagging', 'type': '@tag', 'id': 'tag:another%20tag', 'label': 'another tag'},
+    {'type': '@tag', 'id': 'scrapple', 'label': 'scrapple'}, {'type': '@tag', 'id': 'tag:more%20tagging', 'label': 'more tagging'}] 
+    }
+    
+    #similar to the previous test but add two unlisted statements with a non-empty propseq list 
+    #instead of one statement with an emtpy list
+    json = {
+      "id" : "1",
+      "prop" : [1,2,3,4]
+    }
+    stmts = tostatements(json)
+    stmts.append( Statement('1', 'prop', 'foo', 'R', '')  )
+    stmts.append( Statement('1', 'prop', 'bar', 'R', '')  )
+    assert tojson(stmts, asList=True) == [{'pjson': '0.9', 'namemap': {'refpattern': '@((::)?URIREF)'}}, {'id': '1', 'prop': [1, 2, 3, 4, '@bar', '@foo']}]
+    
+    print 'ran %d tests, all pass' % test_counter
+    
 test_counter = 0
 
 if __name__  == "__main__":

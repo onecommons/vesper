@@ -196,7 +196,7 @@ class RaccoonTestCase(unittest.TestCase):
                 
         self.assertEquals(root2.dataStore.query("{*}").results, 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
-    
+
     def testRemoves(self):
         store = vesper.app.createStore({
         "id": "hello", 
@@ -207,6 +207,8 @@ class RaccoonTestCase(unittest.TestCase):
         #print 'store', store.query('{*}')        
         #utils.debugp( 'testremove', store.model.by_s)                
         #print 'hello', store.model.by_s.get('hello')
+        
+        #a non-null value will only remove that particular value
         store.remove({"id":"hello","tags":"@tag2"})
         #utils.debugp('hello', store.model.by_s.get('hello'))
         from vesper import pjson
@@ -216,6 +218,36 @@ class RaccoonTestCase(unittest.TestCase):
             }])            
         self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
         
+        #null value will remove the property and any associated values
+        store.remove({"id":"hello","tags":None})
+        self.assertEquals(pjson.tojson(store.model.getStatements())['data'],
+            [{"id": "hello" }])
+        self.assertEquals(store.query('{*}').results, [{'id': 'hello'}])
+        
+        #strings are treated as resource ids and the entire object is removed
+        store.remove(["hello"])
+        self.assertEquals(pjson.tojson(store.model.getStatements())['data'], [])
+        self.assertEquals(store.query('{*}').results, [])        
+
+    def testUpdate(self):
+        store = vesper.app.createStore({
+        "id": "hello", 
+        "tags": [
+          { "id": "tag1" }, 
+          { "id": "tag2"}
+        ]})
+        #print 'store', store.query('{*}')        
+        #utils.debugp( 'testremove', store.model.by_s)                
+        #print 'hello', store.model.by_s.get('hello')
+        store.update({"id":"hello","tags":"@tag1"})
+        #utils.debugp('hello', store.model.by_s.get('hello'))
+        from vesper import pjson
+        self.assertEquals(pjson.tojson(store.model.getStatements())['data'],
+            [{"id": "hello", 
+               "tags": ["@tag1"]
+            }])            
+        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
+
     def testMerge(self):
         store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
         self.assertEquals(store1.model.currentVersion, '0')

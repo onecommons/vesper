@@ -121,8 +121,6 @@ try:
 
     @Action
     def displayError(kw, retVal):
-        if retVal:
-            return retVal #already handled
         kw._responseHeaders._status = 500
         kw._responseHeaders['content-type'] = 'text/html'
         type = kw._errorInfo.type

@@ -781,6 +781,40 @@ model=modelFromJson([{
 }])
 )
 
+#XXX throws AssertionError File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 54, in getColumns
+#  assert outerjoin or keycell
+skip('''{
+?parent 
+ id : [{* where(subsumedby = ?parent)}]
+}''', model =  {
+   "subsumedby": None, 
+   "id": "1"
+ }
+)
+
+##XXX returns parent [[{'id': '1', 'subsumedby': []}]]
+#treating empty list as the parent resource
+#but it shouldn't match anything (empty result)
+skip('''{
+?parent 
+ "parent" : {* where(subsumedby = ?parent)}
+}''', model =  {
+   "subsumedby": [], 
+   "id": "1"
+ }
+)
+
+#returns [[{'id': '1', 'subsumedby': []}]]
+#XXX should error or at least warn if construct has name expression and result object is a list
+skip('''{
+?parent 
+ id : {* where(subsumedby = ?parent)}
+}''', model =  {
+   "subsumedby": [], 
+   "id": "1"
+ }
+)
+
 t.group = 'follow'
 
 t("""
