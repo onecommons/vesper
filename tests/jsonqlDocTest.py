@@ -162,7 +162,7 @@ t("""{
 
 t %'''
 Abbreviated properties: :token:`objectitem`
-----------------------------------------
+-------------------------------------------
 When a single property name appears instead of a name-value pair, it is 
 treated as a name-value pair where the name is the name of the property and 
 the value is a reference to the property. So the following example is 
@@ -523,6 +523,31 @@ t('''
 , model = mainmodel)
 
 t%'''
+.. raw:: html
+
+    <style>
+    .example-plaintext { position:absolute; z-index: 2; background-color: lightgray;}
+    .close-example-plaintext { float:right; padding-right: 3px; font-size: 11px;}
+    .close-example-plaintext:hover { color: #CA7900; cursor: pointer; }
+    .toolbar { background-color: lightgray; float:right; 
+        border:1px solid;
+        padding: 1px;
+        text-decoration:underline;
+    }
+    .toolbar:hover { color: #CA7900; cursor: pointer; }
+    </style>
+    <script>
+    $().ready(function(){
+      $('.example-plaintext+.highlight-javascript pre').prepend("<span class='toolbar'>copy</span");
+      $('.toolbar').click(function() {
+        $(this).parents('.highlight-javascript').prev().slideDown('fast').find('textarea').focus();
+      });
+      $('.close-example-plaintext').click(function() { 
+            $(this).parents('.example-plaintext').slideUp('fast').find('textarea').blur(); 
+      });
+    });
+    </script>   
+
 ..  colophon: this doc was generated with "python tests/jsonqlDocTest.py --printdoc > doc/source/spec.rst"
 '''
 

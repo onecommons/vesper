@@ -173,9 +173,9 @@ reference patterns
 If a :ref:`refpattern-property` is present in the :ref:`namemap`, it will be used to recognize JSON values as references. 
 If a match is made on a value, it will treated as a reference to the object with the matching id.
 If no :ref:`refpattern-property` is specified the default pattern `@((::)?URIREF)` will be used [1]_.
-If any :ref:`idpatterns` or :ref:`sharedpatterns` are specified, those are applied to the reference that was extracted.
+If any :ref:`idpatterns` or :ref:`sharedpatterns` are specified, those are applied to the reference that was extracted, so the ref pattern should match the result of the id patterns.
 
-When serializing references from the datastore, the ref pattern will be applied after id patterns
+Likewise, when serializing references from the datastore, the ref pattern will be applied after any id patterns
 applied, including any :ref:`escaping <pjson-escaping>`, so the reference pattern needs to match 
 the results of applying those id patterns, which might not be the same as data store's representation of the id.
 

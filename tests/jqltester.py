@@ -109,34 +109,53 @@ _printedmodels = []
 def _pprintjson(src, width=50):
     #return pprint.pformat(src, width=width)    
     return pjson.json.dumps(src, indent=2) #textwrap.fill(, width)
-    
+
 def formatmodel(modelsrc, modelname):
-    modelformatted = _pprintjson(modelsrc).replace('\n', '\n ... ')  
+    modeltext = _pprintjson(modelsrc)
+    modelformatted = modeltext.replace('\n', '\n ... ')
+    modelplain = modeltext.replace('\n', '\n  ')     
     return Template("""
  >>> $modelname = app.createStore(
  ... '''$modelformatted''')
+""").substitute(locals()),  Template("""
+  $modelname = app.createStore(
+  '''$modelplain''')\n
 """).substitute(locals())
 
 def printmodel(model):
     modelsrc, modelname = _models[id(model)]    
     assert id(model) not in _printedmodels
     _printedmodels.append(id(model))        
-    return formatmodel(modelsrc, modelname)
+    return formatmodel(modelsrc, modelname)[0] #XXX
     
 def printdocs(test):
     if not test.doc:
         return    
     modelsrc, modelname = _models[id(test.model)]    
     if id(test.model) in _printedmodels:    
-        createmodel = ''
+        createmodel, modelplain = '', ''
     else:        
         _printedmodels.append(id(test.model))        
-        createmodel = formatmodel(modelsrc, modelname)
+        createmodel, modelplain = formatmodel(modelsrc, modelname)
     doc = test.doc
     result = _pprintjson(test.results).replace('\n', '\n ')     
-    queryformatted = test.query.replace('\n', '\n ... ')  
+    queryformatted = test.query.replace('\n', '\n ... ')
+    queryplain = test.query.strip().replace('\n', '\n  ')
+    rows=queryplain.count('\n');
+    plaintexthtml = '''\n\n.. raw:: html\n
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span></div>  
+  <textarea rows='%d' cols='60'>%s%s</textarea></div>
+
+.. code-block:: javascript
+
+ %s
+
+.. code-block:: python
+
+    ''' % (rows, modelplain, queryplain, queryplain)
     print Template("""
-$doc$createmodel
+$doc$plaintexthtml$createmodel
  >>> ${modelname}.query(
  ... '''$queryformatted''')
  $result
