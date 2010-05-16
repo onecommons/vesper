@@ -527,7 +527,12 @@ t%'''
 
     <style>
     .example-plaintext { position:absolute; z-index: 2; background-color: lightgray;}
-    .close-example-plaintext { float:right; padding-right: 3px; font-size: 11px;}
+    .close-example-plaintext { float:right; 
+      padding-right: 3px;     
+      font-size: .83em;
+      line-height: 0.7em;
+      vertical-align: baseline;
+    }
     .close-example-plaintext:hover { color: #CA7900; cursor: pointer; }
     .toolbar { background-color: lightgray; float:right; 
         border:1px solid;
@@ -538,9 +543,10 @@ t%'''
     </style>
     <script>
     $().ready(function(){
-      $('.example-plaintext+.highlight-javascript pre').prepend("<span class='toolbar'>copy</span");
+      $('.example-plaintext ~ .highlight-python pre').prepend("<span class='toolbar'>Run Example</span");
       $('.toolbar').click(function() {
-        $(this).parents('.highlight-javascript').prev().slideDown('fast').find('textarea').focus();
+        $(this).parents('.highlight-python').prevAll('.example-plaintext:last')
+          .slideDown('fast').find('textarea').focus();
       });
       $('.close-example-plaintext').click(function() { 
             $(this).parents('.example-plaintext').slideUp('fast').find('textarea').blur(); 

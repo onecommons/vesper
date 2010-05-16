@@ -8,6 +8,7 @@ jsonQL is languages for querying data that can represented in JSON. A jsonQL imp
 The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
 
 
+ >>> from vesper import app
  >>> model1 = app.createStore(
  ... '''[
  ...   {
@@ -122,25 +123,28 @@ JQL query consists of a pattern describes a JSON object (dictionary), a list (ar
 
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='3' cols='60'>{ 
-      "displayname" : displayname,
-      "type" : type
-      }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  { 
       "displayname" : displayname,
       "type" : type
       }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='7' cols='60'>
+ model1.query(
+   '''{ 
+      "displayname" : displayname,
+      "type" : type
+      }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{ 
  ...     "displayname" : displayname,
@@ -164,25 +168,28 @@ Both the property name and value are expressions. In this example, the property 
 more complex expression. It uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service. [#f1]_
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='3' cols='60'>{
-    service : maybe facebook_uid or maybe email
-    MERGEALL 
-  }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {
     service : maybe facebook_uid or maybe email
     MERGEALL 
   }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='7' cols='60'>
+ model1.query(
+   '''{
+    service : maybe facebook_uid or maybe email
+    MERGEALL 
+  }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{
  ...   service : maybe facebook_uid or maybe email
@@ -205,19 +212,22 @@ the value is a reference to the property. So the following example is
 equivalent to the first query: 
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{ displayname, type }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  { displayname, type }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{ displayname, type }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{ displayname, type }''')
  [
@@ -238,19 +248,22 @@ equivalent to the first query:
 You can also construct results as arrays (lists) instead of objects. This query selects the same objects but it formats each result as a list not an object.
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>[displayname, type]</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  [displayname, type]
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''[displayname, type]''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''[displayname, type]''')
  [
@@ -272,19 +285,22 @@ You can also construct results as arrays (lists) instead of objects. This query 
 You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>(displayname)</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  (displayname)
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''(displayname)''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''(displayname)''')
  [
@@ -304,13 +320,18 @@ You can specify properties whose name match reserved keywords or have invalid ch
 Such a property can written as `<id>`.
 
 
+.. code-block:: jsonql
+
+ { 'key' : id, <id>, <a property with spaces>}
+
 .. raw:: html
 
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>
-  model2 = app.createStore(
-  '''[
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='18' cols='60'>
+ from vesper import app
+ model2 = app.createStore(
+ '''[
     {
       "a property with spaces": "this property name has spaces", 
       "namemap": {
@@ -321,15 +342,15 @@ Such a property can written as `<id>`.
     }
   ]''')
 
-{ 'key' : id, <id>, <a property with spaces>}</textarea></div>
 
-.. code-block:: javascript
+ model2.query(
+   '''{ 'key' : id, <id>, <a property with spaces>}''')
 
- { 'key' : id, <id>, <a property with spaces>}
+ </textarea></div>
 
 .. code-block:: python
 
-    
+ >>> from vesper import app
  >>> model2 = app.createStore(
  ... '''[
  ...   {
@@ -359,19 +380,22 @@ Property wildcard ('*')
 The "*" will expand to all properties defined for the object. For example, this query retrieves all objects in the store:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{*}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {*}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{*}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{*}''')
  [
@@ -433,13 +457,18 @@ Note that the actually semantics of inserting pjson depends on the data store it
 does inserted a property that already exists on an object might add a new value or replace the current one.
 
 
+.. code-block:: jsonql
+
+ { id, a_list }
+
 .. raw:: html
 
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>
-  model3 = app.createStore(
-  '''[
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='37' cols='60'>
+ from vesper import app
+ model3 = app.createStore(
+ '''[
     {
       "a_list": [
         "a", 
@@ -469,15 +498,15 @@ does inserted a property that already exists on an object might add a new value 
     }
   ]''')
 
-{ id, a_list }</textarea></div>
 
-.. code-block:: javascript
+ model3.query(
+   '''{ id, a_list }''')
 
- { id, a_list }
+ </textarea></div>
 
 .. code-block:: python
 
-    
+ >>> from vesper import app
  >>> model3 = app.createStore(
  ... '''[
  ...   {
@@ -530,19 +559,22 @@ does inserted a property that already exists on an object might add a new value 
 You can use wrap the property value with brackets to force the value of a property to always be a list, even when the value just as one value or is `null`. If the value is `null`, an empty list (`[]`) will be used. For example, compare the results of the following two examples which are identical except for the second one's use of "forcelist":
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{ id, mixed }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  { id, mixed }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model3.query(
+   '''{ id, mixed }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model3.query(
  ... '''{ id, mixed }''')
  [
@@ -568,19 +600,22 @@ You can use wrap the property value with brackets to force the value of a proper
 
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{ id, [mixed] }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  { id, [mixed] }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model3.query(
+   '''{ id, [mixed] }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model3.query(
  ... '''{ id, [mixed] }''')
  [
@@ -612,19 +647,22 @@ results will only include objects that contain the property referenced in the co
 For example, the next example just returns one object because only one has a both a displayname and auth property.
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{displayname, auth}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {displayname, auth}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{displayname, auth}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{displayname, auth}''')
  [
@@ -652,19 +690,22 @@ For example, the next example just returns one object because only one has a bot
 If property references are modified "maybe" before them then objects without that property will be included in the result. For example:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{displayname, maybe auth}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {displayname, maybe auth}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{displayname, maybe auth}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{displayname, maybe auth}''')
  [
@@ -696,19 +737,22 @@ If property references are modified "maybe" before them then objects without tha
 This query still specifies that "auth" property appears in every object in the result -- objects that doesn't have a "auth" property defined have that property value set to null. If you do not want the property included in that case, you can use the the `OMITNULL` modifier instead:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{displayname, omitnull auth}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {displayname, omitnull auth}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{displayname, omitnull auth}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{displayname, omitnull auth}''')
  [
@@ -745,19 +789,22 @@ For example, here's a silly query that has a "nullproperty" property with a cons
 but it will never be included in the result because of the "omitnull".
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{displayname, omitnull "nullproperty" : null}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {displayname, omitnull "nullproperty" : null}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{displayname, omitnull "nullproperty" : null}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{displayname, omitnull "nullproperty" : null}''')
  [
@@ -774,19 +821,22 @@ but it will never be included in the result because of the "omitnull".
 The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='0' cols='60'>{displayname, [maybe auth]}</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {displayname, [maybe auth]}
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='4' cols='60'>
+ model1.query(
+   '''{displayname, [maybe auth]}''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''{displayname, [maybe auth]}''')
  [
@@ -856,17 +906,7 @@ Once an objected labels, you can create joins by referencing that label in an ex
 This is example, value of the contains property will be any object that
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='4' cols='60'>{
-      ?parent, 
-      *,
-      'contains' : { * where (subsumedby = ?parent)}
-      }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {
       ?parent, 
@@ -874,9 +914,22 @@ This is example, value of the contains property will be any object that
       'contains' : { * where (subsumedby = ?parent)}
       }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='8' cols='60'>
+ model1.query(
+   '''{
+      ?parent, 
+      *,
+      'contains' : { * where (subsumedby = ?parent)}
+      }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''
  ...     {
@@ -890,17 +943,7 @@ This is example, value of the contains property will be any object that
 
 find all tag, include child tags in result
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='4' cols='60'>{
-      ?parent, 
-      *,
-      'contains' : { where(subsumedby = ?parent)}
-      }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  {
       ?parent, 
@@ -908,9 +951,22 @@ find all tag, include child tags in result
       'contains' : { where(subsumedby = ?parent)}
       }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='8' cols='60'>
+ model1.query(
+   '''{
+      ?parent, 
+      *,
+      'contains' : { where(subsumedby = ?parent)}
+      }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''
  ...     {
@@ -939,19 +995,7 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
 .. [#f1] Note this simplified example isn't very useful since it will merge all user's logins together. Here's a similar query that  returns the login object per user:
 
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='6' cols='60'>{ "userid" : id, 
-    "logins" : {?login 
-                service : maybe facebook_uid or maybe email
-                MERGEALL
-               }
-    where (auth = ?login)  
-  }</textarea></div>
-
-.. code-block:: javascript
+.. code-block:: jsonql
 
  { "userid" : id, 
     "logins" : {?login 
@@ -961,9 +1005,24 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
     where (auth = ?login)  
   }
 
+.. raw:: html
+
+ <div class='example-plaintext' style='display:none'>
+ <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+ <textarea rows='10' cols='60'>
+ model1.query(
+   '''{ "userid" : id, 
+    "logins" : {?login 
+                service : maybe facebook_uid or maybe email
+                MERGEALL
+               }
+    where (auth = ?login)  
+  }''')
+
+ </textarea></div>
+
 .. code-block:: python
 
-    
  >>> model1.query(
  ... '''
  ... { "userid" : id, 
@@ -989,7 +1048,12 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
 
     <style>
     .example-plaintext { position:absolute; z-index: 2; background-color: lightgray;}
-    .close-example-plaintext { float:right; padding-right: 3px; font-size: 11px;}
+    .close-example-plaintext { float:right; 
+      padding-right: 3px;     
+      font-size: .83em;
+      line-height: 0.7em;
+      vertical-align: baseline;
+    }
     .close-example-plaintext:hover { color: #CA7900; cursor: pointer; }
     .toolbar { background-color: lightgray; float:right; 
         border:1px solid;
@@ -1000,9 +1064,10 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
     </style>
     <script>
     $().ready(function(){
-      $('.example-plaintext+.highlight-javascript pre').prepend("<span class='toolbar'>copy</span");
+      $('.example-plaintext ~ .highlight-python pre').prepend("<span class='toolbar'>Run Example</span");
       $('.toolbar').click(function() {
-        $(this).parents('.highlight-javascript').prev().slideDown('fast').find('textarea').focus();
+        $(this).parents('.highlight-python').prevAll('.example-plaintext:last')
+          .slideDown('fast').find('textarea').focus();
       });
       $('.close-example-plaintext').click(function() { 
             $(this).parents('.example-plaintext').slideUp('fast').find('textarea').blur(); 

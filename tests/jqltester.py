@@ -115,11 +115,13 @@ def formatmodel(modelsrc, modelname):
     modelformatted = modeltext.replace('\n', '\n ... ')
     modelplain = modeltext.replace('\n', '\n  ')     
     return Template("""
+ >>> from vesper import app
  >>> $modelname = app.createStore(
  ... '''$modelformatted''')
 """).substitute(locals()),  Template("""
-  $modelname = app.createStore(
-  '''$modelplain''')\n
+ from vesper import app
+ $modelname = app.createStore(
+ '''$modelplain''')\n
 """).substitute(locals())
 
 def printmodel(model):
@@ -141,19 +143,27 @@ def printdocs(test):
     result = _pprintjson(test.results).replace('\n', '\n ')     
     queryformatted = test.query.replace('\n', '\n ... ')
     queryplain = test.query.strip().replace('\n', '\n  ')
-    rows=queryplain.count('\n');
-    plaintexthtml = '''\n\n.. raw:: html\n
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span></div>  
-  <textarea rows='%d' cols='60'>%s%s</textarea></div>
+    
+    plaintext = Template("""$modelplain
+ $modelname.query(
+   '''$queryplain''')
+""").substitute(locals())
+    rows=plaintext.count('\n')+1;
+    plaintexthtml = '''
 
-.. code-block:: javascript
+.. code-block:: jsonql
 
  %s
 
-.. code-block:: python
+.. raw:: html
 
-    ''' % (rows, modelplain, queryplain, queryplain)
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='%d' cols='60'>%s
+  </textarea></div>
+
+.. code-block:: python
+''' % (queryplain, rows, plaintext)
     print Template("""
 $doc$plaintexthtml$createmodel
  >>> ${modelname}.query(

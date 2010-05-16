@@ -72,8 +72,11 @@ setup(
     extras_require = extras_require,
     zip_safe=False,
 
-   entry_points = {
-        'console_scripts': [
+   entry_points = {   
+    'pygments.lexers' : [
+        'jsonql = vesper.query.pygmentslexer:JsonqlLexer'
+        ],
+    'console_scripts': [
             'vesper-admin = vesper.web.admin:console_main',
         ],
     },
