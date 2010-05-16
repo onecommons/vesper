@@ -199,7 +199,7 @@ txn.commit();
          }
         
          if (commitNow)
-            txn.commit();
+            txn.commit(null, this);
          return this;
      },
 
