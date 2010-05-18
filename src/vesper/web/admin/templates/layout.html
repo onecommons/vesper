@@ -199,8 +199,9 @@ ${call(caller).style}
 </%def>
 
 <%def name='renderPanel(headerContents="", panelId="", bodyClass="")'>
-<div ${panelId and 'id='+panelId} class='panel'>
-    <div class='panel-header'>
+<div ${panelId and 'id='+panelId} class='panel ui-helper-clearfix ui-widget'>
+    <div class='panel-header ui-widget-header'>
+        <span class="ui-icon showhide-button ui-icon-triangle-1-s"></span>
         <span class="ui-icon ui-icon-refresh" style='float: right'></span>
         <span class='panel-header-content'>${headerContents or call(caller).headerContents}</span>
     </div>
@@ -221,7 +222,7 @@ ${call(caller).style}
    <button class='entry-delete-button'>delete</button>
    <button class='entry-canceledit-button'>cancel</button>
    <textarea name='contents' class='expand' style='width: 100%'>${editcontents}</textarea>
-   <div class='preview-contents'></div>   
+   <div class='preview-contents'></div>
   </div>
   <div class='item${i%2 and " altband" or ""}'>${call(caller).renderItemProperties}
       ## contents are block elements (p) so bullet doesnt appear inline as we want
@@ -285,12 +286,15 @@ function editEntry(event) {
 function makePanels(selector, refreshCallback) {
     var panels = $(selector);
 
+    /*
+    do this on the server side to improve load time
     panels.addClass("ui-helper-clearfix ui-widget")
                 .find(".panel-header")
                     .addClass("ui-widget-header")
                     .prepend('<span class="ui-icon showhide-button ui-icon-triangle-1-s"></span>')
                 ;//.end().find(".portlet-content").addClass("ui-widget-content");
-
+    */
+    
     /*
     panels.wrapInner("<div class='panel-body'></div>").prepend(
         '<div class="panel-header"><span class="ui-icon ui-icon-triangle-1-s"></span></div>');
