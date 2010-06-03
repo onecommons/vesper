@@ -8,6 +8,70 @@ jsonQL is languages for querying data that can represented in JSON. A jsonQL imp
 The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
 
 
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='53' cols='60'>
+ from vesper import app
+ model1 = app.createStore(
+ '''[
+    {
+      "contentType": "text/plain", 
+      "author": "user:1", 
+      "tags": [
+        "tag:foo"
+      ], 
+      "published": "", 
+      "type": "post", 
+      "id": "post1", 
+      "contents": "hello world!"
+    }, 
+    {
+      "subcategoryOf": "tag:nonsense", 
+      "type": "tag", 
+      "id": "tag:foo", 
+      "label": "foo"
+    }, 
+    {
+      "type": "tag", 
+      "id": "tag:nonsense", 
+      "label": "Nonsense"
+    }, 
+    {
+      "displayname": "abbey aardvaark", 
+      "type": "user", 
+      "id": "user:1", 
+      "auth": [
+        {
+          "name": "abbey aardvaark", 
+          "service": "facebook", 
+          "facebook_uid": 394090223
+        }, 
+        {
+          "username": "aaardvaark", 
+          "language": "en", 
+          "name": "abbey aardvaark", 
+          "service": "google", 
+          "email": "aaardvaark@gmail.com"
+        }
+      ]
+    }, 
+    {
+      "displayname": "billy billygoat", 
+      "type": "user", 
+      "id": "user:2"
+    }
+  ]''')
+
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+
  >>> from vesper import app
  >>> model1 = app.createStore(
  ... '''[
@@ -58,6 +122,7 @@ The examples here are based on the following example. You can cut an paste or yo
  ...     "id": "user:2"
  ...   }
  ... ]''')
+
 
 
 Basic Grammar
@@ -130,18 +195,20 @@ JQL query consists of a pattern describes a JSON object (dictionary), a list (ar
       "type" : type
       }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='7' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='7' cols='60'>
  model1.query(
    '''{ 
       "displayname" : displayname,
       "type" : type
       }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -175,18 +242,20 @@ more complex expression. It uses the MERGEALL option to return a single dictiona
     MERGEALL 
   }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='7' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='7' cols='60'>
  model1.query(
    '''{
     service : maybe facebook_uid or maybe email
     MERGEALL 
   }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -216,15 +285,17 @@ equivalent to the first query:
 
  { displayname, type }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{ displayname, type }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -252,15 +323,17 @@ You can also construct results as arrays (lists) instead of objects. This query 
 
  [displayname, type]
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''[displayname, type]''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -289,15 +362,17 @@ You can select individual values (strings or numbers) by wrapping an :token:`exp
 
  (displayname)
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''(displayname)''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -324,11 +399,12 @@ Such a property can written as `<id>`.
 
  { 'key' : id, <id>, <a property with spaces>}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='18' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='18' cols='60'>
  from vesper import app
  model2 = app.createStore(
  '''[
@@ -346,7 +422,8 @@ Such a property can written as `<id>`.
  model2.query(
    '''{ 'key' : id, <id>, <a property with spaces>}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -384,15 +461,17 @@ The "*" will expand to all properties defined for the object. For example, this 
 
  {*}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{*}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -461,11 +540,12 @@ does inserted a property that already exists on an object might add a new value 
 
  { id, a_list }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='37' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='37' cols='60'>
  from vesper import app
  model3 = app.createStore(
  '''[
@@ -502,7 +582,8 @@ does inserted a property that already exists on an object might add a new value 
  model3.query(
    '''{ id, a_list }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -563,15 +644,17 @@ You can use wrap the property value with brackets to force the value of a proper
 
  { id, mixed }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model3.query(
    '''{ id, mixed }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -604,15 +687,17 @@ You can use wrap the property value with brackets to force the value of a proper
 
  { id, [mixed] }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model3.query(
    '''{ id, [mixed] }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -651,15 +736,17 @@ For example, the next example just returns one object because only one has a bot
 
  {displayname, auth}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{displayname, auth}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -694,15 +781,17 @@ If property references are modified "maybe" before them then objects without tha
 
  {displayname, maybe auth}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{displayname, maybe auth}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -741,15 +830,17 @@ This query still specifies that "auth" property appears in every object in the r
 
  {displayname, omitnull auth}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{displayname, omitnull auth}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -793,15 +884,17 @@ but it will never be included in the result because of the "omitnull".
 
  {displayname, omitnull "nullproperty" : null}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{displayname, omitnull "nullproperty" : null}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -825,15 +918,17 @@ The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 
  {displayname, [maybe auth]}
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='4' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
  model1.query(
    '''{displayname, [maybe auth]}''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -914,11 +1009,12 @@ This is example, value of the contains property will be any object that
       'contains' : { * where (subsumedby = ?parent)}
       }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='8' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='8' cols='60'>
  model1.query(
    '''{
       ?parent, 
@@ -926,7 +1022,8 @@ This is example, value of the contains property will be any object that
       'contains' : { * where (subsumedby = ?parent)}
       }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -951,11 +1048,12 @@ find all tag, include child tags in result
       'contains' : { where(subsumedby = ?parent)}
       }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='8' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='8' cols='60'>
  model1.query(
    '''{
       ?parent, 
@@ -963,7 +1061,8 @@ find all tag, include child tags in result
       'contains' : { where(subsumedby = ?parent)}
       }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 
@@ -1005,11 +1104,12 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
     where (auth = ?login)  
   }
 
+
 .. raw:: html
 
- <div class='example-plaintext' style='display:none'>
- <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
- <textarea rows='10' cols='60'>
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='10' cols='60'>
  model1.query(
    '''{ "userid" : id, 
     "logins" : {?login 
@@ -1019,7 +1119,8 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
     where (auth = ?login)  
   }''')
 
- </textarea></div>
+  </textarea></div>
+
 
 .. code-block:: python
 

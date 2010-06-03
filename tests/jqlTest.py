@@ -74,13 +74,13 @@ t('''
 ''', 
 [{'staticprop': 'foo'}])
 
-t('''{ * where ( foo > 'bar') }''', [])
+t('''{ * where foo > 'bar' }''', [])
 
 t('''{ * where ( id = :id) }''', 
 [{'foo':'bar', 'id':'2'}], 
                 bindvars={'id':'2'})
 
-t('''{ * where ( child = :child) }''', 
+t('''{ * where  child = :child }''', 
 [{'child': '2', 'id': '_:2', 'parent': '1'}], 
         bindvars={'child':'2'})
 
@@ -216,14 +216,14 @@ t('''
 
 t.group = 'orderby'
 
-t('''{ * orderby(child) }''',
+t('''{ * order by child }''',
 [{'foo': 'bar', 'id': '3'}, #note: nulls go first
  {'foo': 'bar', 'id': '2'},
  {'child': '2', 'id': '_:2', 'parent': '1'},
  {'child': '3', 'id': '_:1', 'parent': '1'}]
 )
 
-t('''{ * orderby(id desc) }''',
+t('''{ * order by id desc }''',
 [{'child': '2', 'id': '_:2', 'parent': '1'},
  {'child': '3', 'id': '_:1', 'parent': '1'},
  {'foo': 'bar', 'id': '3'},
@@ -235,8 +235,8 @@ res = [{'child': '3', 'id': '_:1', 'parent': '1'},
  {'foo': 'bar', 'id': '2'},
  {'foo': 'bar', 'id': '3'}]
  
-t('''{ * orderby(child desc, id) }''', res)
-t('''{ * orderby(child desc, id asc) }''', res)
+t('''{ * order by child desc, id }''', res)
+t('''{ * order by child desc, id asc }''', res)
 
 t.group = 'parse'
 
@@ -313,7 +313,7 @@ where( {
     topic_interest = ?ss and
     <foaf:topic_interest> = ?artist.foo.bar #Join(
   })
-GROUPBY(foo)
+GROUP BY foo
 }
 ''',
 #jql.QueryException: only equijoin supported for now:
@@ -444,7 +444,7 @@ t.group = 'namemap'
 t('''{
 * 
 where (<rdfs:range> = 'Tag')
-orderby (<rdfs:range>)
+order by <rdfs:range>
 namemap = {
  "propertypatterns" : { 
       'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
@@ -478,7 +478,7 @@ groupby(subject, display=merge)
 t('''{
 subject, 
 content
-groupby(subject)
+group by subject
 }
 ''', 
 [{'content': ['some text about the commons', 
@@ -492,7 +492,7 @@ groupby(subject)
 #leave the groupby property out of the display list
 t('''{
 content
-groupby(subject)
+group by subject
 }
 ''', [{'content': ['some text about the commons',
               'some more text about the commons',
@@ -503,7 +503,7 @@ groupby(subject)
 t('''{
  subject, 
  'count' : count(content)
- groupby(subject)
+ group by subject
  }
  ''', 
  [{'count': 2, 'subject': 'commons'}, {'count': 1, 'subject': 'rhizome'}])
@@ -512,7 +512,7 @@ t('''{
   subject, 
   'count' : count(*), 
   'count2': count(subject)
-  groupby(subject)
+  group by subject
   }
   ''',
 [{'count': 2, 'count2': 2, 'subject': 'commons'}, {'count': 1, 'count2': 1, 'subject': 'rhizome'}])
@@ -534,7 +534,7 @@ key,
 'sumOfType1' : sum(if(type==1, val, 0)), #-2 + -4 = -6
 'sumOfType2' : sum(if(type==2, val, 0)),  # 2 + 4  = 6
 'differenceOfSums' : sum(if(type==1, val, 0)) - sum(if(type==2, val, 0))
-groupby(key) 
+group by key 
 }
 ''',
 [{'key': 1, 
@@ -555,7 +555,7 @@ groupby(key)
 model = groupbymodel
 )
 
-t('''{key, type, val groupby(key)}''',
+t('''{key, type, val group by key}''',
 model = [{'key': 1, 'type': [1, 1, 2, 2], 'val': [-2, -4, 2, 4]},
  {'key': 10, 'type': [1, 1, 2, 2], 'val': [-20, -40, 20, 40]}]
 )
@@ -681,7 +681,7 @@ id,
 
 t('''
 { ?tag, * 
-where (?tag in ('foo', 'commons'))
+where ?tag in ('foo', 'commons')
 }
 ''',
 [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}])

@@ -57,7 +57,7 @@ import ply.yacc
 
 reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NAMEMAP', 
            'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
-           'GROUPBY', 'ORDERBY', 'ASC', 'DESC', 'OMITNULL')#'INCLUDE', 'EXCLUDE', 'WHEN')
+           'GROUP', 'ORDER', 'BY', 'ASC', 'DESC', 'OMITNULL')#'INCLUDE', 'EXCLUDE', 'WHEN')
 
 tokens = reserved + (
     # Literals (identifier, integer constant, float constant, string constant)
@@ -655,12 +655,17 @@ def p_dictvalue(p):
     else:
         p[0] = p[1]
 
-def p_constructop1(p):
+def p_constructop_where(p):
     '''
-    constructop : WHERE LPAREN expression RPAREN
-                | GROUPBY LPAREN arglist RPAREN
+    constructop : WHERE expression
     '''
-    p[0] = T.constructop(p[1], p[3])
+    p[0] = T.constructop(p[1], p[2])
+
+def p_constructop_groupby(p):
+    '''
+    constructop : GROUP BY arglist
+    '''
+    p[0] = T.constructop("groupby", p[3])
 
 def p_constructop2(p):
     '''
@@ -670,11 +675,11 @@ def p_constructop2(p):
     '''
     p[0] = T.constructop(p[1], p[2])
 
-def p_constructop4(p):
+def p_constructop_orderby(p):
     '''
-    constructop : ORDERBY LPAREN sortexplist RPAREN
+    constructop : ORDER BY sortexplist
     '''
-    p[0] = T.constructop(p[1], OrderBy(*p[3]) )
+    p[0] = T.constructop("orderby", OrderBy(*p[3]) )
 
 def p_constructop5(p):
     '''

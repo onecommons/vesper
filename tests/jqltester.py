@@ -124,12 +124,33 @@ def formatmodel(modelsrc, modelname):
  '''$modelplain''')\n
 """).substitute(locals())
 
+def formatPlainText(plaintext):
+    rows=plaintext.count('\n')+1
+    return Template("""
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='$rows' cols='60'>$plaintext
+  </textarea></div>
+
+""").substitute(locals())
+
+
+#called by jsonqlDocTest.py
 def printmodel(model):
     modelsrc, modelname = _models[id(model)]    
     assert id(model) not in _printedmodels
     _printedmodels.append(id(model))        
-    return formatmodel(modelsrc, modelname)[0] #XXX
-    
+    modelFormatted, modelPlain = formatmodel(modelsrc, modelname)
+    plaintextFormatted = formatPlainText(modelPlain)
+    return '''
+%s
+.. code-block:: python
+
+%s
+''' % (plaintextFormatted, modelFormatted)
+
 def printdocs(test):
     if not test.doc:
         return    
@@ -148,22 +169,16 @@ def printdocs(test):
  $modelname.query(
    '''$queryplain''')
 """).substitute(locals())
-    rows=plaintext.count('\n')+1;
+    plaintextFormatted = formatPlainText(plaintext)
     plaintexthtml = '''
 
 .. code-block:: jsonql
 
  %s
 
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='%d' cols='60'>%s
-  </textarea></div>
-
+%s
 .. code-block:: python
-''' % (queryplain, rows, plaintext)
+''' % (queryplain, plaintextFormatted)
     print Template("""
 $doc$plaintexthtml$createmodel
  >>> ${modelname}.query(
