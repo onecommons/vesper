@@ -1425,13 +1425,8 @@ class SimpleQueryEngine(object):
             rvalue = op.right.evaluate(self, context)
         else:
             rvalue = context.currentValue
-        #XXX unit tests for following sql semantics:
-        #"The IS and IS NOT operators work like = and !=  except that NULL values compare equal to one another.
-        #IS and IS NOT have the same precedence as =." http://www.sqlite.org/lang_expr.html
-        if not op.nulleq and lvalue is None or rvalue is None:
-            return False
-        else:
-            return lvalue == rvalue
+        
+        return lvalue == rvalue
 
     def costEq(self, op, context): #XXX
         assert len(op.args) == 2, op

@@ -55,7 +55,7 @@ import ply.yacc
 #### TOKENS
 ###########
 
-reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'IS', 'NAMEMAP', 
+reserved = ('TRUE', 'FALSE', 'NULL', 'NOT', 'AND', 'OR', 'IN', 'NAMEMAP',
            'ID', 'MAYBE', 'WHERE', 'LIMIT', 'OFFSET', 'DEPTH', 'MERGEALL',
            'GROUP', 'ORDER', 'BY', 'ASC', 'DESC', 'OMITNULL')#'INCLUDE', 'EXCLUDE', 'WHEN')
 
@@ -273,7 +273,7 @@ precedence = (
     ('right','MAYBE'),
     ('right','NOT'),
     ("left", "IN"), 
-    ("nonassoc", 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE', 'IS'),
+    ("nonassoc", 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE'),
     ('left','PLUS','MINUS'),
     ('left','TIMES','DIVIDE', 'MOD'),
     ('right','UMINUS', 'UPLUS'),
@@ -297,15 +297,6 @@ def p_expression_notin2(p):
     """    
     p[0] = Not(In(p[1], *p[5]))
 
-#note: needs to precede p_expression_binop to resolve reduce/reduce conflict correctly
-def p_expression_isnotop(p):
-    '''
-    expression : expression IS NOT expression
-    '''
-    #XXX: make sure that precedence should be the same as !=
-    p[0] = Not(Eq(p[1], p[4], True))
-
-
 def p_expression_binop(p):
     """
     expression : expression PLUS expression
@@ -322,7 +313,6 @@ def p_expression_binop(p):
               | expression IN expression              
               | expression AND expression
               | expression OR expression
-              | expression IS expression
     """
     op = p.parser.jqlState.mapOp(p[2].upper())
     p[0] = op(p[1], p[3])

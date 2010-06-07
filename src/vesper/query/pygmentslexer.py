@@ -55,7 +55,7 @@ class JsonqlLexer(RegexLexer):
             (r'<(\\\\|\\"|[^"])*?>', Name.Variable),#propstring
             (r'\?[A-Za-z_$][\w_$]*', Name.Label),            
             (r'[+/%=!\-<>]',Operator),
-            (r'(NOT|AND|OR|IN|IS)', Operator.Word),
+            (r'(NOT|AND|OR|IN)', Operator.Word),
             (r'[A-Za-z_$][\w_$]*', Name.Variable),
         ]
     }

@@ -1151,10 +1151,6 @@ t('''{ values where values != '1' }''')
 t('''{ values where values == 1 }''') 
 t('''{ values where values != 1 }''') 
 
-t('''{ values where values is null }''') 
-
-t('''{ values where values is not null }''')
-
 t('''{ values where values = null }''') 
 
 t('''{ values where values != null }''') 

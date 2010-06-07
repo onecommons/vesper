@@ -32,7 +32,6 @@ class _ParseState(object):
         "IN" : In,
         "=" : Eq,
         "==" : Eq,
-        'IS' : lambda left, right: Eq(left, right, nulleq=True),
         '!=' : lambda *args: Not(Eq(*args)),
         '<' : lambda *args: Cmp('<',*args),
         '>' : lambda *args: Cmp('>',*args),

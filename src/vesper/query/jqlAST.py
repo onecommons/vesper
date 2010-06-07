@@ -638,8 +638,7 @@ class Cmp(CommunitiveBinaryOp):
         return '(' + op.join( [repr(a) for a in self.args] ) + ')'
 
 class Eq(CommunitiveBinaryOp):
-    def __init__(self, left=None, right=None, nulleq=False):
-        self.nulleq = nulleq
+    def __init__(self, left=None, right=None):
         return super(Eq, self).__init__(left, right)
 
     def __repr__(self):
@@ -651,11 +650,6 @@ class In(BooleanOp):
     def __repr__(self):
         rep = repr(self.args[0]) + ' in ('
         return rep + ','.join([repr(a) for a in self.args[1:] ]) + ')'
-
-class Is(CommunitiveBinaryOp):
-    def __repr__(self):
-        self._validateArgs()
-        return '(' + ' is '.join( [repr(a) for a in self.args] ) + ')'
 
 class Not(BooleanOp):
     def __repr__(self):
