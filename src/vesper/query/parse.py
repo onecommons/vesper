@@ -69,7 +69,7 @@ tokens = reserved + (
     #'LOR', 'LAND', 'LNOT',
     'LT', 'LE', 'GT', 'GE', 'EQ', 'NE',
 
-    # Delimeters ( ) [ ] { } , . 
+    # Delimeters ( ) [ ] { } , . :
     'LPAREN', 'RPAREN',
     'LBRACKET', 'RBRACKET',
     'LBRACE', 'RBRACE',
@@ -125,7 +125,7 @@ def t_FLOAT(t):
     return t
 
 def t_STRING(t):
-    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*')'''    
+    r'''(?:"(?:[^"\n\r\\]|(?:"")|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*")|(?:'(?:[^'\n\r\\]|(?:'')|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*')'''
     #support JSON strings which means need to decode escapes like \r and \u0000 
     #since this is a subset of python literal syntax so we can use the unicode-escape decoding
     if isinstance(t.value, unicode):
@@ -135,7 +135,7 @@ def t_STRING(t):
         t.value = t.value[1:-1].encode('ascii', 'backslashreplace').decode("unicode-escape")
     else:
         t.value = t.value[1:-1].decode("unicode-escape").encode('utf8')
-    #XXX don't do unicode-escape if no escapes appear in string
+    #XXX perf?: don't do unicode-escape if no escapes appear in string
     return t
 
 def t_PROPSTRING(t):
@@ -176,7 +176,8 @@ def t_linecomment(t):
 
 def t_error(t):
     # print "t_error:", t.lexpos, t.lineno, t.type, t.value
-    t.lexer.errorlog.error("Illegal character %s at line:%d char:%d" % (repr(t.value[0]), t.lineno, t.lexpos))
+    t.lexer.errorlog.error("Illegal character %s at line:%d char:%d"
+                                % (repr(t.value[0]), t.lineno, t.lexpos))
     t.lexer.skip(1)
 
 # Newlines
@@ -272,7 +273,7 @@ precedence = (
     ('right','MAYBE'),
     ('right','NOT'),
     ("left", "IN"), 
-    ("nonassoc", 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE'),
+    ("nonassoc", 'LT', 'LE', 'GT', 'GE', 'EQ', 'NE', 'IS'),
     ('left','PLUS','MINUS'),
     ('left','TIMES','DIVIDE', 'MOD'),
     ('right','UMINUS', 'UPLUS'),
@@ -296,6 +297,15 @@ def p_expression_notin2(p):
     """    
     p[0] = Not(In(p[1], *p[5]))
 
+#note: needs to precede p_expression_binop to resolve reduce/reduce conflict correctly
+def p_expression_isnotop(p):
+    '''
+    expression : expression IS NOT expression
+    '''
+    #XXX: make sure that precedence should be the same as !=
+    p[0] = Not(Eq(p[1], p[4], True))
+
+
 def p_expression_binop(p):
     """
     expression : expression PLUS expression
@@ -312,6 +322,7 @@ def p_expression_binop(p):
               | expression IN expression              
               | expression AND expression
               | expression OR expression
+              | expression IS expression
     """
     op = p.parser.jqlState.mapOp(p[2].upper())
     p[0] = op(p[1], p[3])
@@ -332,16 +343,7 @@ def p_expression_maybe(p):
 def p_expression_notop(p):
     'expression : NOT expression'
     p[0] = Not(p[2])
-
-def p_expression_isop(p):
-    '''
-    expression : expression IS NULL
-               | expression IS NOT NULL
-    '''
-    if len(p) == 4:
-        p[0] = IsNull(p[1])
-    else:
-        p[0] = Not(IsNull(p[1]))
+                
 
 def p_expression_group(p):
     'expression : LPAREN expression RPAREN'

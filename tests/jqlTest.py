@@ -350,6 +350,9 @@ t("{*/1}", ast='error')
 #logs ERROR:parser:Syntax error at '}'
 t("{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'} }", ast='error')
 
+#error: need space after ':' or else looks like a bindvar
+t('''{ foo:bar }''', ast='error')
+
 #XXX filters to test:
 '''
     foo = (?a or ?b)
@@ -1115,6 +1118,56 @@ values
  {'id': '4', 'values': [1, '1', 1.1]}]
  )
 
+t.group = 'nulls'
+t.model = modelFromJson([
+      { 'id' : '1',
+        'values' :  None
+      },
+      { 'id' : '2',
+        'values' : 0
+      },
+     { 'id' : '3',
+        'values' : ['', 0, None, False]
+     },
+     { 'id' : '4',
+        'values' : [1,'1',1.1]
+     },
+     { 'id' : '5',
+       'values' : ''
+     },
+     { 'id' : '6',
+       'values' : 1
+     },
+     { 'id' : '7',
+       'values' : '1'
+     },
+     ]
+ )
+
+#XXX fix these!
+t('''{ values where values == '1' }''')
+t('''{ values where values != '1' }''')
+
+t('''{ values where values == 1 }''') 
+t('''{ values where values != 1 }''') 
+
+t('''{ values where values is null }''') 
+
+t('''{ values where values is not null }''')
+
+t('''{ values where values = null }''') 
+
+t('''{ values where values != null }''') 
+
+t('''{ values where values = '' }''') 
+t('''{ values where values != '' }''') 
+#t('''{ values where values <> '' }''') #XXX add to syntax?
+t('''{ values where values = 0 }''') 
+t('''{ values where values != 0 }''') 
+t('''{ values where values = '0' }''') 
+t('''{ values where values != '0' }''') 
+
+
 #test multivalued properties without any associated json list info
 t.group = 'multivalue'
 
@@ -1189,6 +1242,31 @@ t('{ listprop, listprop2, listprop3, listprop4 }',
   'listprop4': [[]]}]
 )
 
+#XXX list order is not preserved
+#XXX evaluating on list product is not intuitive here
+#XXX shouldn't nested lists be evaluated too? -- currently treated as a bad value
+#XXX bad values are collapsing to 0, shouldn't list size be preserved? (e.g. [0,0,0] instead of 0)
+t('''{ 
+"listpropX2" : listprop * 2,
+"listprop2X2" : [listprop2 * 2],
+#"listproplistprop2" : listprop + listprop2,
+}''',
+[{'listprop2X2': [-2.0,
+                  0.0,
+                  2.0,
+                  20.0,
+                  22.0,
+                  4.0,
+                  6.0,
+                  8.0,
+                  10.0,
+                  12.0,
+                  14.0,
+                  18.0],
+  'listpropX2': [0.0, 0.0, 0.0, 0.0]             
+ },
+ {'listprop2X2': [0.0], 'listpropX2': 0.0
+  }])
 
 #XXX t.group = 'exclude'
 #html5 json microdata representation:
@@ -1731,14 +1809,14 @@ class JQLTestCase(unittest.TestCase):
                 return hash(tuple(sorted(self.items())))
 
             def __repr__(self):
-                return 'HashableList'+super(hashablelist, self).__repr__()
+                return 'HashableDict('+super(hashabledict, self).__repr__()+')'
         
         class hashablelist(list):
             def __hash__(self):
                 return hash(tuple(self))
 
             def __repr__(self):
-                return 'HashableList'+super(hashablelist, self).__repr__()
+                return 'HashableList('+super(hashablelist, self).__repr__()+')'
 
         try:
             save =jql.QueryContext.defaultShapes
@@ -1749,7 +1827,26 @@ class JQLTestCase(unittest.TestCase):
             self.fail()
         finally:
             jql.QueryContext.defaultShapes = save
-                    
+    
+    def testPygmentsLexer(self):
+        try:
+            import pygments
+            from pygments.token import Token
+        except ImportError:
+            print 'skipping testPygmentsLexer, pygments not available'
+            return
+        from vesper.query.pygmentslexer import JsonqlLexer
+        query = '''{
+          foo, 
+          *,
+          "displayname" : displayname,
+          <afasfd>
+           where (?bar = :bindvar)
+           order BY <a prop> ASC
+        }'''
+        tokens = [(Token.Punctuation, u'{'), (Token.Text, u'\n          '), (Token.Name.Variable, u'foo'), (Token.Punctuation, u','), (Token.Text, u' \n          '), (Token.Name.Variable, u'*'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Literal.String.Double, u'"displayname"'), (Token.Text, u' '), (Token.Punctuation, u':'), (Token.Text, u' '), (Token.Name.Variable, u'displayname'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Name.Variable, u'<afasfd>'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'where'), (Token.Text, u' '), (Token.Punctuation, u'('), (Token.Name.Label, u'?bar'), (Token.Text, u' '), (Token.Operator, u'='), (Token.Text, u' '), (Token.Name.Entity, u':bindvar'), (Token.Punctuation, u')'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'order'), (Token.Text, u' '), (Token.Keyword.Reserved, u'BY'), (Token.Text, u' '), (Token.Name.Variable, u'<a prop>'), (Token.Text, u' '), (Token.Keyword.Reserved, u'ASC'), (Token.Text, u'\n        '), (Token.Punctuation, u'}'), (Token.Text, u'\n')]        
+        self.assertEquals(tokens, list(pygments.lex(query, JsonqlLexer()) ) )
+    
 if __name__ == "__main__":
     import sys
     try:

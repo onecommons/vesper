@@ -205,20 +205,16 @@ def groupbyOrdered(tupleset, groupby, debug=False):
 ################ Query Functions ############################
 #############################################################
 
+def numericbinop(a, b, func):
+    return func(safeFloat(a), safeFloat(b))
+
 class QueryFuncs(object):
 
-    SupportedFuncs = {
-        (EMPTY_NAMESPACE, 'true') :
-          jqlAST.QueryFuncMetadata(lambda *args: True, BooleanType, None, True,
-                            lambda *args: 0),
-        (EMPTY_NAMESPACE, 'false') :
-          jqlAST.QueryFuncMetadata(lambda *args: False, BooleanType, None, True,
-                            lambda *args: 0),
-    }
+    SupportedFuncs = {}
 
     def addFunc(self, name, func, type=None, opFactory=None, cost=None, 
-                            needsContext=False, lazy=False, isAggregate=False,
-                            initialValue=None, finalFunc=None):
+                            needsContext=False, lazy=False, checkForNulls=9999,
+                            isAggregate=False, initialValue=None, finalFunc=None):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         if cost is None or callable(cost):
@@ -227,7 +223,7 @@ class QueryFuncs(object):
             costfunc = lambda *args: cost
         self.SupportedFuncs[name] = jqlAST.QueryFuncMetadata(func, type, 
                     opFactory, costFunc=costfunc, needsContext=needsContext, 
-                    lazy=lazy, isAggregate=isAggregate, 
+                    lazy=lazy, checkForNulls=checkForNulls, isAggregate=isAggregate,
                     initialValue=initialValue, finalFunc=finalFunc)
 
     def getOp(self, name, *args):
@@ -242,18 +238,23 @@ class QueryFuncs(object):
     
     def __init__(self):
         #add basic functions
-        self.addFunc('add', lambda a, b: float(a)+float(b), NumberType)
-        self.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
-        self.addFunc('mul', lambda a, b: float(a)*float(b), NumberType)
-        self.addFunc('div', lambda a, b: float(a)/float(b), NumberType)
-        self.addFunc('mod', lambda a, b: float(a)%float(b), NumberType)
-        self.addFunc('negate', lambda a: -float(a), NumberType)
-        self.addFunc('bool', lambda a: bool(a), BooleanType)
+        #number functions and operators
+        self.addFunc('add', lambda a, b: numericbinop(a, b, operator.add), NumberType)
+        self.addFunc('sub', lambda a, b: numericbinop(a, b, operator.sub), NumberType)
+        self.addFunc('mul', lambda a, b: numericbinop(a, b, operator.mul), NumberType)
+        self.addFunc('div', lambda a, b: numericbinop(a, b, operator.div), NumberType)
+        self.addFunc('mod', lambda a, b: numericbinop(a, b, operator.mod), NumberType)
+        self.addFunc('negate', lambda a: -safeFloat(a), NumberType)
+        #cast functions
+        self.addFunc('bool', bool, BooleanType)
+        self.addFunc('number', safeFloat, NumberType)
+        self.addFunc('string', str, StringType) #XXX: unicode?
+        #string functions
         self.addFunc('upper', lambda a: a.upper(), StringType)
         self.addFunc('lower', lambda a: a.lower(), StringType)
-        self.addFunc('trim', lambda a,chars=None: a.strip(chars), StringType)
-        self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType)
-        self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType)        
+        self.addFunc('trim', lambda a,chars=None: a.strip(chars), StringType, checkForNulls=1)
+        self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType, checkForNulls=1)
+        self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType, checkForNulls=1)
 
 def followFunc(context, startid, propname=None, excludeInitial=False, 
                                                         edgesOnly=False):
@@ -410,8 +411,11 @@ def hasNonAggregateDependentOps(op):
         or (isinstance(op, jqlAST.AnyFuncOp) and op.isAggregate()) )
     return not op.isIndependent(exclude=test)
 
-def aggFloat(n):
+def safeFloat(n):
+    #XXX should not catch exceptions if context is in a strict convert mode
+    #due that to match underlying e.g. with sql92/oracle convertion semantics
     try:
+        #note: like sql, python trims strings when converting to float
         return float(n)
     except ValueError:
         return 0.0
@@ -419,6 +423,7 @@ def aggFloat(n):
         return 0.0
 
 def _aggMin(x, y):
+    #XXX test that min, max and avg return null if and only if there are no non-null values
     if y is not None and x is not None:
         return min(x,y)
     return x
@@ -432,7 +437,7 @@ def _aggAvg(x, y):
     if y is None: 
         return x
     else:
-        return len(x) and (x[0]+aggFloat(y), x[1]+1.0) or (aggFloat(y),1.0)
+        return len(x) and (x[0]+ safeFloat(y), x[1]+1.0) or (safeFloat(y),1.0)
 
 def _aggCount(context, x, y):
     if context.groupby:
@@ -461,9 +466,9 @@ class SimpleQueryEngine(object):
     #http://www.sqlite.org/lang_aggfunc.html
     for name, func, initialValue, finalFunc in [
         ('sum', lambda x,y: y is not None and (
-                x and x+aggFloat(y) or aggFloat(y)) or x, None, None),
+                x and x+safeFloat(y) or safeFloat(y)) or x, None, None),
         ('total', lambda x,y: y is not None and (
-                x and x+float(y) or aggFloat(y)) or x, 0, None),
+                x and x+float(y) or safeFloat(y)) or x, 0, None),
         ('avg', _aggAvg, (), lambda n, *a: len(n) and n[0]/n[1] or 0),
         ('min', _aggMin, None, None),
         ('max', _aggMax, None, None)]:
@@ -658,7 +663,6 @@ class SimpleQueryEngine(object):
                         hint=tupleset, 
                         op='eval agg on '+subjectlabel, debug=context.debug)
                     
-                    ccontext.currentProjects = prop.projects
                     ccontext.currentProjects = prop.projects
                     if not row or len(row[0]) <= 1:
                         #don't bother with all the expression-in-list handling below
@@ -1421,7 +1425,13 @@ class SimpleQueryEngine(object):
             rvalue = op.right.evaluate(self, context)
         else:
             rvalue = context.currentValue
-        return lvalue == rvalue
+        #XXX unit tests for following sql semantics:
+        #"The IS and IS NOT operators work like = and !=  except that NULL values compare equal to one another.
+        #IS and IS NOT have the same precedence as =." http://www.sqlite.org/lang_expr.html
+        if not op.nulleq and lvalue is None or rvalue is None:
+            return False
+        else:
+            return lvalue == rvalue
 
     def costEq(self, op, context): #XXX
         assert len(op.args) == 2, op
@@ -1484,7 +1494,15 @@ class SimpleQueryEngine(object):
         if op.metadata.lazy:
             values = op.args
         else:
-            values = [arg.evaluate(self, context) for arg in op.args]
+            checknulls = op.metadata.checkForNulls
+            values = []
+            for i, arg in enumerate(op.args):
+                v = arg.evaluate(self, context)
+                if checknulls > i and v is None:
+                    return None
+                values.append(v)
+            #XXX if op.metadata.signature:
+            #    values = [c(v) for c,v in zip(op.metadata.signature, values)]
         result = op.execFunc(context, *values)
         return result
 

@@ -37,20 +37,23 @@ class JsonqlLexer(RegexLexer):
         ],
         'root': [
             include('commentsandwhitespace'),
+            (r'\:[A-Za-z_$][\w_$]*', Name.Entity), #bindvar
             (r'[{(\[,:]', Punctuation),
             (r'[})\].]', Punctuation),
             (r'(NAMEMAP|MAYBE|WHERE|LIMIT|OFFSET|DEPTH|MERGEALL|'
-             r'GROUPBY|ORDERBY|ASC|DESC|OMITNULL)\b', Keyword.Reserved),
+             r'GROUP|ORDER|ASC|DESC|BY|OMITNULL)\b', Keyword.Reserved),
             (r'(true|false|null)\b', Keyword.Constant),
-            (r'(sum|count|total|avg)\b', Name.Builtin),            
+            #built-in functions
+            (r'(sum|count|total|avg|min|max|number|string|bool|'
+             r'if|follow|isbnode|isref|'
+             r'upper|lower|trim|ltrim|rtrim)\b', Name.Builtin),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\"|[^"])*"', String.Double),
-            (r"'(\\\\|\\'|[^'])*'", String.Single),
+            (r'"(\\\\|\\"|[^"])*?"', String.Double),
+            (r"'(\\\\|\\'|[^'])*?'", String.Single),
             (r'\*', Name.Variable),
-            (r'<(\\\\|\\"|[^"])*>', Name.Variable),#propstring
-            (r'\?[A-Za-z_$][\w_$]*', Name.Label),
-            (r'\:[A-Za-z_$][\w_$]*', Name.Entity), #bindvar
+            (r'<(\\\\|\\"|[^"])*?>', Name.Variable),#propstring
+            (r'\?[A-Za-z_$][\w_$]*', Name.Label),            
             (r'[+/%=!\-<>]',Operator),
             (r'(NOT|AND|OR|IN|IS)', Operator.Word),
             (r'[A-Za-z_$][\w_$]*', Name.Variable),

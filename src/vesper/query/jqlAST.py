@@ -638,6 +638,10 @@ class Cmp(CommunitiveBinaryOp):
         return '(' + op.join( [repr(a) for a in self.args] ) + ')'
 
 class Eq(CommunitiveBinaryOp):
+    def __init__(self, left=None, right=None, nulleq=False):
+        self.nulleq = nulleq
+        return super(Eq, self).__init__(left, right)
+
     def __repr__(self):
         self._validateArgs()
         return '(' + ' == '.join( [repr(a) for a in self.args] ) + ')'
@@ -648,9 +652,14 @@ class In(BooleanOp):
         rep = repr(self.args[0]) + ' in ('
         return rep + ','.join([repr(a) for a in self.args[1:] ]) + ')'
 
-class IsNull(BooleanOp):
+class Is(CommunitiveBinaryOp):
     def __repr__(self):
-        return repr(self.args[0]) + ' is null '
+        self._validateArgs()
+        return '(' + ' is '.join( [repr(a) for a in self.args] ) + ')'
+
+class Not(BooleanOp):
+    def __repr__(self):
+        return 'not(' + ','.join( [repr(a) for a in self.args] ) + ')'
 
 class Not(BooleanOp):
     def __repr__(self):
@@ -662,8 +671,8 @@ class QueryFuncMetadata(object):
       }
 
     def __init__(self, func, type=None, opFactory=None, isIndependent=True,
-            costFunc=None, needsContext=False, lazy=False, isAggregate=False,
-            initialValue=None, finalFunc=None):
+            costFunc=None, needsContext=False, lazy=False, checkForNulls=0,
+            isAggregate=False, initialValue=None, finalFunc=None):
         self.func = func
         self.type = type or ObjectType
         self.isIndependent = isIndependent
@@ -674,6 +683,7 @@ class QueryFuncMetadata(object):
         self.isAggregate = isAggregate
         self.initialValue = initialValue
         self.finalFunc = finalFunc
+        self.checkForNulls = checkForNulls
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
