@@ -42,17 +42,22 @@ class ChangesetListener(object):
             self.replicator.last_ts = datetime.now()
             
             message_id = headers['message-id']
-            self.replicator.log.debug("Node %s processing message:%s" % (self.replicator.clientid, message_id))
+            self.replicator.log.debug("Node %s processing message:%s"
+                                      % (self.replicator.clientid, message_id))
                         
             obj = json.loads(message)
             
             # sanity check to make sure this is a message we need to care about
             if (headers['clientid'] != obj['origin']):
-                self.replicator.log.warning("Node %s ignoring message id %s with mismatched origins! headers: %s obj:%s" % (self.replicator.clientid, message_id, headers['clientid'], obj['origin']))
+                self.replicator.log.warning("Node %s ignoring message id %s with "
+                "mismatched origins! headers: %s obj:%s" % (self.replicator.clientid,
+                                  message_id, headers['clientid'], obj['origin']))
                 self.replicator.msg_recv_err += 1
                 # XXX do we ack this or not?
             elif (self.replicator.clientid == headers['clientid']):
-                self.replicator.log.warning("Node %s ignoring message id %s from myself" % (self.replicator.clientid, message_id))
+                self.replicator.log.warning(
+                    "Node %s ignoring message id %s from myself"
+                                % (self.replicator.clientid, message_id))
                 self.replicator.msg_recv_err += 1
                 # XXX do we ack this or not?
             else:

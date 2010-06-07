@@ -6,10 +6,12 @@ ez_setup.use_setuptools()
 from setuptools import setup, find_packages
 import sys, os
 
+#install extras like this: easy_install "vesper[docs, replication]"
 install_requires = ['ply', 'routes', 'mako']
 extras_require = { 'yaml' : ['pyyaml'],
-  #'replication' : [stomp.py]
-  #'doc' : ['sphinx']
+  'docs' : ['Sphinx'],
+  #'replication' : [stomp.py],
+  #'tests' : [],
 }
 PACKAGE_NAME = 'vesper'
 pyver = sys.version_info[:2]

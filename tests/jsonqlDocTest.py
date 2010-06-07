@@ -410,9 +410,9 @@ t%'''
 Sub-queries (nested constructs)
 -------------------------------
 
-The value of a property or array item can be another object or list construct instead of an expression. 
-If a nested query references an object in the outer query (via `labels`) it will be correlated with the outer query.
-If it is independent it will be evaluated for each result, so the result set will equivalent to a cross-join.
+The value of a property or array item can be a :token:`constructobject` or a :token:`constructarray` instead of an :ref:`expression`.
+If the nested query references an object in the outer query (via `labels`) it will be correlated with the outer query.
+Otherwise, it will be evaluated on each result, so the result set will equivalent to a cross-join.
 '''
 
 t%'''
@@ -492,20 +492,32 @@ If an object is anonymous it will be expanded, otherwise an object reference obj
 
 '''
 
-'''
+t % '''
 Expressions
 ===========
+
+If an expression contains a property reference whose value a list and the expression doesn't contain any :ref:`aggregate functions', the expression will be evaluated for each item in that list, resulting in a list. If the expression contains more than one property reference, the expression will be evaluated on each tuple obtained from a cartesian product of the list values, using an order based on the depth-first appearance of the property references.
+
+XXX examples
 '''
 
-'''
+t%'''
 Groupby and aggregate Functions
 ===============================
 
+If a "group by" clause is not specified, the aggregate function will be apply
+
 Built-in aggregate functions
+----------------------------
 
 count, min, max, sum, avg follow standard SQL semantics with regard to null handling, 
 *total* follow the semantics sqllite's *total*, described here: http://www.sqlite.org/lang_aggfunc.html
 
+'''
+
+t%'''
+Bind variables
+==============
 '''
 
 t.group = 'footnotes'
@@ -549,9 +561,9 @@ t%'''
     </style>
     <script>
     $().ready(function(){
-      $('.example-plaintext ~ .highlight-python pre').prepend("<span class='toolbar'>Run Example</span");
+      $('.example-plaintext ~ .highlight-python pre').prepend("<span class='toolbar'>Copy Code</span");
       $('.toolbar').click(function() {
-        $(this).parents('.highlight-python').prevAll('.example-plaintext:last')
+        $(this).parents('.highlight-python').prev('.example-plaintext:last')
           .slideDown('fast').find('textarea').focus();
       });
       $('.close-example-plaintext').click(function() { 

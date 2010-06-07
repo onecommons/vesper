@@ -718,8 +718,8 @@ class MergeableGraphManager(NamedGraphManager):
     the max revisionnum for each branchid (and adding new branchid if not present) and also increments
     its own revisionnum. 
     
-    If a branch into merged back into the trunk we can drop that branch id 
-    ("retire" it) along as the branch no longer changes because the new trunk revision 
+    If a branch is into merged back into the trunk we can drop that branch id
+    ("retire" it) as long as the branch no longer changes because the new trunk revision
     will lexicographically compare greater than any prior revision that has that branch id.
     But if non-trunk branch dropped another non-trunk branch after a merge we 
     no longer can compare revisions of the retired branch that didn't contain the branch
@@ -732,7 +732,7 @@ class MergeableGraphManager(NamedGraphManager):
     revision creation timestamp.
         
     In summary, for revision string R1 and R2, if R1 >= R2 then it can't R1 precede R2.
-    R2 may precede R1 and at least R2 branchprecedes R1 on the trunk branch.
+    R2 may precede R1 and at least R2 partialprecedes R1 on the trunk branch.
     '''
     
     initialRevision = '0'
@@ -768,6 +768,9 @@ class MergeableGraphManager(NamedGraphManager):
 
     @staticmethod
     def getBranchRev(rev,branchid):
+        '''
+        Return the revision number for the given branch of the given revision string
+        '''
         for node in rev.split(','):
             if node.startswith(branchid):
                 return node[len(branchid):]
@@ -830,15 +833,16 @@ class MergeableGraphManager(NamedGraphManager):
             if changeset.origin not in (self.trunk_id, self.branch_id):
                 #we can't allow this since we need changesets to at least 
                 #share the trunk revision
-                raise RuntimeError('''merging a changeset into an empty store 
-but neither its trunkid %s not its branchid %s 
-match the changeset's branchid: %s''' % (
-                                self.trunk_id, self.branch_id, changeset.origin))            
+                raise RuntimeError("merging a changeset into an empty store "
+                    "but neither its trunkid %s not its branchid %s "
+                    "match the changeset's branchid: %s" %
+                            (self.trunk_id, self.branch_id, changeset.origin))
         else:
             branchidlen = len(self.branch_id)
             if (changeset.revision[:branchidlen] != 
                     self.currentVersion[:branchidlen]):
-                raise RuntimeError('can not add a changeset that does not share trunk branch: %s, %s'
+                raise RuntimeError(
+                'can not add a changeset that does not share trunk branch: %s, %s'
                                     % (self.currentVersion, changeset.revision))        
         if setrevision:
             self.currentVersion = changeset.revision        
@@ -931,13 +935,14 @@ match the changeset's branchid: %s''' % (
     
     def merge(self, changeset):
         '''
-        Merge an external changeset into the local store. If the local store doesn't have 
-        the base revision of the changeset it is add to the pending queue. 
-        If no changes have been made to the local store after the base revision then the changeset is
-        added to store with no modification. But if changes have been made, these changes are merged
-        with the external changeset. If the merge succeeds, the changeset is added, followed by a merge 
+        Merge an external changeset into the local store. If the local store doesn't
+        have the base revision of the changeset it is add to the pending queue.
+        If no changes have been made to the local store after the base revision
+        then the changeset is added to store with no modification. But if changes
+        have been made, these changes are merged with the external changeset.
+        If the merge succeeds, the changeset is added, followed by a merge
         changeset.
-        '''        
+        '''
         if self._currentTxn:
             raise RuntimeError('cannot merge while transaction in progress')
         if not isinstance(changeset, attrdict):
@@ -946,8 +951,9 @@ match the changeset's branchid: %s''' % (
         if changeset.origin == self.branch_id:
             #handle receiving own changeset
             raise RuntimeError("merge received changeset from itself: " + self.branch_id)
-            
-        if changeset.baserevision != self.initialRevision and not list(self.getRevisions(changeset.baserevision)):
+
+        if changeset.baserevision != self.initialRevision and not list(
+                                    self.getRevisions(changeset.baserevision)):
             if changeset.baserevision in self.pendingQueue:
                 assert changeset != self.pendingQueue[changeset.baserevision], changeset
                 self.merge(self.pendingQueue[changeset.baserevision])
@@ -955,7 +961,8 @@ match the changeset's branchid: %s''' % (
                 #xxx queue should be persistent because we're SOL if 
                 #we miss a changeset
                 self.pendingQueue[changeset.baserevision] = changeset            
-                log.warning('adding to pending queue because base revision "%s" is missing' 
+                log.warning(
+                  'adding to pending queue because base revision "%s" is missing'
                                                     , changeset.baserevision)
                 return False
             else:

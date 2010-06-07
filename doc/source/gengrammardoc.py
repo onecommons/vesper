@@ -93,8 +93,10 @@ for key in order:
         continue
     value = productions[key]
     print "    ", key.lower().ljust(14), ":", ('\n'+(20*' ')+': |').join(value)
-
+    #for http://www-cgi.uni-regensburg.de/~brf09510/syntax.html:
+    #print key.lower().ljust(14), ":", ('\n'+(20*' ')+'| ').join(value.replace('`','')),'.'
 print '''
 
 ..  colophon: this doc was generated with "python doc/source/gengrammardoc.py > doc/source/grammar.rst"
 '''
+
