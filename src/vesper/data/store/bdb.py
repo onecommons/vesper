@@ -5,7 +5,13 @@ __all__ = ['BdbStore', 'TransactionBdbStore']
 import os, os.path
 import logging
 
-import bsddb, bsddb.db
+try:
+    import bsddb, bsddb.db
+except ImportError:
+    import bsddb3 as bsddb #Mac default python doesn't have bsddb
+    import bsddb3.db
+    assert bsddb.db
+
 
 from vesper.backports import *
 from vesper.data.base import * # XXX
@@ -44,7 +50,7 @@ def _to_safe_str(s):
     elif not isinstance(s, str):
         s = str(s)
     if '\0' in s:
-        raise RuntimeError(r'strings with \0 can not be save in BdbStore')
+        raise RuntimeError(r'strings with \0 can not be saved in BdbStore')
     return s 
 
 def _encodeValues(*args):

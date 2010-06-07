@@ -4,11 +4,18 @@ import sys, unittest, docTest
 
 __all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
-  'pjsonTest', 'jqlTest', 'jsonqlDocTest', 'modelTest', 'FileModelTest', 'BdbModelTest']
+  'pjsonTest', 'jqlTest', 'jsonqlDocTest', 'modelTest', 'FileModelTest']
 
 if sys.version_info[:2] >= (2,5):
     __all__.append('python25Test')
 
+try:
+    import vesper.data.store.bdb
+except ImportError:
+    print "skipping Bdb tests"
+else:
+    __all__.append('BdbModelTest')
+    
 try:
     import multiprocessing
     import stomp
