@@ -51,7 +51,8 @@ XSD+'float' : float,
 }
 
 from vesper.utils import Uri
-ABSURI, URIREF = Uri.getURIRegex(allowbnode=True)
+ABSURI = Uri.getURIRegex(allowbnode=True)[0]
+URIREF = r'(?:[\w$_-]+[^\s{}\\\\]*)'
 
 _refpatternregex = re.compile(r'''(.*?)
     (?<!\\)\(
@@ -223,7 +224,7 @@ def loads(data):
 class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False,
-            onlyEmbedBnodes=False):
+            onlyEmbedBnodes=False, parseContext=None):
         '''
         { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
         or if `asList == True`: 
@@ -247,11 +248,11 @@ class Serializer(object):
             if 'refpattern' in self.nameMap:
                 del self.nameMap['refpattern']
         else:
-            if 'refpattern' not in self.nameMap:            
+            if not parseContext and 'refpattern' not in self.nameMap:            
                 self.nameMap['refpattern'] = defaultSerializeRefPattern
-        self.parseContext = ParseContext(self.nameMap)
+        self.parseContext = ParseContext(self.nameMap, parseContext)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = None, None, None
-        idrefpattern = self.nameMap.get('refpattern')
+        idrefpattern = self.parseContext.refpatternValue
         if idrefpattern:
             patterns = _parseIdRefPattern(idrefpattern)
             self.outputRefPattern = patterns.parsePattern
@@ -289,7 +290,7 @@ class Serializer(object):
             if context is not None or falsePositive or (self.outputRefPattern 
                                           and self.outputRefPattern.match(v)):
                 #explicitly encode literal so we don't think its a reference
-                #or the wrong datatype
+                #or the wrong datatype                
                 datatype = rdfDataTypeToPjsonDataType(objectType)
                 literalObj = { datatypeName : datatype, 'value' : v }
                 if context is not None:
@@ -317,16 +318,14 @@ class Serializer(object):
         return _serializeAbbreviations(id, self.parseContext.idReplacements)
         
     def serializeRef(self, uri, context):
+        match = False
         if not self.explicitRefObjects:
-            assert self.inputRefPattern
             #check if the ref looks like our inputRefPattern
             #if it doesn't, create a explicit ref object
-            if isinstance(uri, (str,unicode)):
+            if isinstance(uri, (str,unicode)) and self.inputRefPattern:
                 #apply the match to the serialized version of the id 
                 match = self.inputRefPattern.match(self.serializeId(uri))
-            else:
-                match = False
-        
+
         if self.explicitRefObjects or not match or context is not None:
             assert isinstance(uri, (str, unicode))        
             ref =  { self.parseContext.refName : self.serializeId(uri) }
@@ -689,7 +688,7 @@ class ParseContext(object):
         if self.parent and self.nameMap != self.parent.nameMap:
             return True
         return False
-    
+
     def _setReplacements(self, more):
         replacements = []        
         for d in self.sharedpatternsValue, more:            

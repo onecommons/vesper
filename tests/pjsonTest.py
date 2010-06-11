@@ -515,6 +515,22 @@ def test():
     stmts.append( Statement('1', 'prop', 'bar', 'R', '')  )
     assert tojson(stmts, asList=True) == [{'pjson': '0.9', 'namemap': {'refpattern': '@((::)?URIREF)'}}, {'id': '1', 'prop': [1, 2, 3, 4, '@bar', '@foo']}]
     
+    src = [
+     {
+      "pjson": "0.9", 
+      "namemap": {
+         "refpattern": "@(URIREF)"
+      }
+    },
+    {
+      'id' : "1",
+      'prop1': "@"
+    },    
+    ]
+    intermediateJson = [{ 'id' : "1", 'prop1': "@" }]
+    assert_json_and_back_match(src, intermediateJson=intermediateJson)
+    
+    
     print 'ran %d tests, all pass' % test_counter
     
 test_counter = 0
