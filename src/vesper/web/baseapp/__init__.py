@@ -108,6 +108,7 @@ actions = { 'http-request' : vesper.web.route.gensequence,
 def sendJsonRpcError(kw, retVal):
     if 'CONTENT_TYPE' not in kw._environ or not kw._environ.CONTENT_TYPE.startswith('application/json'):
         return retVal
+    #kw._responseHeaders._status = 500 or 400?
     kw._responseHeaders['Content-Type'] = 'application/json'
     ei = kw._errorInfo
     import traceback
@@ -134,7 +135,7 @@ try:
     
     actions['http-request-error'] = [sendJsonRpcError, displayError]
 except ImportError:
-    pass
+    actions['http-request-error'] = [sendJsonRpcError]
 
 from vesper.data.store.basic import FileStore
 app = createApp(
