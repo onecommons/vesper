@@ -41,7 +41,8 @@ t('''
 )
 
 #id keys only
-t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'}, ])
+t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'},]
+, useSerializer=True)
 
 t("{id : foo MERGEALL}", [{'2': 'bar', '3': 'bar'}])
 
@@ -63,26 +64,33 @@ t("(foo)",['bar', 'bar'])
 
 t("(id)",['3', '2', '_:2', '_:1'])
 
-t("('constant')", ['constant'])
+#XXX serialize -- do we really want these to be serialized as object references?
+t("(id)",['@3', '@2', '@_:2', '@_:1'], useSerializer=True)
+
+t("('@constant')", ['@constant'])
+
+t("('@constant')",
+[{'datatype': 'json', 'value': '@constant'}], useSerializer=True)
 
 t('''
 { "staticprop" : ["foo"] }
-''',[{ "staticprop" : ["foo"] }])
+''',[{ "staticprop" : ["foo"] }], useSerializer=True)
 
 t('''
 { "staticprop" : "foo" }
 ''', 
-[{'staticprop': 'foo'}])
+[{'staticprop': 'foo'}], useSerializer=True)
 
-t('''{ * where foo > 'bar' }''', [])
+t('''{ * where foo > @bar }''', [])
 
 t('''{ * where ( id = :id) }''', 
-[{'foo':'bar', 'id':'2'}], 
-                bindvars={'id':'2'})
+[{'foo':'@bar', 'id':'2'}], 
+        bindvars={'id':'@2'}, useSerializer=True)
 
+#XXX bindvar needs to support ref and datatype patterns
 t('''{ * where  child = :child }''', 
-[{'child': '2', 'id': '_:2', 'parent': '1'}], 
-        bindvars={'child':'2'})
+[{'child': '@2', 'id': '_:2', 'parent': '@1'}], 
+        bindvars={'child':'@2'}, useSerializer=True)
 
 t("{ id, 'parent' : child }",
 [{'parent': '2', 'id': '_:2'}, {'parent': '3', 'id': '_:1'},])
@@ -111,7 +119,7 @@ t(
 
 t(
 ''' { ?parentid,        
-      'derivedprop' : id * 2,
+      'derivedprop' : string(id) * 2,
       'children' : { ?childid,
                    *
                    where( {child = ?childid and
@@ -159,7 +167,7 @@ t(
       id,
       'children' : { ?childid,
                    id, foo,
-                   where( foo = 'bar' and 
+                   where( foo = @bar and 
                          {child = ?childid and
                         parent = ?parentid                    
                        })
@@ -168,7 +176,8 @@ t(
 ''',
 [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'id': '1'}],
-  skipParse=0,
+
+skipParse=0,
 skipast=Select( #XXX fix
   Construct([
     cp('children', Select(Construct([            
@@ -245,8 +254,14 @@ t('''{ 'foo' : ?bar.baz.id }''')
 t('''
 { 'id' : ID, 'blah' : foo }
 ''',
-[{'blah': 'bar', 'id': '3'}, {'blah': 'bar', 'id': '2'}]
-)
+[{'blah': '@bar', 'id': '3'}, {'blah': '@bar', 'id': '2'}]
+, useSerializer=True)
+
+t('''
+{ id, 'blah' : foo }
+''',
+[{'blah': '@bar', 'id': '3'}, {'blah': '@bar', 'id': '2'}]
+, useSerializer=True)
 
 t(u'("\u2019\\x0a")', [u'\u2019\n']) #\u2019 is RIGHT SINGLE QUOTATION MARK
 
@@ -280,14 +295,15 @@ syntaxtests = [
 '''
 [<rdfs:comment> where(<rdfs:label>='foo')]
 ''',
-'''
-(<rdfs:comment> where(<rdfs:label>='foo'))
-''',
+
+'''{ * where foo = <{what a prop}>}''',
 #force list
 '''
 { 'blah' : [foo] }
 ''',
-'''{* where (foo = { id = 'd' }) }'''
+'''{* where (foo = { id = 'd' }) }''',
+
+'''{ * where foo = @<{what a ref}>}''',
 ]
 
 #XXX fix failing queries!
@@ -443,22 +459,22 @@ t.model = modelFromJson([
 
 t.group = 'namemap'
 
-#XXX need to serialize based on namemap
 t('''{
 * 
-where (<rdfs:range> = 'Tag')
+where (<rdfs:range> = @Tag)
 order by <rdfs:range>
 namemap = {
- "propertypatterns" : { 
+ "sharedpatterns" : { 
       'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
       'rdfs:': 'http://www.w3.org/2000/01/rdf-schema#'
     }
 }
 }''',
-[{u'http://www.w3.org/2000/01/rdf-schema#domain': 'Tag',
-  u'http://www.w3.org/2000/01/rdf-schema#range': 'Tag',
-  u'http://www.w3.org/2000/01/rdf-schema#subPropertyOf': u'http://www.w3.org/2000/01/rdf-schema#subClassOf',
-  'id': 'subsumedby'}]
+[{'id': 'subsumedby',
+  'rdfs:domain': '@Tag',
+  'rdfs:range': '@Tag',
+  'rdfs:subPropertyOf': '@rdfs:subClassOf'}],
+ useSerializer=True
 )
 
 t.group = 'groupby'
@@ -684,21 +700,21 @@ id,
 
 t('''
 { ?tag, * 
-where ?tag in ('foo', 'commons')
+where ?tag in (@foo, @commons)
 }
 ''',
 [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}])
 
 t('''
 { *
-where (id = ?tag and ?tag in ('foo', 'commons'))
+where (id = ?tag and ?tag in (@foo, @commons))
 }
 ''',
 [{'id': 'commons',  'label': 'commons', 'subsumedby': 'projects', 'type': 'Tag'}])
 
 t('''
 { id
-where (id not in ('foo', 'commons') and subsumedby)
+where (id not in (@foo, @commons) and subsumedby)
 }''',
 [{'id': 'toread'},
  {'id': 'todo'},
@@ -856,8 +872,8 @@ t('''
   and {?posts ?tag = tags and tags = ?tag1} 
   and ?tag not in (:tagid1) )}
 ''',
-[{'id': 'toread', 'label': 'to read', 'othertags': ['commons', 'toread']}], 
-bindvars = { 'tagid1' : 'commons'})
+[{'id': 'toread', 'label': 'to read', 'othertags': ['@commons', '@toread']}], 
+bindvars = { 'tagid1' : '@commons'}, useSerializer=True) 
 
 #find all the entries that implicitly or explicitly are tagged 'projects'
 t('''
@@ -865,7 +881,7 @@ t('''
     * 
      where (
           { id = ?tag and
-            'projects' in follow(?tag, subsumedby)
+            @projects in follow(?tag, subsumedby)
            }
            and subject= ?tag
         )
@@ -884,7 +900,7 @@ t( '''
     *
      where (subject= ?tag and
           { id = ?tag and
-            ?tag in follow('commons', subsumedby)
+            ?tag in follow(@commons, subsumedby)
            }
         )
     }
@@ -900,7 +916,7 @@ t( '''
     *
      where (subject= ?tag and
           { ?tag, 
-            ?tag in follow('commons', subsumedby)
+            ?tag in follow(@commons, subsumedby)
            }
         )
     }
@@ -914,7 +930,7 @@ t( '''
 skip( '''
     { *
      where (subjectof= ?tag and
-          { id = ?start and id = 'commons' }
+          { id = ?start and id = @commons }
           and
           {
            id = ?tag and id in follow(?start, subsumedby)
@@ -946,14 +962,14 @@ t.group = 'not'
 
 t('''
 { *
-where (type = 'Tag' and not subsumedby)
+where (type = @Tag and not subsumedby)
 }
 ''',
 [{'id': 'actions', 'type': 'Tag'}, {'id': 'projects', 'type': 'Tag'}])
 
 t('''
 { *
-where (not subsumedby and type = 'Tag')
+where (not subsumedby and type = @Tag)
 }
 ''',
 [{'id': 'actions', 'type': 'Tag'}, {'id': 'projects', 'type': 'Tag'}])
@@ -979,7 +995,7 @@ where (not subsumedby)
 
 t('''
 { *
-where (type = 'Tag' and not not subsumedby)
+where (type = @Tag and not not subsumedby)
 }
 ''',
 [{'id': 'toread', 'label': 'to read', 'subsumedby': 'actions', 'type': 'Tag'},
@@ -1028,6 +1044,7 @@ t.model = modelFromJson([
     ]
 )
 
+#compare results with and without forUpdate
 t('{*}', 
 [{'id': '1',
   'values': {'id': '_:j:e:object:1:1',
@@ -1046,9 +1063,6 @@ t('{*}',
  {'id': '4', 'values': [1, '1', 1.1000000000000001]}],
 forUpdate=True)
 
-t.group = 'types'
-
-#XXX shouldn't including anoymous children in results
 t('''{*}''',
 [
      { 'id' : '1',
@@ -1076,6 +1090,9 @@ t('''{*}''',
     },
  ]
 )
+
+t.group = 'types'
+
 
 #make sure rows with null values aren't filtered out when proper 
 t('''{ prop3 }''',
@@ -1145,23 +1162,23 @@ t.model = modelFromJson([
  )
 
 #XXX fix these!
-t('''{ values where values == '1' }''')
-t('''{ values where values != '1' }''')
+t('''{ id, values where values == '1' }''')
+t('''{ id, values where values != '1' }''')
 
-t('''{ values where values == 1 }''') 
-t('''{ values where values != 1 }''') 
+t('''{ id, values where values == 1 }''') 
+t('''{ id, values where values != 1 }''') 
 
-t('''{ values where values = null }''') 
+t('''{ id, values where values = null }''') 
 
-t('''{ values where values != null }''') 
+t('''{ id, values where values != null }''') 
 
-t('''{ values where values = '' }''') 
-t('''{ values where values != '' }''') 
+t('''{ id, values where values = '' }''') 
+t('''{ id, values where values != '' }''') 
 #t('''{ values where values <> '' }''') #XXX add to syntax?
-t('''{ values where values = 0 }''') 
-t('''{ values where values != 0 }''') 
-t('''{ values where values = '0' }''') 
-t('''{ values where values != '0' }''') 
+t('''{ id, values where values = 0 }''') 
+t('''{ id, values where values != 0 }''') 
+t('''{ id, values where values = '0' }''') 
+t('''{ id, values where values != '0' }''') 
 
 
 #test multivalued properties without any associated json list info
@@ -1403,7 +1420,7 @@ t('''
 t('''
 {   *,
     'tags' : {id where (id=?tag)}   
-    where (type='post' and maybe tags = ?tag)
+    where (type=@post and maybe tags = ?tag)
 }
 ''',
 [{'id': '3', 'tags': None, 'type': 'post'},
@@ -1413,7 +1430,7 @@ t('''
 t('''
 {   *, 
     'tags' : [id where (id=?tag)]
-    where (maybe tags = ?tag and type='post')
+    where (maybe tags = ?tag and type=@post)
 }
 ''',
 [{'id': '3', 'tags': None, 'type': 'post'},
@@ -1423,7 +1440,7 @@ t('''
 t('''
 {   *,
     'tags' : {* where (id=?tag)}   
-    where (type='post' and maybe tags = ?tag)
+    where (type=@post and maybe tags = ?tag)
 }
 ''',
 [{'id': '3', 'tags': None, 'type': 'post'},
@@ -1433,7 +1450,7 @@ t('''
 t('''
 {   ?post, id, 
     'tags' : [id where (id=?tag)]
-    where ((maybe tags = ?tag) and type='post')
+    where ((maybe tags = ?tag) and type=@post)
 }
 ''',
 [{'id': '3', 'tags': None}, {'id': '2', 'tags': ['tag1']}]
@@ -1521,7 +1538,7 @@ t.model = modelFromJson([
 t('''
 {   ?post, id, 
     'tags' : [id where (id=?tag)]
-    where (tags = ?tag and type='post')
+    where (tags = ?tag and type=@post)
 }''',
 [{'id': '2', 'tags': [['tag1'], ['tag2']]}])
 
@@ -1529,7 +1546,7 @@ t('''
 t('''
 {   ?post,  
     id : [id where (id=?tag)]
-    where (tags = ?tag and type='post')
+    where (tags = ?tag and type=@post)
 }''',
 [{'2': [['tag1'], ['tag2']]}]
 )
@@ -1537,7 +1554,7 @@ t('''
 t('''
 {   ?post, id, 
     'tags' : [id where (id=?tag)]
-    where (type='post' and maybe tags = ?tag)
+    where (type=@post and maybe tags = ?tag)
 }
 ''',
 [{'id': '3', 'tags': None}, {'id': '2', 'tags': [['tag1'], ['tag2']]}]
@@ -1546,7 +1563,7 @@ t('''
 t('''
 {   ?post, id, 
     'tags' : {* where (id=?tag)}
-    where (tags = ?tag and type='post')
+    where (tags = ?tag and type=@post)
 }''',
 [{'id': '2',
   'tags': [{'id': 'tag1', 'label': 'tag 1'},
@@ -1556,7 +1573,7 @@ t('''
 t('''
 {   ?post, id, 
     'tags' : {* where (id=?tag and label="tag 1")}
-    where (tags = ?tag and type='post')
+    where (tags = ?tag and type=@post)
 }''',
 [{'id': '2',
   'tags': {'id': 'tag1', 'label': 'tag 1'}
@@ -1568,7 +1585,7 @@ t('''
 t('''
 {   ?post, id, 
     'tags' : { id=?tag and label="tag 1"}
-    where (tags = ?tag and type='post')
+    where (tags = ?tag and type=@post)
 }''',
 [{'id': '2', 'tags': 'tag1'}])
 
@@ -1577,7 +1594,7 @@ t('''
 skip('''
 {   ?post, id, 
     'tags' : ?tag
-    where (tags = ?tag and type='post'
+    where (tags = ?tag and type=@post
        and { id=?tag and label="tag 1"}
     )
 }''',
@@ -1658,13 +1675,14 @@ t("""
 """)
 
 t("""
-{ id, foo where (foo = '1')}
-""")
+{ id, foo where (foo = @1)}
+""",
+ [{'foo': '1', 'id': '1'}])
 
 #this is correct but it'd be nice if there was some way to have the results 
 #filter the values in bar's list
 t("""
-{ bar where (bar = 'a')}
+{ bar where (bar = @a)}
 """,
 [{'bar': ['a', 'b']}])
 
@@ -1835,12 +1853,12 @@ class JQLTestCase(unittest.TestCase):
         query = '''{
           foo, 
           *,
-          "displayname" : displayname,
+          "displayname" : displayname+1,
           <afasfd>
-           where (?bar = :bindvar)
+           where ?bar = :bindvar and func(@<{what a ref}>, @foo:baz)
            order BY <a prop> ASC
         }'''
-        tokens = [(Token.Punctuation, u'{'), (Token.Text, u'\n          '), (Token.Name.Variable, u'foo'), (Token.Punctuation, u','), (Token.Text, u' \n          '), (Token.Name.Variable, u'*'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Literal.String.Double, u'"displayname"'), (Token.Text, u' '), (Token.Punctuation, u':'), (Token.Text, u' '), (Token.Name.Variable, u'displayname'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Name.Variable, u'<afasfd>'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'where'), (Token.Text, u' '), (Token.Punctuation, u'('), (Token.Name.Label, u'?bar'), (Token.Text, u' '), (Token.Operator, u'='), (Token.Text, u' '), (Token.Name.Entity, u':bindvar'), (Token.Punctuation, u')'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'order'), (Token.Text, u' '), (Token.Keyword.Reserved, u'BY'), (Token.Text, u' '), (Token.Name.Variable, u'<a prop>'), (Token.Text, u' '), (Token.Keyword.Reserved, u'ASC'), (Token.Text, u'\n        '), (Token.Punctuation, u'}'), (Token.Text, u'\n')]        
+        tokens = [(Token.Punctuation, u'{'), (Token.Text, u'\n          '), (Token.Name.Variable, u'foo'), (Token.Punctuation, u','), (Token.Text, u' \n          '), (Token.Name.Variable, u'*'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Literal.String.Double, u'"displayname"'), (Token.Text, u' '), (Token.Punctuation, u':'), (Token.Text, u' '), (Token.Name.Variable, u'displayname'), (Token.Operator, u'+'), (Token.Literal.Number.Integer, u'1'), (Token.Punctuation, u','), (Token.Text, u'\n          '), (Token.Name.Variable, u'<afasfd>'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'where'), (Token.Text, u' '), (Token.Name.Label, u'?bar'), (Token.Text, u' '), (Token.Operator, u'='), (Token.Text, u' '), (Token.Name.Entity, u':bindvar'), (Token.Text, u' '), (Token.Operator.Word, u'and'), (Token.Text, u' '), (Token.Name.Function, u'func'), (Token.Punctuation, u'('), (Token.Literal, u'@<{what a ref}>'), (Token.Punctuation, u','), (Token.Text, u' '), (Token.Literal, u'@foo:baz'), (Token.Punctuation, u')'), (Token.Text, u'\n           '), (Token.Keyword.Reserved, u'order'), (Token.Text, u' '), (Token.Keyword.Reserved, u'BY'), (Token.Text, u' '), (Token.Name.Variable, u'<a prop>'), (Token.Text, u' '), (Token.Keyword.Reserved, u'ASC'), (Token.Text, u'\n        '), (Token.Punctuation, u'}'), (Token.Text, u'\n')]
         self.assertEquals(tokens, list(pygments.lex(query, JsonqlLexer()) ) )
     
 if __name__ == "__main__":

@@ -21,7 +21,10 @@ from vesper.backports import product
 #############################################################
 ####################  Grouping  #############################
 #############################################################
+import vesper.pjson
+
 RDF_MS_BASE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
+NilResource = ResourceUri(RDF_MS_BASE+'nil')
 
 def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
     """
@@ -281,7 +284,7 @@ def followFunc(context, startid, propname=None, excludeInitial=False,
             found = not edgesOnly
             for row in context.initialModel.filter({0:visitId, 1:propname}):
                 found = True
-                obj = row[2]
+                obj = row[2]                
                 if obj not in tovisit:
                     if not edgesOnly: yield MutableTupleset(columns, [obj])
                     tovisit.append(obj)
@@ -312,9 +315,12 @@ def ifFunc(context, ifArg, thenArg, elseArg):
         elseval = elseArg.evaluate(context.engine, context)
         return elseval
 
-def isBnode(context, v):    
-    return hasattr(v, 'startswith') and (
-                v.startswith(context.initialModel.bnodePrefix))
+def isBnode(context, v):
+    if isinstance(v, ResourceUri):
+        v = v.uri
+    elif not hasattr(v, 'startswith'):
+        return False
+    return v.startswith(context.initialModel.bnodePrefix)
 
 #############################################################
 ################ Evaluation Engine ##########################
@@ -332,19 +338,26 @@ def getNullRows(columns):
             nullrows[i] = ColumnInfo(c.label, None)
     return nullrows
 
-# def serializeValue(context, v):
-#     scope = None
-#     if isinstance(v, ResourceURI):
-#         objectType = RESOURCE
-#     elif not isinstance(v, (str,unicode)) and scope is None:
-#         return v
-#     else:
-#         return context.serializer.serializeValue(v, objectType, scope)
-        
-def _setConstructProp(shape, pattern, prop, v, name, listCtor):
+def _serializeValue(context, v, isId):
+    if not context.serializer:
+        if isinstance(v, ResourceUri):
+            return v.uri
+        else:
+            return v
+    if isId:
+        return context.serializer.serializeId(str(v))
+    scope = None #context.scope
+    if isinstance(v, ResourceUri):
+        return context.serializer.serializeRef(v.uri, scope)
+    elif not isinstance(v, (str,unicode)) and scope is None:
+        return v
+    else:
+        return context.serializer._value(v, base.OBJECT_TYPE_LITERAL, scope)
+
+def _setConstructProp(shape, pattern, prop, v, name, listCtor, context):
+    isId = context.serializer and context.serializer.parseContext.idName == name
     isSeq = isinstance(v, (list,tuple))
-    #print '_setConstructProp', v, isSeq, prop.ifEmpty
-    if v == RDF_MS_BASE+'nil': #special case to force empty list
+    if v == NilResource: #special case to force empty list
         val = listCtor() #[]
     elif v is None or (isSeq and not len(v)):
         if prop.ifEmpty == jqlAST.PropShape.omit:            
@@ -359,17 +372,22 @@ def _setConstructProp(shape, pattern, prop, v, name, listCtor):
             val = None #null
     elif (prop.ifSingle == jqlAST.PropShape.nolist
                 and not isSeq):
-        val = v
+        val = _serializeValue(context,v, isId)
     #elif (prop.ifSingle == jqlAST.PropShape.nolist
     #        and len(v) == 1):    
     #    val = flatten(v[0])
     else: #uselist
         if isSeq:
-            val = listCtor(v)
+            val = listCtor( (_serializeValue(context,i,isId) for i in v) )
         else:
-            val = listCtor([v])
+            val = listCtor( [_serializeValue(context,v,isId)] )
     
     if shape is jqlAST.Construct.dictShape:
+        if not isId:
+            if isinstance(name, ResourceUri):
+                name = name.uri
+            if context.serializer:
+                name = context.serializer.serializeProp(name)
         pattern[name] = val
     elif shape is jqlAST.Construct.listShape:        
         pattern.append(val)
@@ -416,6 +434,8 @@ def safeFloat(n):
     #due that to match underlying e.g. with sql92/oracle convertion semantics
     try:
         #note: like sql, python trims strings when converting to float
+        if isinstance(n, ResourceUri):
+            n = n.uri
         return float(n)
     except ValueError:
         return 0.0
@@ -477,41 +497,50 @@ class SimpleQueryEngine(object):
     queryFunctions.addFunc('count', _aggCount, NumberType, lazy=True,
         needsContext=True, isAggregate=True, initialValue=0)
 
-    def isPropertyList(self, context, idvalue):
+    def isPropertyList(self, context, v):
         '''
         return True if the given resource is a proplist (an internal 
             list resource generated pjson to preserve list order)
         '''
-        if not hasattr(idvalue, 'startswith'):
+        if isinstance(v, ResourceUri):
+            v = v.uri
+        elif not hasattr(v, 'startswith'):
             return False
-        return idvalue.startswith(context.initialModel.bnodePrefix+'j:proplist:')        
+        return v.startswith(context.initialModel.bnodePrefix+'j:proplist:')
 
-    def isListResource(self, context, idvalue):
+    def isListResource(self, context, v):
         '''
         return True if the given resource is a json list. 
         '''
         #this just checks the bnode pattern for lists generated by pjson 
         #other models/mappings may need a different way to figure this out
-        if not isinstance(idvalue, base.ResourceUri):
+        if isinstance(v, ResourceUri):
+            v = v.uri
+        elif not hasattr(v, 'startswith'):
             return False
-        if idvalue == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil':
+        if v == 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil':
             return True
         prefix = context.initialModel.bnodePrefix+'j:'        
-        return idvalue.startswith(prefix+'t:list:') or idvalue.startswith(
-                                                            prefix+'e:list:')
+        return v.startswith(prefix+'t:list:') or v.startswith(prefix+'e:list:')
 
-    def isEmbeddedBNode(self, context, idvalue):
+    def isEmbeddedBNode(self, context, v):
         '''
         return True if the given resource is a json list. 
         '''
         #this just checks the bnode pattern for embedded objects generated by pjson 
         #other models/mappings may need a different way to figure this out
-        if not hasattr(idvalue, 'startswith'):
+        if isinstance(v, ResourceUri):
+            v = v.uri
+        elif not hasattr(v, 'startswith'):
             return False
+        #if not isinstance(v, base.ResourceUri):
+        #    assert not hasattr(v, 'startswith') or not v.startswith(context.initialModel.bnodePrefix)
+        #    return False
+
         prefix = context.initialModel.bnodePrefix+'j:'
-        return idvalue.startswith(prefix+'e:') or idvalue.startswith(prefix+'proplist:')
+        return v.startswith(prefix+'e:') or v.startswith(prefix+'proplist:')
     
-    def isIdVisible(self, context, idvalue):
+    def isIdVisible(self, context, v):
         '''
         return True if the id should be serialized. 
         '''
@@ -519,9 +548,14 @@ class SimpleQueryEngine(object):
         #want to add option to exclude all bnodes or user-configurable pattern
         if context.forUpdate:
             return True
-        if not hasattr(idvalue, 'startswith'):
-            return False            
-        return not idvalue.startswith(context.initialModel.bnodePrefix+'j:')        
+        if isinstance(v, ResourceUri):
+            v = v.uri
+        elif not hasattr(v, 'startswith'):
+            return False
+        #if not isinstance(idvalue, base.ResourceUri):
+        #    assert not hasattr(idvalue, 'startswith') or not idvalue.startswith(context.initialModel.bnodePrefix)
+        #    return False
+        return not v.startswith(context.initialModel.bnodePrefix+'j:')
     
     def findPropList(self, context, subject, predicate):
         #by default search for special proplist bnode pattern
@@ -538,6 +572,10 @@ class SimpleQueryEngine(object):
         
     def evalSelect(self, op, context):
         context.engine = self
+        if context.serializer:
+            parseContext = vesper.pjson.ParseContext(op.namemap, context.serializer.parseContext)
+            context.serializer = pjson.Serializer(parseContext = parseContext)
+        #context.serializer = pjson.Serializer(parseContext = op.parseContext)
         if op.isIndependent(): #constant expression
             context.currentTupleset = MutableTupleset(
                         [ColumnInfo('', object)], ([1],))
@@ -569,7 +607,7 @@ class SimpleQueryEngine(object):
             def merge():
                 shape = op.construct.shape
                 merged = self.getShape(context, shape)
-                for row in result:
+                for row in result:                    
                     #XXX constructed results maybe of mixed types
                     #because we construct a list instead an object if the resource is a list
                     assert isinstance(row, type(merged)) 
@@ -708,7 +746,6 @@ class SimpleQueryEngine(object):
             propset = _getAllProps(idvalue, rows, propsAlreadyOutput)
         
         listCtor = context.shapes.get(jqlAST.Construct.listShape, jqlAST.Construct.listShape)
-                    
         for propname, proprows in propset:
             ccontext = copy.copy(context)
             ccontext.currentTupleset = SimpleTupleset([proprows],
@@ -719,8 +756,8 @@ class SimpleQueryEngine(object):
             value = jqlAST.Project(OBJECT, constructRefs=True
                                         ).evaluate(self, ccontext)
             _setConstructProp(allPropsShape, allPropsPattern, 
-                        propsetOp, value, propname, listCtor)
-        
+                        propsetOp, value, propname, listCtor, context)
+
     def evalConstruct(self, op, context):
         '''
         Construct ops operate on currentValue (a cell -- that maybe multivalued)
@@ -769,6 +806,7 @@ class SimpleQueryEngine(object):
                 propsAlreadyOutput = set((pjson.PROPSEQ,)) #exclude PROPSEQ
                 for prop in op.args:
                     if isinstance(prop, jqlAST.ConstructSubject):
+                        #print 'seriliaze id', op.dictShape, idvalue, 'name', prop.name
                         if shape is op.listShape: 
                             #XXX this check prevents ids from being in list results, 
                             #instead prop.name check should be set correctly
@@ -783,13 +821,18 @@ class SimpleQueryEngine(object):
                         #suppress this id?
                         if not self.isIdVisible(context, idvalue):
                             continue
-                        #XXX serialize id
-                        if shape is op.dictShape:
-                            pattern[prop.name] = idvalue
-                        elif shape is op.listShape:
-                            pattern.append(idvalue)
+                        if isinstance(idvalue, ResourceUri):
+                            outputId = idvalue.uri
                         else:
-                            pattern = idvalue
+                            outputId = idvalue
+                        if context.serializer:
+                            outputId = context.serializer.serializeId(outputId)
+                        if shape is op.dictShape:
+                            pattern[prop.name] = outputId
+                        elif shape is op.listShape:
+                            pattern.append(outputId)
+                        else:
+                            pattern = outputId
                     else:
                         isAllProp = isinstance(prop.value, jqlAST.Project
                                                 ) and prop.value.name == '*'
@@ -831,7 +874,7 @@ class SimpleQueryEngine(object):
                                 assert prop.nameFunc
                                 if ccontext.depth < 1:
                                     ccontext.depth = 1
-                                v = self.buildObject(ccontext, ResourceUri.new(idvalue), True)
+                                v = self.buildObject(ccontext, ResourceUri(idvalue), True)
                             else:
                                 ccontext.finalizedAggs = context.finalizedAggs
                                 ccontext.accumulate = context.accumulate
@@ -855,13 +898,15 @@ class SimpleQueryEngine(object):
                         
                             #print '####PROP', prop.name or prop.value.name, 'v', v
                             if prop.nameFunc:
-                                name = flatten(prop.nameFunc.evaluate(self, context), to=listCtor)
+                                name = flatten(prop.nameFunc.evaluate(
+                                                self, context), to=listCtor)
                                 if not name: #don't include property in result
                                     continue
                             else:
                                 name = prop.name or prop.value.name
                                                
-                            pattern = _setConstructProp(shape, pattern, prop, v, name, listCtor)
+                            pattern = _setConstructProp(shape, pattern, prop, v,
+                                                        name, listCtor, context)
                             if prop.value.name and isinstance(prop.value, jqlAST.Project):
                                 propsAlreadyOutput.add(prop.value.name)
                 
@@ -913,7 +958,7 @@ class SimpleQueryEngine(object):
                 return 0
 
             tupleset.sort(cmp=orderbyCmp)
-        else:                        
+        else:
             def extractKey(row):
                 return [flatten( (c[0] for c in getColumn(pos, row))) for pos in positions]
 
@@ -1235,7 +1280,7 @@ class SimpleQueryEngine(object):
                 colmap=colmap, op=opmsg, debug=context.debug)
     
     def buildObject(self, context, v, handleNil):
-        if handleNil and v == RDF_MS_BASE+'nil': 
+        if handleNil and v == NilResource:
             #special case to force empty list
             return []        
         refFunc = self.queryFunctions.getOp('isref')
@@ -1259,12 +1304,12 @@ class SimpleQueryEngine(object):
                         jqlAST.Construct([jqlAST.Project('*')]),
                         jqlAST.Join())
             ccontext = copy.copy(context)
-            ccontext.currentTupleset = SimpleTupleset([[v]], 
+            ccontext.currentTupleset = SimpleTupleset([[v]],
                     columns=[ColumnInfo('', object)], 
                     op='recursive project on %s'%v, 
                     debug=context.debug)
             if not isbnode:
-                ccontext.depth -= 1
+                ccontext.depth -= 1            
             result = list(query.evaluate(self, ccontext))
             if result:
                 assert len(result) == 1, (

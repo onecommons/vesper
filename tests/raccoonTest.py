@@ -216,7 +216,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{"id": "hello", 
                "tags": ["@tag1"]
             }])            
-        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
+        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['@tag1']}])
         
         #null value will remove the property and any associated values
         store.remove({"id":"hello","tags":None})
@@ -246,7 +246,7 @@ class RaccoonTestCase(unittest.TestCase):
             [{"id": "hello", 
                "tags": ["@tag1"]
             }])            
-        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['tag1']}])
+        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['@tag1']}])
 
     def testMerge(self):
         store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
@@ -263,8 +263,8 @@ class RaccoonTestCase(unittest.TestCase):
         }
         ])
         self.assertEquals(store1.model.currentVersion, '0A00002')
-
-        self.assertEquals(store1.query("{*}", debug=1).results, 
+        import sys
+        self.assertEquals(store1.query("{*}", debug=0).results, 
             [{'base': [{'foo': 3}, {'foo': 4}],  'prop' : 1, 'id': '1'}])
         
         try:
@@ -283,8 +283,7 @@ class RaccoonTestCase(unittest.TestCase):
         store1.merge(makeChangeset('0B', '0A00002,0B00001', '0A00002'))
         
         self.assertEquals(store1.model.currentVersion, '0A00002,0B00001')
-        self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')
-        
+        self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')        
         self.assertEquals(store1.query("{*}").results, 
             [{'base': [{'foo': 3}, {'foo': 4}], 'prop' : 1, 'id': '1'},
             {'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}
@@ -516,7 +515,7 @@ class RaccoonTestCase(unittest.TestCase):
             store2 = vesper.app.createStore(storage_path=tmppath, storageURL='', 
                 model_factory=vesper.data.store.basic.FileStore,model_uri = 'test:', save_history=False)
             #XXX jql is not including scope in results
-            self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['t', 't']}])            
+            self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['@t', '@t']}])            
         finally:
             os.unlink(tmppath)
         

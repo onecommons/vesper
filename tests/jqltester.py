@@ -37,7 +37,7 @@ class Test(object):
 class Suite(object):    
     defaults = dict(ast=None, rows=None, result=None, skip=False, bindvars=None,
         printdebug=False, skipParse=False, model=None, name=None, query=None,
-        group=None, unordered=False, forUpdate=False)
+        group=None, unordered=False, forUpdate=False, useSerializer=False)
 
     def __init__(self):
         self.tests = []
@@ -88,8 +88,10 @@ def cp(name, *args, **kw):
     return ConstructProp(None, *args, **kw)
 
 _models = {}
+nameMap = {'refpattern':'(URIREF)'}
+
 def modelFromJson(modelsrc, modelname=None):
-    model = pjson.Parser(generateBnode='counter', nameMap={'refpattern':'(URIREF)'},
+    model = pjson.Parser(generateBnode='counter', nameMap=nameMap,
         toplevelBnodes=True #set so top-level object use 'counter's
     ).to_rdf(modelsrc)
     model = vesper.data.store.basic.MemStore(model)
@@ -326,7 +328,8 @@ def main(t, cmdargs=None):
         
         if ast:
             testresults = list(jql.evalAST(ast, test.model, test.bindvars,
-                            explain=explain, debug=debug, forUpdate = test.forUpdate))
+                    explain=explain, debug=debug, forUpdate = test.forUpdate, 
+                                            useSerializer= test.useSerializer))
         else:
             testresults = None
         

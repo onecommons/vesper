@@ -3,10 +3,13 @@
 import sys
 sys.path.append('.')
 from jqltester import *
-
+import jqltester
 t = Suite()
 skip = Suite()
 
+#restore defaults
+jqltester.nameMap = {}
+t.useSerializer = True
 ###################################
 ########### basic tests ###########
 ###################################
@@ -227,7 +230,7 @@ t.model = modelFromJson([
 t("{ 'key' : id, <id>, <a property with spaces>}",
 [{'a property with spaces': 'this property name has spaces',  
   'id': 'a property named id',
-  'key': '1'}]
+  'key': '@1'}]
 )
 
 t%'''
@@ -537,7 +540,7 @@ t('''
 }
 ''', 
 [{'logins': {'facebook': 394090223, 'google': 'aaardvaark@gmail.com'},
-  'userid': 'user:1'}]
+  'userid': '@user:1'}]
 , model = mainmodel)
 
 t%'''

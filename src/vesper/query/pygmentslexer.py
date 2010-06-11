@@ -13,7 +13,7 @@ import re
 
 from pygments.lexer import RegexLexer, include
 from pygments.token import \
-     Text, Comment, Operator, Keyword, Name, String, Number, Other, Punctuation
+     Text, Comment, Operator, Keyword, Name, String, Number, Other, Punctuation, Literal
 
 __all__ = ['JsonqlLexer']
 
@@ -47,13 +47,17 @@ class JsonqlLexer(RegexLexer):
             (r'(sum|count|total|avg|min|max|number|string|bool|'
              r'if|follow|isbnode|isref|'
              r'upper|lower|trim|ltrim|rtrim)\b', Name.Builtin),
+            #user-defined function:
+            (r'[A-Za-z_$][\w_$]*(?=\()', Name.Function),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'[0-9]+', Number.Integer),
             (r'"(\\\\|\\"|[^"])*?"', String.Double),
             (r"'(\\\\|\\'|[^'])*?'", String.Single),
             (r'\*', Name.Variable),
+            (r'@<(\\\\|\\"|[^"])*?>', Literal), #refstring
+            (r'@[^\s<}),\]]+', Literal), #object reference
             (r'<(\\\\|\\"|[^"])*?>', Name.Variable),#propstring
-            (r'\?[A-Za-z_$][\w_$]*', Name.Label),            
+            (r'\?[A-Za-z_$][\w_$]*', Name.Label),
             (r'[+/%=!\-<>]',Operator),
             (r'(NOT|AND|OR|IN)', Operator.Word),
             (r'[A-Za-z_$][\w_$]*', Name.Variable),

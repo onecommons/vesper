@@ -46,9 +46,10 @@ We could give the propery different names just as can "SELECT foo AS fob FROM ta
 """
 from vesper.backports import *
 from vesper.data.base import Tupleset, ColumnInfo, EMPTY_NAMESPACE, ResourceUri
-from vesper import utils
+from vesper import utils, pjson
 import StringIO
-        
+import vesper.utils._utils
+
 SUBJECT = 0
 PROPERTY = 1
 OBJECT = 2
@@ -116,8 +117,8 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     
     if explain:
         explain = StringIO.StringIO()
-    
-    if debug:
+
+    if debug and not hasattr(debug, 'write'):
         debug = StringIO.StringIO()
     
     if ast != None:        
@@ -144,7 +145,7 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     if explain:
         response['explain'] = explain.getvalue()        
 
-    if debug:
+    if debug and hasattr(debug, 'getvalue'):
         response['debug'] = debug.getvalue()        
     
     return response
@@ -152,14 +153,41 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
 def buildAST(query, namemap=None):
     "parse a query, returning (ast, [error messages])"
     from vesper.query import parse, engine
-    return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, namemap)
-    
+    from vesper.pjson import defaultParseRefPattern
+    if namemap is None:
+        namemap = { 'refpattern' : defaultParseRefPattern }
+
+    return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, False, namemap)
+
+def _parsePjson(parseContext, v):
+    #XXX handle pjson dicts
+    if isinstance(v, (str, unicode)):
+        ref = parseContext.lookslikeIdRef(v)
+        if ref:
+            return ResourceUri(ref)
+    return v
+
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, 
-                                    forUpdate=False, contextShapes=None):
-    #rewriteAST(ast)
+                    forUpdate=False, contextShapes=None, useSerializer=True):
     from vesper.query import engine
+    if useSerializer:
+        serializer = pjson.Serializer(ast.namemap)
+    else:
+        serializer = None
+    if bindvars:
+        if serializer:
+            parseContext = serializer.parseContext
+        elif ast.namemap is not None:
+            parseContext = pjson.ParseContext(ast.namemap)
+        if parseContext:
+            for k, v in bindvars.items():
+                if isinstance(v, (list, tuple)):
+                    bindvars[k] = [_parsePjson(parseContext, i) for i in v]
+                else:
+                    bindvars[k] = _parsePjson(parseContext, v)
+
     queryContext = QueryContext(model, ast, explain, bindvars, debug, 
-                            forUpdate=forUpdate, shapes=contextShapes)
+            forUpdate=forUpdate, shapes=contextShapes, serializer=serializer)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
@@ -175,7 +203,8 @@ class QueryContext(object):
     finalizedAggs = False
     groupby = None
     
-    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False, depth=0, forUpdate=False, shapes=None):
+    def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False,
+                 depth=0, forUpdate=False, shapes=None, serializer=None):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
@@ -188,10 +217,11 @@ class QueryContext(object):
         self.engine = None        
         self.accumulate = {}
         self.shapes = shapes or self.defaultShapes.copy()
+        self.serializer = serializer
 
     def __copy__(self):
-        copy = QueryContext(self.initialModel, self.ast, self.explain, 
-            self.bindvars, self.debug, self.depth, self.forUpdate, self.shapes)
+        copy = QueryContext(self.initialModel,self.ast,self.explain,self.bindvars,
+            self.debug, self.depth, self.forUpdate, self.shapes, self.serializer)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow

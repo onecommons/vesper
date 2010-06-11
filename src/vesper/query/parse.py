@@ -4,6 +4,7 @@
 parse JQL 
 '''
 from vesper.query.jqlAST import *
+from vesper.data import base
 import logging, logging.handlers
 #errorlog = logging.getLogger('parser')
 
@@ -75,7 +76,7 @@ tokens = reserved + (
     'LBRACE', 'RBRACE',
     'COMMA', 'PERIOD', 'COLON',
 
-    'PROPSTRING', 'LABEL', 'BINDVAR'
+    'PROPSTRING', 'LABEL', 'BINDVAR', 'REF', 'REFSTRING'
 )
 
 # Operators
@@ -138,6 +139,15 @@ def t_STRING(t):
     #XXX perf?: don't do unicode-escape if no escapes appear in string
     return t
 
+def t_REFSTRING(t):
+    r'''(?:@<(?:[^<>\n\r\\]|(?:<>)|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*>)'''
+    if isinstance(t.value, unicode):        
+        v = t.value[2:-1].encode('ascii', 'backslashreplace').decode("unicode-escape")
+    else:
+        v = t.value[2:-1].decode("unicode-escape").encode('utf8')
+    t.value = ResourceUri(v)
+    return t
+
 def t_PROPSTRING(t):
     r'''(?:<(?:[^<>\n\r\\]|(?:<>)|(?:(\\(x|u|U))[0-9a-fA-F]+)|(?:\\.))*>)'''
     if isinstance(t.value, unicode):        
@@ -163,6 +173,11 @@ def t_BINDVAR(t):
     t.value = t.value[1:]
     return t
 t_BINDVAR.__doc__ = r'\:'+ _namere +''
+
+def t_REF(t):
+    r'@[^\s}),\]]+'
+    t.value = ResourceUri(t.value[1:])
+    return t
 
 # SQL/C-style comments
 def t_comment(t):
@@ -193,16 +208,21 @@ t_ignore = ' \t\x0c'
 
 # Parsing rules
 
-def resolveQNames(nsmap, root):
+def resolveNameMap(parseContext, root):
+    skipNode = None
     for c in root.depthfirst(descendPredicate=
-            lambda n: c is root or not isinstance(n, Select)):
+            lambda n: n is not skipNode and (n is root or not isinstance(n, Select))):
+        if c is skipNode:
+            continue
         if isinstance(c, Select):
             if c is root:
-                nsmap = nsmap.initParseContext({'namemap':c.namemap}, nsmap)
+                parseContext = ParseContext(c.namemap, parseContext)
             else:
-                resolveQNames(nsmap, c)
+                resolveNameMap(parseContext, c)
         else:
-            c._resolveQNames(nsmap) 
+            skip = c._resolveNameMap(parseContext)
+            #if skip:
+            #    skipNode = skip
 
 def p_root(p):
     '''
@@ -210,7 +230,7 @@ def p_root(p):
     '''
     p[0] = p[1]
     select = p[0]
-    resolveQNames(p.parser.jqlState.namemap, select)
+
     #we're done parsing, now join together joins that share labels,
     #removing any joined joins if their parent is a dependant (non-root) Select op
     p.parser.jqlState.buildJoins(select)
@@ -220,6 +240,13 @@ def p_root(p):
         #top level queries without a filter (e.g. {*}) 
         #should not include anyonmous objects that have already appeared 
         select.skipEmbeddedBNodes = True
+
+    #we're done parsing so resolve the namemaps now (we had to wait because
+    #namemaps inherit from their parent context)
+    if select.namemap:
+        p.parser.jqlState.namemap.update( select.namemap )
+    select.namemap = p.parser.jqlState.namemap
+    resolveNameMap(None, select)
 
 def p_construct0(p):
     '''
@@ -350,6 +377,8 @@ def p_atom_constant(p):
             | NULL
             | TRUE
             | FALSE
+            | REF
+            | REFSTRING
     '''
     p[0] = Constant(p[1])
 
@@ -847,8 +876,7 @@ def parse(query, functions, debug=False, namemap=None):
     errorlog.addHandler(log_messages)    
     try:
         from vesper.query import rewrite
-        parseState = rewrite._ParseState(functions, namemap)
-        parser.jqlState = parseState
+        parser.jqlState = rewrite._ParseState(functions, namemap)
         
         #XXX only turn tracking on if there's an error
         r = parser.parse(query,lexer, tracking=True, debug=debug)

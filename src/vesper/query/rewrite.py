@@ -22,7 +22,7 @@ class _ParseState(object):
         self.orphanedJoins = {}
         self._anonJoinCounter = 0
         self.functions = functions
-        self.namemap = ParseContext(namemap)
+        self.namemap = namemap or {}
 
     def mapOp(self, op):
         _opmap = {

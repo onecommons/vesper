@@ -234,7 +234,7 @@ class QueryOp(object):
                 return p
         return None
 
-    def _resolveQNames(self, parseContext):
+    def _resolveNameMap(self, parseContext):
         pass #no op by default
         
 class ErrorOp(QueryOp):
@@ -362,7 +362,7 @@ class JoinConditionOp(QueryOp):
             self.position = position #index or label
             #self.appendArg(Eq(Project(SUBJECT),Project(self.position)) )
 
-    def _resolveQNames(self, parseContext):
+    def _resolveNameMap(self, parseContext):
         if isinstance(self.position, (str, unicode)):
             self.position = parseContext.parseProp(self.position)
         
@@ -460,7 +460,7 @@ class Filter(QueryOp):
                 self.labels.append( (label+':type', OBJTYPE_POS) )
                 self.labels.append( (label+':pos', LIST_POS) )
 
-    def _resolveQNames(self, parseContext):
+    def _resolveNameMap(self, parseContext):
         def resolve(name):
             return parseContext.parseProp(name)
 
@@ -499,10 +499,10 @@ class Constant(QueryOp):
         else:
             return ObjectType
 
-    def _resolveQNames(self, parseContext):
-        ref = parseContext.lookslikeIdRef(self.value)
-        if ref:
-            self.value = ResourceUri.new(ref)
+    def _resolveNameMap(self, parseContext):
+        if isinstance(self.value, ResourceUri):
+            self.value = ResourceUri( parseContext.parseId(self.value.uri) )
+        #XXX: elif parseContext.datatypemap
 
     def __eq__(self, other):
         return super(Constant,self).__eq__(other) and self.value == other.value
@@ -519,7 +519,7 @@ class Constant(QueryOp):
         return 'eval'+ Constant.__name__
 
 class PropString(Constant):
-    def _resolveQNames(self, parseContext):
+    def _resolveNameMap(self, parseContext):
         self.value = parseContext.parseProp(self.value)
 
 class AnyFuncOp(QueryOp):
@@ -696,7 +696,7 @@ class Project(QueryOp):
     def isPosition(self):
         return isinstance(self.name, int)
 
-    def _resolveQNames(self, nsmap):
+    def _resolveNameMap(self, nsmap):
         def resolve(name):
             if isinstance(name, (str, unicode)):
                 return nsmap.parseProp(name)
@@ -768,6 +768,9 @@ class ConstructProp(QueryOp):
             self.appendArg(with_)
             return
         raise QueryException('replaceArg failed: not a child')
+
+    def _resolveNameMap(self, parseContext):
+        return self.nameFunc
 
     def __eq__(self, other):
         return (super(ConstructProp,self).__eq__(other)
@@ -862,7 +865,7 @@ class Select(QueryOp):
     where = None
     groupby = None
     orderby=None
-    skipEmbeddedBNodes = False
+    skipEmbeddedBNodes = False    
 
     def __init__(self, construct, where=None, groupby=None, limit=None, 
         offset=None, depth=None, namemap=None, orderby=None, mergeall=False):
