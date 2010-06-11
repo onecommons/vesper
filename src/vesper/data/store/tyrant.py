@@ -70,27 +70,34 @@ class TyrantStore(Model):
         treated as a wildcard that matches any value in the model.
         """
         q = {}
-        if subject != None:
+        if subject is not None:
             q['subj__streq'] = to_str(subject)
         else:
             q['subj__strbw'] = ''
         
-        if predicate != None:
+        if predicate is not None:
             q['pred__streq'] = to_str(predicate)
         else:
             q['pred__strbw'] = ''
         
         if object != None:
-            q['obj__streq'] = to_str(object)
+            if isinstance(object, ResourceUri):
+                q['obj__streq'] = to_str(object.uri)
+                objecttype = OBJECT_TYPE_RESOURCE
+            else:
+                q['obj__streq'] = to_str(object)
+                if objecttype is None:
+                    objecttype = OBJECT_TYPE_LITERAL
         else:
             q['obj__strbw'] = ''
-        
-        if objecttype != None:
+
+
+        if objecttype is not None:
             q['type__streq'] = to_str(objecttype)
         else:
             q['type__strbw'] = ''
         
-        if context != None:
+        if context is not None:
             q['scope__streq'] = to_str(context)
         else:
             q['scope__strbw'] = ''

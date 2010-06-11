@@ -66,8 +66,17 @@ class Statement(tuple, BaseStatement):
 
     def __new__(cls, subject, predicate, object,
              objectType=OBJECT_TYPE_LITERAL, scope=''):
-        return tuple.__new__(cls, (subject, predicate, object,
-             objectType,scope) )
+
+        if isinstance(subject,ResourceUri):
+            subject = subject.uri
+        if isinstance(predicate,ResourceUri):
+            predicate = predicate.uri
+        if isinstance(object,ResourceUri):
+            object = object.uri
+            objectType = OBJECT_TYPE_RESOURCE
+        if isinstance(scope,ResourceUri):
+            scope = scope.uri
+        return tuple.__new__(cls, (subject,predicate,object,objectType,scope))
 
     subject = property(lambda self: self[0])
     predicate = property(lambda self: self[1])
@@ -111,8 +120,17 @@ class MutableStatement(list, BaseStatement):
         
     def __init__(self, subject, predicate, object,
              objectType=OBJECT_TYPE_LITERAL, scope=''):
-        super(MutableStatement, self).__init__( (subject, predicate, object,
-             objectType,scope) )
+        if isinstance(subject,ResourceUri):
+            subject = subject.uri
+        if isinstance(predicate,ResourceUri):
+            predicate = predicate.uri
+        if isinstance(object,ResourceUri):
+            object = object.uri
+            objectType = OBJECT_TYPE_RESOURCE
+        if isinstance(scope,ResourceUri):
+            scope = scope.uri
+        super(MutableStatement, self).__init__(
+                (subject, predicate, object, objectType, scope))
 
     subject = property(lambda self: self[0], lambda self, x: self.__setitem__(0, x))
     predicate = property(lambda self: self[1], lambda self, x: self.__setitem__(1, x))
@@ -132,8 +150,8 @@ class StatementWithOrder(Statement):
     
     def __new__(cls, subject, predicate, object,
              objectType=OBJECT_TYPE_LITERAL, scope='', listpos=()):        
-        obj = tuple.__new__(cls, (subject, predicate, object,
-             objectType,scope) )
+        obj = Statement.__new__(cls, subject, predicate, object,
+             objectType,scope)
         obj.listpos = tuple(listpos)
         return obj
 
@@ -142,20 +160,34 @@ class StatementWithOrder(Statement):
 
 class ResourceUri(object):
     '''
-    Marker class
+    Represents a resource reference
     '''
-    @staticmethod
-    def new(s):
-        if isinstance(s, unicode):
-            return ResourceUriU(s)
+
+    __slots__ = ('uri')
+
+    def __init__(self, uri):
+        self.uri = str(uri)
+    
+    def __eq__(self, other):
+        if isinstance(other, ResourceUri):
+            return self.uri == other.uri
         else:
-            return ResourceUriS(s)
+            return False
 
-class ResourceUriS(str, ResourceUri):
-    __slots__ = ()
+    def __cmp__(self, other):
+        if isinstance(other, ResourceUri):
+            return cmp(self.uri, other.uri)
+        else:  
+            return 1 #XXX correct? at least None will come before this
 
-class ResourceUriU(unicode, ResourceUri):
-    __slots__ = ()
+    def __hash__(self):
+        return hash(self.uri)
+
+    def __str__(self):
+        return self.uri
+
+    def __repr__(self):
+        return 'ResourceUri('+repr(self.uri)+')'
 
 class ParseException(utils.NestedException):
     def __init__(self, msg = ''):                

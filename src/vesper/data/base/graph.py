@@ -632,7 +632,7 @@ class NamedGraphManager(base.Model):
         '''
         #find the txn contexts with changes to the srcContext
         txncontexts = [s.subject for s in self.revisionModel.getStatements(
-            object=srcContext,
+            object=srcContext, objecttype=OBJECT_TYPE_RESOURCE,
             predicate='http://rx4rdf.sf.net/ns/archive#applies-to')]
     
         #get a unique set of transaction context uris, sorted by revision order

@@ -34,14 +34,15 @@ class MemStore(Model):
         hints = hints or {}
         limit=hints.get('limit')
         offset=hints.get('offset')
-        #XXX enable this:
-        #if fo and not fot:
-        #    fot = True
-        #    if isinstance(object, ResourceUri):
-        #        objecttype = OBJECT_TYPE_RESOURCE
-        #    else:
-        #        objecttype = OBJECT_TYPE_LITERAL
-        
+        checkLiteral = False
+        if fo:
+            if isinstance(object, ResourceUri):
+                object = object.uri
+                fot = True
+                objecttype = OBJECT_TYPE_RESOURCE
+            elif not fot:
+                checkLiteral = True
+
         if not fc:
             if fs:                
                 stmts = self.by_s.get(subject,[])            
@@ -73,6 +74,7 @@ class MemStore(Model):
                     and (not fp or s.predicate == predicate)
                     and (not fo or s.object == object)
                     and (not fot or s.objectType == objecttype)
+                    and (not checkLiteral or s.objectType != OBJECT_TYPE_RESOURCE)
                     and (not fc or s.scope == context)]
         stmts.sort()
         stmts = removeDupStatementsFromSortedList(stmts, asQuad, 

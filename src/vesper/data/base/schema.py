@@ -420,7 +420,8 @@ class RDFSSchema(BaseSchema, base.MultiModel):
     
             if removeTypeInference:
                 for stmt in self.entailments.getStatements(
-                    predicate=RDF_MS_BASE+u'type', object=stmt.object):
+                    predicate=RDF_MS_BASE+u'type', object=stmt.object,
+                    objecttype=OBJECT_TYPE_RESOURCE):
                     refCount = self.inferences[(stmt.subject, stmt.object)] - 1
                     #its possible that multiple domain and range rules
                     #entail the same type for a given resource

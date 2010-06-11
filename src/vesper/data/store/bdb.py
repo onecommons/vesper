@@ -159,7 +159,15 @@ class BdbStore(Model):
         hints = hints or {}
         limit=hints.get('limit')
         offset=hints.get('offset')
-        
+
+        if fo:
+            if isinstance(object, ResourceUri):
+                object = object.uri
+                fot = True
+                objecttype = OBJECT_TYPE_RESOURCE
+            elif not fot:
+                objecttype = OBJECT_TYPE_LITERAL
+
         stmts = []
         if fs: 
             subject = _to_safe_str(subject)

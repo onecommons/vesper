@@ -296,10 +296,11 @@ _:O4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> _:A.
 _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
 '''
         model = self.getModel(cStringIO.StringIO(model) )
-        def getcount(obj):
+        def getcount(obj, p=0):
             stmts = model.getStatements(
                 predicate='http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 
                 object=obj, objecttype=OBJECT_TYPE_RESOURCE)
+            if p: print 'getcount for', obj, set(s[0] for s in stmts), stmts
             return len(set(s[0] for s in stmts))
 
         self.assertEquals(getcount('bnode:A'), 1)        
@@ -312,21 +313,21 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         Statement('test:prop', RDF_SCHEMA_BASE+u'domain', 'bnode:A', 'R'),
         Statement('bnode:O5', 'test:prop', 'test'),
         ])
-        self.failUnless(getcount('bnode:A') == 2)
-        self.failUnless(getcount('bnode:D') == 5)
+        self.assertEquals(getcount('bnode:A'), 2)
+        self.assertEquals(getcount('bnode:D'), 5)
 
         #already has this type, so adding prop on this resource shouldn't change anything
         model.addStatements([
         Statement('bnode:O4', 'test:prop', 'test2'),
         ])
-        self.failUnless(getcount('bnode:A') == 2)
-        self.failUnless(getcount('bnode:D') == 5)
+        self.assertEquals(getcount('bnode:A'), 2)
+        self.assertEquals(getcount('bnode:D'), 5)
         #neither should removing it
         model.removeStatements([
         Statement('bnode:O4', 'test:prop', 'test2'),
         ])
-        self.failUnless(getcount('bnode:A') == 2)
-        self.failUnless(getcount('bnode:D') == 5)
+        self.assertEquals(getcount('bnode:A'), 2)
+        self.assertEquals(getcount('bnode:D'), 5)
 
         #add a subproperty rule and an resource with that property
         model.addStatements([
@@ -334,8 +335,8 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         Statement('bnode:D6', 'test:subprop', 'test'),
         ])
         #subproperty should trigger entailments too
-        self.failUnless(getcount('bnode:A') == 3)
-        self.failUnless(getcount('bnode:D') == 6)
+        self.assertEquals(getcount('bnode:A'), 3)
+        self.assertEquals(getcount('bnode:D'), 6)
 
         #remove the rule, the entailments should be removed too
         model.removeStatements([
@@ -351,8 +352,8 @@ _:O4 <http://rx4rdf.sf.net/ns/archive#contents> "".
         Statement('test:propR', RDF_SCHEMA_BASE+u'range', 'bnode:A', 'R'),
         Statement('bnode:O6', 'test:propR', 'bnode:O5', 'R'),
         ])
-        self.failUnless(getcount('bnode:A') == 2)
-        self.failUnless(getcount('bnode:D') == 5)
+        self.assertEquals(getcount('bnode:A'), 2)
+        self.assertEquals(getcount('bnode:D'), 5)
 
         #already has this type, so adding prop on this resource shouldn't change anything
         model.addStatements([

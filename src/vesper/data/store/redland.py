@@ -44,7 +44,7 @@ def object2node(object, objectType):
         elif objectType and len(objectType) > 1: #must be a language id
             kwargs['language'] = objectType
         elif isinstance(object, ResourceUri):
-            return URI2node(object)
+            return URI2node(object.uri)
                                     
         return RDF.Node(**kwargs)            
     
@@ -102,39 +102,31 @@ class RedlandStore(Model):
             predicate = URI2node(predicate)
         if object is not None:
             if objecttype is None:
-                #ugh... we need to do two separate queries
-                objecttypes = (OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL)
-            else:
-                objecttypes = (objecttype,)
-        else:
-            objecttypes = (None,)
-
-        redlandStmts = []
-        for objecttype in objecttypes:
-            if object is not None:
-                redlandObject = object2node(object, objecttype)
-            else:
-                redlandObject = None
-        
-            if context or not asQuad:
-                if context:
-                    redlandContext = URI2node(context)
+                if isinstance(object, ResourceUri):
+                    objecttype = OBJECT_TYPE_RESOURCE
                 else:
-                    redlandContext = None
-            
-                redlandStmts.append(self.model.find_statements(
-                                RDF.Statement(subject, predicate, redlandObject),
-                                    context=redlandContext) )
-                defaultContext = context
-            else:
-                #search across all contexts                
-                redlandStmts.append(self.model.find_statements_context(
-                            RDF.Statement(subject, predicate, redlandObject)) )
-                defaultContext = ''
+                    objecttype = OBJECT_TYPE_LITERAL
+            redlandObject = object2node(object, objecttype)
+        else:
+            redlandObject = None
 
-        statements = list( utils.flattenSeq([redland2Statements(rstmts, defaultContext)
-                                     for rstmts in redlandStmts]) )
-        #statements = list( redland2Statements(redlandStmts, defaultContext))
+        if context or not asQuad:
+            if context:
+                redlandContext = URI2node(context)
+            else:
+                redlandContext = None
+
+            redlandStmts = self.model.find_statements(
+                            RDF.Statement(subject, predicate, redlandObject),
+                            context=redlandContext)
+            defaultContext = context
+        else:
+            #search across all contexts
+            redlandStmts = self.model.find_statements_context(
+                        RDF.Statement(subject, predicate, redlandObject))
+            defaultContext = ''
+
+        statements = list( redland2Statements(redlandStmts, defaultContext))
         statements.sort()
         return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))
                      

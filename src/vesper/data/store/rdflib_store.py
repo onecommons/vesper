@@ -46,17 +46,17 @@ def node2String(node):
         return unicode(node)
 
 def object2node(object, objectType):
+    if isinstance(object, ResourceUri):
+        return URI2node(object.uri)
     if objectType == OBJECT_TYPE_RESOURCE:            
         return URI2node(object)
-    else:
-        kwargs = {}
-        if objectType and objectType.find(':') > -1:
-            kwargs['datatype'] = objectType
-        elif objectType and len(objectType) > 1: #must be a language id
-            kwargs['lang'] = objectType
-        elif isinstance(object, ResourceUri):
-            return URI2node(object)
-        return Literal(object, **kwargs)                                
+
+    kwargs = {}
+    if objectType and objectType.find(':') > -1:
+        kwargs['datatype'] = objectType
+    elif objectType and len(objectType) > 1: #must be a language id
+        kwargs['lang'] = objectType
+    return Literal(object, **kwargs)
 
 class RDFLibStore(Model):
     '''

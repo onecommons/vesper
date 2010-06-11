@@ -62,7 +62,9 @@ class FtStore(Model):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
         treated as a wildcard that matches any value in the model.'''
-        self._beginIfNecessary()        
+        self._beginIfNecessary()
+        if isinstance(object, ResourceUri):
+            object = object.uri
         statements = list(Ft2Statements(
             self.model.complete(subject, predicate, object,scope=context)))
         statements.sort()

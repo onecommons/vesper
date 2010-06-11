@@ -94,6 +94,14 @@ class MemCacheStore(Model):
             stmts.sort()
             return removeDupStatementsFromSortedList(stmts,asQuad,
                                                 limit=limit,offset=offset)                
+        if fo:
+            if isinstance(object, ResourceUri):
+                object = object.uri
+                fot = True
+                objecttype = OBJECT_TYPE_RESOURCE
+            elif not fot:
+                objecttype = OBJECT_TYPE_LITERAL
+
         stmts = [s for s in stmts 
                     if (not fs or s.subject == subject)
                     and (not fp or s.predicate == predicate)

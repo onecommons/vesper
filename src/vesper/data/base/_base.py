@@ -116,15 +116,17 @@ class Model(Tupleset):
         if conditions:
             labels = ('subject', 'predicate','object', 'objecttype','context')
             for key, value in conditions.iteritems():
+                if key == 0 and isinstance(value, ResourceUri):
+                    value = value.uri
                 kw[labels[key] ] = value
         kw['hints'] = hints
         for stmt in self.getStatements(**kw):
             objectType = stmt[3]
             if objectType == OBJECT_TYPE_RESOURCE:
-                value = ResourceUri.new(stmt[2])
+                value = ResourceUri(stmt[2])
             else:
                 value = pjson.toJsonValue(stmt[2], objectType)
-            yield (stmt[0], stmt[1], value, stmt[3], stmt[4], stmt.listpos)
+            yield (ResourceUri(stmt[0]), stmt[1], value, stmt[3], stmt[4], stmt.listpos)
 
     def update(self, rows):
         for row in rows:
@@ -409,8 +411,16 @@ class TransactionModel(object):
             return False
         if predicate and stmt.predicate != predicate:
             return False
-        if object is not None and stmt.object != object:
-            return False
+        if object is not None:
+            if objectType is None:
+                if isinstance(object, ResourceUri):
+                    object = object.uri
+                    objectType = OBJECT_TYPE_RESOURCE
+                elif stmt.objectType == OBJECT_TYPE_RESOURCE:
+                    return False
+            if stmt.object != object:
+                return False
+
         if objectType is not None and stmt.objectType != objectType:
             return False
         if context is not None and stmt.scope != context:
