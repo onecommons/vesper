@@ -1205,6 +1205,13 @@ class SimpleQueryEngine(object):
                 #position already taken, treat as complex
                 continue
             value = other.evaluate(self, context)
+            if proj.name == OBJECT:
+                if context.serializer:
+                    parseContext = context.serializer.parseContext
+                else:
+                    parseContext = None
+                value, objectType = vesper.pjson.getDataType(value, parseContext)
+                simplefilter[3] = objectType
             simplefilter[proj.name] = value
             complexargs.pop()        
         return simplefilter, complexargs

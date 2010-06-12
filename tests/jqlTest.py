@@ -1135,7 +1135,6 @@ values
  {'id': '4', 'values': [1, '1', 1.1]}]
  )
 
-t.group = 'nulls'
 t.model = modelFromJson([
       { 'id' : '1',
         'values' :  None
@@ -1158,27 +1157,138 @@ t.model = modelFromJson([
      { 'id' : '7',
        'values' : '1'
      },
+     { 'id' : '8',
+       'values' : { 'datatype' : 'json', 'value' : '1' }
+     },
      ]
  )
 
-#XXX fix these!
-t('''{ id, values where values == '1' }''')
-t('''{ id, values where values != '1' }''')
+#XXX: the matches below contain full list values correct per implementation 
+#but it'd be much more intuitive if the results 
+#filtered list to only contain matching value
+#current semantics only make sense if the value is a first-class list object
+#but even in that case the list shouldn't match the filter 
 
-t('''{ id, values where values == 1 }''') 
-t('''{ id, values where values != 1 }''') 
+t('''{ id, values where values == @1 }''',
+[{'id': '4', 'values': [1, '@1', 1.1]},
+ {'id': '7', 'values': '@1'}], useSerializer=True
+)
 
-t('''{ id, values where values = null }''') 
+t('''{ id, values where values != @1 }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '6', 'values': 1},
+ {'id': '8', 'values': '1'}]
+)
 
-t('''{ id, values where values != null }''') 
+t('''{ id, values where values == '1' }''',
+[{'id': '8', 'values': '1'}], 
+useSerializer=True)
 
-t('''{ id, values where values = '' }''') 
-t('''{ id, values where values != '' }''') 
-#t('''{ values where values <> '' }''') #XXX add to syntax?
-t('''{ id, values where values = 0 }''') 
-t('''{ id, values where values != 0 }''') 
-t('''{ id, values where values = '0' }''') 
-t('''{ id, values where values != '0' }''') 
+t('''{ id, values where values != '1' }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '@1', 1.1]},
+ {'id': '7', 'values': '@1'},
+ {'id': '6', 'values': 1},
+], useSerializer=True
+)
+
+t('''{ id, values where values == 1 }''',
+[{'id': '4', 'values': [1, '1', 1.1]}, {'id': '6', 'values': 1}]
+) 
+
+t('''{ id, values where values != 1 }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '7', 'values': '1'},
+ {'id': '8', 'values': '1'}
+ ]
+) 
+
+t('''{ id, values where values = null }''',
+[{'id': '1', 'values': None}, {'id': '3', 'values': ['', 0, None, False]}]) 
+
+t('''{ id, values where values != null }''',
+[{'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '7', 'values': '1'},
+ {'id': '6', 'values': 1},
+ {'id': '8', 'values': '1'}]
+) 
+
+t('''{ id, values where values = '' }''',
+[{'id': '3', 'values': ['', 0, None, False]}, 
+{'id': '5', 'values': ''}]
+)
+
+t('''{ id, values where values != '' }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '7', 'values': '1'},
+ {'id': '6', 'values': 1},
+ {'id': '8', 'values': '1'}]
+) 
+
+t('''{ id, values where values = 0 }''',
+[{'id': '3', 'values': ['', 0, None, False]}, 
+ {'id': '2', 'values': 0}]
+) 
+
+t('''{ id, values where values != 0 }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '7', 'values': '1'},
+ {'id': '6', 'values': 1},
+ {'id': '8', 'values': '1'}]
+) 
+
+t('''{ id, values where values = '0' }''', []) 
+
+t('''{ id, values where values != '0' }''',
+[{'id': '1', 'values': None},
+ {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '2', 'values': 0},
+ {'id': '5', 'values': ''},
+ {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '7', 'values': '1'},
+ {'id': '6', 'values': 1},
+ {'id': '8', 'values': '1'}]
+) 
+
+from vesper.data.store.basic import MemStore
+from vesper.data.base import Statement, OBJECT_TYPE_LITERAL, OBJECT_TYPE_RESOURCE
+
+t.model = MemStore([
+    Statement("subject1", 'prop' , 'value', OBJECT_TYPE_LITERAL,''),
+    Statement("subject2", 'prop' , 'value', 'en-US',''),
+    Statement("subject3", 'prop' , 'value', 'tag:mydatatype.com:mydatatype',''),
+    Statement("subject4", 'prop' , 'value', OBJECT_TYPE_RESOURCE,''),    
+])
+
+#XXX handle language tags -- plain strings should match lang tagged strings
+#XXX handle datatypes -- how to query for non-json types
+t("""
+{ *
+where (prop = 'value')
+}
+""", 
+[{'id': 'subject1', 'prop': 'value'}]
+)
 
 
 #test multivalued properties without any associated json list info
@@ -1645,47 +1755,7 @@ skip('''{* where(
 #?foo 
 #?foo or ?bar
 #not ?foo
-#test equivalent inline joins
-t.group = 'ref'
-
-from vesper.data.store.basic import MemStore
-from vesper.data.base import Statement, OBJECT_TYPE_LITERAL, OBJECT_TYPE_RESOURCE
-
-t.model = MemStore([
-    Statement("subject", 'prop' , 'value', OBJECT_TYPE_LITERAL,''),
-    Statement("subject", 'prop' , 'value', 'en-US',''),
-    Statement("subject", 'prop' , 'value', 'tag:mydatatype.com:mydatatype',''),
-    Statement("subject", 'prop' , 'value', OBJECT_TYPE_RESOURCE,''),    
-])
-
-#XXX handle refs
-t("""
-{ *
-where (prop = 'value')
-}
-""")
-
-t.model=modelFromJson([{'id': '1', 'foo' : "1"}, {'id': '2', 'foo' : 1},
-                                                 { 'bar' : ["a", "b"]}])
-
-#XXX handle types
-#XXX plus how to query for non-json types and lang tags?
-t("""
-{ id, foo where (foo = 1)}
-""")
-
-t("""
-{ id, foo where (foo = @1)}
-""",
- [{'foo': '1', 'id': '1'}])
-
-#this is correct but it'd be nice if there was some way to have the results 
-#filter the values in bar's list
-t("""
-{ bar where (bar = @a)}
-""",
-[{'bar': ['a', 'b']}])
-
+#test equivalent inline joins'
 
 #XXX raises error: "tags" projection not found
 '''{ ?tag

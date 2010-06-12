@@ -191,6 +191,25 @@ def pjsonDataTypeToRdfDataType(objectType):
         objectType = 'pjson:' + objectType
     return objectType
 
+def getDataType(item, parseContext):
+    if item is None:
+        return 'null', JSON_BASE+'null'
+    elif isinstance(item, bool):
+        return (item and u'true' or u'false'), XSD+'boolean'
+    elif isinstance(item, (int, long)):
+        return unicode(item), XSD+'integer'
+    elif isinstance(item, float):
+        return unicode(item), XSD+'double'
+    elif isinstance(item, (unicode, str)):
+        if parseContext:
+            return parseContext.deduceDataType(item)
+        else:
+            return item, OBJECT_TYPE_LITERAL
+    elif isinstance(item, base.ResourceUri):
+        return item.uri, OBJECT_TYPE_RESOURCE
+    else:
+        raise RuntimeError('parse error: unexpected object type: %s (%r)' % (type(item), item))
+
 def findPropList(model, subject, predicate, objectValue=None, objectType=None, scope=None):
     #by default search for special proplist bnode pattern
     #other models/mappings may need to implement a different way to figure this out
@@ -1040,19 +1059,10 @@ class Parser(object):
         
         if res:
             return res, OBJECT_TYPE_RESOURCE, context
-        elif item is None:
-            return 'null', JSON_BASE+'null', context
-        elif isinstance(item, bool):
-            return (item and u'true' or u'false'), XSD+'boolean', context
-        elif isinstance(item, (int, long)):
-            return unicode(item), XSD+'integer', context
-        elif isinstance(item, float):
-            return unicode(item), XSD+'double', context
-        elif isinstance(item, (unicode, str)):
-            value, objectType  = parseContext.deduceDataType(item)
-            return value, objectType, context
-        else:            
-            raise RuntimeError('parse error: unexpected object type: %s (%r)' % (type(item), item)) 
+        else:
+            value, valueType = getDataType(item, parseContext)
+            return value, valueType, context
+
 
     def generateListResources(self, m, lists):
         '''
