@@ -72,7 +72,9 @@ class QueryOp(object):
     name = None
     value = None #evaluation results maybe cached here
     maybe = False
-
+    functions = None
+    fromConstruct = False
+    
     def _setparent(self, parent_):
         parents = [id(self)]
         parent = parent_
@@ -104,6 +106,8 @@ class QueryOp(object):
             return False
         if self.name != other.name:
             return False
+        if self.labels != other.labels:
+            return False        
         return self.args == other.args
 
     def isIndependent(self, exclude=None):
@@ -125,7 +129,7 @@ class QueryOp(object):
         '''
         return getattr(engine, self._evalMethodName())(self, context)
 
-    def __repr__(self):
+    def getReprIndent(self):
         indent = self.parent and '\n' or ''
         parent = self.parent
         parents = [id(self)]
@@ -136,22 +140,27 @@ class QueryOp(object):
                 break;
             parents.append(id(parent))
             parent = parent.parent
+
+        return indent
             
+
+    def _getExtraReprArgs(self, indent):
         if self.name is not None:
-            name = self.name
-            if isinstance(name, tuple): #if qname pair
-                name = self.name[1]
-            namerepr = ':'+ repr(name)
+            return repr(self.name)
         else:
-            namerepr = ''
+            return ''
+
+    def __repr__(self):
         if self.args:
             self._validateArgs()
-            argsrepr = '(' + ','.join([repr(a) for a in self.args]) + ')'
-        else:
-            argsrepr = ''
-        return (indent + self.__class__.__name__ + namerepr
-                + (self.labels and repr(self.labels) or '')
-                + argsrepr)
+
+        indent = self.getReprIndent() 
+
+        extra = self._getExtraReprArgs(indent)
+        if extra and self.args:
+            extra= ', '+extra
+        return (indent + self.__class__.__name__ + '(' + ','.join([repr(a) for a in self.args])
+                + extra + ')')
 
     def _validateArgs(self):
         if not all(a.parent is self for a in self.args):
@@ -218,12 +227,18 @@ class QueryOp(object):
 
     def removeArg(self, child):
         try:
-            self.args.remove(child)
-            child._parent = None
-        except ValueError:
-            raise QueryException(
-            'removeArg failed on %r: could not find child %c'
-            % (type(self), type(child)))
+            #can't use list.remove() because there might be duplicates
+            found = False
+            for i, a in enumerate(self.args):
+                if a is child:
+                    self.args.pop(i)
+                    found = True
+            if found:
+                child._parent = None
+            else:
+                raise QueryException(
+                'removeArg failed on %r: could not find child %c'
+                % (type(self), type(child)))
         except:
             print 'self', type(self), self
             raise QueryException('invalid operation: removeArg on %r' % type(self))
@@ -292,6 +307,12 @@ class ResourceSetOp(QueryOp):
                 return True
         return False
         #raise QueryException('unable to add label ' + label + ' to empty join: %s' % self)
+
+    def _getExtraReprArgs(self, indent):
+        if self.name is not None:
+            return 'name='+repr(self.name)
+        else:
+            return ''
 
 class Join(ResourceSetOp):
     '''
@@ -412,6 +433,15 @@ class JoinConditionOp(QueryOp):
         print 'op', self.op, 'replace',child, 'with', with_
         raise QueryException('invalid operation for %s' % type(self))
 
+    def _getExtraReprArgs(self, indent):
+        import re
+        match = re.match(r'#(\d)', self.position) #hack!
+        if match:
+            args = match.group(1)
+        else:
+            args = repr(self.position)
+        return indent + '  ' + args +','+repr(self.join)
+
 class Filter(QueryOp):
     '''
     Filters rows out of a tupleset based on predicate
@@ -466,6 +496,15 @@ class Filter(QueryOp):
 
         self.labels = [ (resolve(name), p) for (name, p) in self.labels]
 
+    def _getExtraReprArgs(self, indent):
+        args = ''
+        for (name, pos) in self.labels:
+            if pos <= 2:
+                kwname = ['subjectlabel', 'propertylabel', 'objectlabel'][pos]
+                args += (args and ', ' or indent+'  ') + kwname + '=' + repr(name)
+        
+        return args
+
 class Label(QueryOp):
 
     def __init__(self, name):
@@ -508,7 +547,8 @@ class Constant(QueryOp):
         return super(Constant,self).__eq__(other) and self.value == other.value
 
     def __repr__(self):
-        return repr(self.value)
+        indent = self.getReprIndent()
+        return indent + self.__class__.__name__ + "("+repr(self.value)+")"
 
     @classmethod
     def _costMethodName(cls):
@@ -543,13 +583,6 @@ class AnyFuncOp(QueryOp):
     
     def isAggregate(self):
         return self.metadata.isAggregate
-    
-    #def __repr__(self):
-    #    if self.name:
-    #        name = self.name[1]
-    #    else:
-    #        raise TypeError('malformed FuncOp, no name')
-    #    return name + '(' + ','.join( [repr(a) for a in self.args] ) + ')'
 
     def cost(self, engine, context):
         return engine.costAnyFuncOp(self, context)
@@ -562,7 +595,16 @@ class AnyFuncOp(QueryOp):
             return self.metadata.func(context, *args, **kwargs)
         else:
             return self.metadata.func(*args, **kwargs)
-        
+
+    def __repr__(self):
+        self._validateArgs()
+        if self.args:
+            argsRepr = ','+ ','.join([repr(a) for a in self.args])
+        else:
+            argsRepr = ''
+        indent = self.getReprIndent()
+        return indent+ 'QueryOp.functions.getOp('+str(self.name) + argsRepr + ')'
+
 class NumberFuncOp(AnyFuncOp):
     def getType(self):
         return NumberType
@@ -580,15 +622,6 @@ class BooleanOp(QueryOp):
         self.args = []
         for a in args:
             self.appendArg(a)
-
-    def __repr__(self):
-        #self._validateArgs()
-        if not self.args:
-            return self.name + '()'        
-        elif len(self.args) > 1:
-            return '(' + self.name.join( [repr(a) for a in self.args] ) + ')'
-        else:
-            return self.name + '(' +  repr(self.args[0]) + ')'
 
     def getType(self):
         return BooleanType
@@ -633,32 +666,20 @@ class Cmp(CommunitiveBinaryOp):
         return super(Cmp, self).__init__(*args)
 
     def __repr__(self):
-        op = self.op
         self._validateArgs()
-        return '(' + op.join( [repr(a) for a in self.args] ) + ')'
+        indent = self.getReprIndent()
+        return indent+'Cmp('+repr(self.op)+','+','.join([repr(a) for a in self.args])+')'
 
 class Eq(CommunitiveBinaryOp):
     def __init__(self, left=None, right=None):
         return super(Eq, self).__init__(left, right)
 
-    def __repr__(self):
-        self._validateArgs()
-        return '(' + ' == '.join( [repr(a) for a in self.args] ) + ')'
-
 class In(BooleanOp):
     '''Like OrOp + EqOp but the first argument is only evaluated once'''
-    def __repr__(self):
-        rep = repr(self.args[0]) + ' in ('
-        return rep + ','.join([repr(a) for a in self.args[1:] ]) + ')'
 
 class Not(BooleanOp):
-    def __repr__(self):
-        return 'not(' + ','.join( [repr(a) for a in self.args] ) + ')'
-
-class Not(BooleanOp):
-    def __repr__(self):
-        return 'not(' + ','.join( [repr(a) for a in self.args] ) + ')'
-
+    pass
+    
 class QueryFuncMetadata(object):
     factoryMap = { StringType: StringFuncOp, NumberType : NumberFuncOp,
       BooleanType : BooleanFuncOp
@@ -681,8 +702,8 @@ class QueryFuncMetadata(object):
 
 AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
-class Project(QueryOp):  
-    
+class Project(QueryOp):      
+
     def __init__(self, fields, var=None, constructRefs = None):
         self.varref = var 
         if not isinstance(fields, list):
@@ -712,13 +733,9 @@ class Project(QueryOp):
             and self.fields == other.fields and self.varref == other.varref)
 
     def __repr__(self):
-        varref = ''
-        fields = ''
-        if self.varref:
-            varref = '('+self.varref + ')'
-        if len(self.fields) > 1:
-            fields = str(self.fields)
-        return super(Project,self).__repr__()+varref+fields
+        indent = self.getReprIndent()
+        return (indent+"Project(" + repr(self.fields) + ','+repr(self.varref)+
+                ','+repr(self.constructRefs) +')' )
 
 class PropShape(object):
     omit = 'omit' #when MAYBE()
@@ -750,7 +767,7 @@ class ConstructProp(QueryOp):
         if isinstance(value, Project):
             #hack: if this is a standalone project expand object references
             #but not for id
-            if value.name != 0 and value.constructRefs is None: 
+            if value.name != 0 and value.constructRefs is None:
                 value.constructRefs = True
         self.value = value #only one, replaces current if set
         value.parent = self
@@ -779,6 +796,12 @@ class ConstructProp(QueryOp):
 
     args = property(lambda self: tuple([a for a in [self.value, self.nameFunc] if a]))
 
+    def __repr__(self):
+        indent = self.getReprIndent()
+        return (indent + "ConstructProp(" + ','.join([repr(x) for x in
+            [self.name, self.value,self.ifEmpty,self.ifSingle, self.nameIsFilter,
+            self.nameFunc] ]) +')' )
+
 class ConstructSubject(QueryOp):
     def __init__(self, name='id', value=None):
         self.name = name        
@@ -802,6 +825,11 @@ class ConstructSubject(QueryOp):
             return ''
 
     args = property(lambda self: self.value and (self.value,) or ())
+
+    def __repr__(self):
+        indent = self.getReprIndent()
+        return (indent+"ConstructSubject(" + repr(self.name)+','+ repr(self.value) +')' )
+
 
 class Construct(QueryOp):
     '''
@@ -835,6 +863,15 @@ class Construct(QueryOp):
         return (super(Construct,self).__eq__(other)
             and self.shape == other.shape and self.id == self.id)
 
+    def __repr__(self):
+        indent = self.getReprIndent()
+        extra = ''
+        if self.shape == self.listShape:
+            extra = ',list'
+        elif self.shape == self.valueShape:
+            extra = ',object'
+        return indent+"Construct(" + repr(self.args)+ extra +')'
+        
 class GroupBy(QueryOp):
     aggregateShape = None
     
@@ -860,6 +897,9 @@ class SortExp(QueryOp):
         self.asc = not desc
 
     args = property(lambda self: (self.exp,))
+
+    def _getExtraReprArgs(self, indent):
+        return repr(not self.asc)
 
 class Select(QueryOp):
     where = None
@@ -904,3 +944,14 @@ class Select(QueryOp):
             child._parent = None
         else:
             raise QueryException('removeArg failed: not a child')
+
+    def __repr__(self):
+        indent = self.getReprIndent()
+        args = repr(self.construct)
+        for name in ('where', 'groupby', 'limit', 'offset', 'depth',
+            'namemap', 'orderby', 'mergeall'):
+            v = getattr(self, name)
+            if v is not None:
+                args += ',\n' + indent + name + '=' + repr(v)
+
+        return indent+"Select(" + args + ')'
