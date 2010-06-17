@@ -206,7 +206,7 @@ def main(t, cmdargs=None):
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
         ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0),
-        ('printdocs',0)]:
+        ('printdocs',0), ('skip', 0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
@@ -236,16 +236,21 @@ def main(t, cmdargs=None):
             groupcount = 0
         else:
             groupcount += 1
-        if options.group and options.group != currentgroup:
-            skipped += 1
-            continue
+        if options.group:
+            if options.skip:
+                if options.num == -1 and options.group == currentgroup:
+                    skipped += 1
+                    continue                
+            elif options.group != currentgroup:
+                skipped += 1
+                continue
         
         if options.num > -1:
             if options.group:
-                if groupcount != options.num:
+                if groupcount != options.num or (options.skip and groupcount == options.num):
                     skipped += 1
                     continue
-            elif i != options.num:
+            elif i != options.num or (options.skip and i == options.num):
                 skipped += 1
                 continue
                 
@@ -268,7 +273,10 @@ def main(t, cmdargs=None):
         
         if not options.quiet:
             print '*** running test:', name
-            print 'query', test.query.strip().encode('unicode_escape')
+            try:
+                print 'query', test.query or test.ast
+            except UnicodeEncodeError:
+                print 'query', test.query.strip().encode('unicode_escape')
 
         if options.printmodel and id(test.model) != lastmodelid:
             lastmodelid = id(test.model)
@@ -345,7 +353,7 @@ def main(t, cmdargs=None):
                 if not options.quiet:
                     print "warning: unexpected order for (unordered) test %d" % i
             else:
-                assert resultsMatch,  ('unexpected results for test %d' % i)
+                 assert resultsMatch,  ('unexpected results for test %d' % i)
 
     if not options.printdocs:
         print '***** %d tests passed, %d skipped' % (count, skipped)
