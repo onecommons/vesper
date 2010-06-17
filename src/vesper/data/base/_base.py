@@ -18,11 +18,26 @@ log = logging.getLogger("RxPath")
 
 class ColumnInfo(object):
     def __init__(self, label, type=object):
-        self.label = label
+        if not isinstance(label, tuple):
+            self.labels = (label,)
+        else:
+            self.labels = label
         self.type = type
 
     def __repr__(self):
-        return 'ColInfo'+repr((self.label,self.type))
+        return 'ColInfo'+repr((self.labels,self.type))
+
+    def __eq__(self, other):
+        if not isinstance(other, ColumnInfo):
+            return False
+        if self.labels != other.labels:
+            return False
+        if isinstance(self.type, Tupleset):
+            if not isinstance(other.type, Tupleset):
+                return False            
+            return self.type.columns == other.type.columns
+        else:
+            return self.type == other.type
 
 class Tupleset(object):
     '''
@@ -30,26 +45,30 @@ class Tupleset(object):
     '''
     columns = None
 
-    def findColumnPos(self, label, rowinfo=False, shallow=False, pos=()):
+    def findColumnPos(self, label, rowinfo=False, shallow=False, pos=(), count=1):
         if not self.columns:
             return None
 
         for i, col in enumerate(self.columns):
             isTuple = isinstance(col.type, Tupleset)
-            if label == col.label:
+            if label in col.labels:
                 if not shallow and isTuple: #look deeper
-                    match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,))
+                    match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,), count)
                     if match:
-                        return match
+                        count -= 1
+                        if not count:
+                            return match
                 pos = pos+(i,)
                 if rowinfo:
                     return pos, self
                 else:
                     return pos
             elif isTuple:
-                match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,))
+                match = col.type.findColumnPos(label, rowinfo, shallow, pos+(i,), count)
                 if match:
-                    return match
+                    count -= 1
+                    if not count:
+                        return match
         return None
 
     def filter(self, conditions=None, hints=None):

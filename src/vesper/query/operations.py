@@ -14,12 +14,15 @@ def _colrepr(self):
     colstr =''
     if self.columns:
         def x(c):
-            s = c.label
+            if len(c.labels) > 1:
+                s = repr(c.labels)
+            else:
+                s = repr(c.labels[0])
             if isinstance(c.type, Tupleset):
-                s += '('+','.join( map(x,c.type.columns) ) +')'
+                s += '['+','.join( map(x,c.type.columns) ) +']'
             return s
         colstr = ','.join( map(x,self.columns) )
-    return '('+colstr+')'
+    return 'C('+colstr+')'
 
 def validateRowShape(columns, row):
     if columns is None:
