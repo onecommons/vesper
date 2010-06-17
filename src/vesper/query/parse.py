@@ -4,6 +4,7 @@
 parse JQL 
 '''
 from vesper.query.jqlAST import *
+import vesper.query.rewrite
 from vesper.data import base
 import logging, logging.handlers
 #errorlog = logging.getLogger('parser')
@@ -246,7 +247,8 @@ def p_root(p):
     if select.namemap:
         p.parser.jqlState.namemap.update( select.namemap )
     select.namemap = p.parser.jqlState.namemap
-    resolveNameMap(None, select)
+    vesper.query.rewrite.removeDuplicateConstructFilters(select)
+    resolveNameMap(None, select)    
 
 def p_construct0(p):
     '''
@@ -877,7 +879,7 @@ def parse(query, functions, debug=False, namemap=None):
     try:
         from vesper.query import rewrite
         parser.jqlState = rewrite._ParseState(functions, namemap)
-        
+        QueryOp.functions = functions
         #XXX only turn tracking on if there's an error
         r = parser.parse(query,lexer, tracking=True, debug=debug)
         # log messages should be safe to serialize
