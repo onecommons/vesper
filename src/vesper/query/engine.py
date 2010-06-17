@@ -26,7 +26,7 @@ import vesper.pjson
 RDF_MS_BASE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
 NilResource = ResourceUri(RDF_MS_BASE+'nil')
 
-def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
+def getColumns(keypos, row, tableType=Tupleset, outerjoin=False, includekey=False):
     """
     Given a row which may contain nested tuplesets as cells and a "key" cell position,
     yield (key, row) pairs where the returned rows doesn't include the key cell.
@@ -43,7 +43,7 @@ def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
     >>> list( getColumns((1,1,1), t, list) ) #group by 'd'
     [('d1', ['a1', 'b1', 'c1']), ('d1', ['a1', 'b2', 'c2'])]
 
-    >>> list( getColumns((1,1), t, list) )
+    >>> list( getColumns((1,1), t, list) ) #group by 'c'
     [([('c1', 'd1')], ['a1', 'b1']), ([('c2', 'd1')], ['a1', 'b2'])]
     """
     keypos = list(keypos)
@@ -52,6 +52,8 @@ def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
     for i, cell in enumerate(row):
         if i == pos:
             keycell = cell
+            if includekey:
+                cols.append(cell)
         else:
             cols.append(cell)
     assert outerjoin or keycell
@@ -61,13 +63,13 @@ def getColumns(keypos, row, tableType=Tupleset, outerjoin=False):
         assert isinstance(keycell, tableType), "cell %s (%s) is not %s p %s restp %s" % (keycell, type(keycell), tableType, pos, keypos)
         if outerjoin and not keycell:            
             nullrow = getNullRows(keycell.columns[0])
-            for key, nestedcols in getColumns(keypos, nullrow, tableType):
+            for key, nestedcols in getColumns(keypos, nullrow, tableType,includekey=includekey):
                 yield key, cols+nestedcols                
         for nestedrow in keycell:
-            for key, nestedcols in getColumns(keypos, nestedrow, tableType):
+            for key, nestedcols in getColumns(keypos, nestedrow, tableType,includekey=includekey):
                 yield key, cols+nestedcols
 
-def getColumnsColumns(keypos, columns):
+def getColumnsColumns(keypos, columns, includekey=False):
     '''
     Return a column list that corresponds to the shape of the rows returned 
     by the equivalent call to `getColumns`.
@@ -77,16 +79,18 @@ def getColumnsColumns(keypos, columns):
     cols = []
     for i, c in enumerate(columns):
         if pos == i:
+            if includekey:
+                cols.append(c)
             if keypos:
                 assert isinstance(c.type, Tupleset)
-                nestedcols = getColumnsColumns(keypos, c.type.columns)
+                nestedcols = getColumnsColumns(keypos, c.type.columns, includekey)
                 if nestedcols:
                     cols.extend(nestedcols)
         else:
             cols.append(c)
     return cols
             
-def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
+def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False, includekey=False):
     '''
     Group the given tupleset by the column specified by groupby
     yields a row the groupby key and a nested tupleset containing the non-key columns
@@ -124,8 +128,10 @@ def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
     for row in tupleset:
         #print 'gb', groupby, row
         if debug: validateRowShape(tupleset.columns, row)
-        for key, outputrow in getColumns(groupby, row, outerjoin=outerjoin):
-            if isinstance(key, list): debugp('####unhashable!', 'debug cols', debug, 'key',key, 'groupby', groupby, 'row', row, 'columns', tupleset.columns)
+        for key, outputrow in getColumns(groupby, row, outerjoin=outerjoin, includekey=includekey):
+            if isinstance(key, list):
+                debugp('####unhashable!', 'debug cols', debug, 'key',key,
+                    'groupby', groupby, 'row', row, 'columns', tupleset.columns)
             vals = resources.get(key)
             if vals is None:
                 vals = MutableTupleset()
@@ -133,7 +139,6 @@ def groupbyUnordered(tupleset, groupby, debug=False, outerjoin=False):
             vals.append(outputrow)
 
     for key, values in resources.iteritems():
-        #print 'gb out', [key, values]
         if debug:
             #debug will be a columns list
             try:
@@ -162,7 +167,7 @@ def getColumn(pos, row):
     else:
         yield (cell, p, row)
 
-def chooseColumns(groupby, columns):
+def chooseColumns(groupby, columns, includekey=False):
     '''
     "above" columns go first, omit groupby column
     '''
@@ -172,8 +177,9 @@ def chooseColumns(groupby, columns):
     groupbycol = None
     for i, c in enumerate(columns):
         if pos == i:
+            if includekey: outputcolumns.append(c)
             if groupby:
-                groupbycol = chooseColumns(groupby, c.type.columns)
+                groupbycol = chooseColumns(groupby, c.type.columns, includekey)
             #else: skip column
         else:
             outputcolumns.append(c)
@@ -335,7 +341,7 @@ def getNullRows(columns):
         if isinstance(c.type, Tupleset):
             nullrows[i] = MutableTupleset([getNullRows(c.type.columns)])
         else:
-            nullrows[i] = ColumnInfo(c.label, None)
+            nullrows[i] = ColumnInfo(c.labels, None)
     return nullrows
 
 def _serializeValue(context, v, isId):
@@ -978,8 +984,7 @@ class SimpleQueryEngine(object):
         ] 
         debug = context.debug
         return SimpleTupleset(
-            lambda: groupbyUnordered(tupleset, position,
-                debug=debug and columns),
+            lambda: groupbyUnordered(tupleset, position, debug=debug and columns),
             columns=columns, 
             hint=tupleset, op='groupby op on '+label,  debug=debug)
 
@@ -992,15 +997,19 @@ class SimpleQueryEngine(object):
         assert position is not None, 'cant find %r in %s %s' % (
                     joincond.position, tupleset, tupleset.columns)
         coltype = object
+        #include the key we're going to group by as a value columns in case we
+        #need all of the values in the key per row
+        #XXX: analyze construct and only set this if its needed
+        includekey = True
         columns = [
             ColumnInfo(joincond.parent.name or '', coltype),
             ColumnInfo(joincond.getPositionLabel(),
-                                    chooseColumns(position,tupleset.columns) )
+                                chooseColumns(position,tupleset.columns, includekey) )
         ]
         outerjoin = joincond.join in ('r')
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
-                debug=debug and columns, outerjoin=outerjoin),
+                                    debug and columns, outerjoin, includekey),
             columns=columns, 
             hint=tupleset, op=msg + repr((joincond.join, joincond.position)),  debug=debug)
 
@@ -1012,7 +1021,7 @@ class SimpleQueryEngine(object):
             propname = op.name
         subject = context.currentRow[SUBJECT]
         
-        if not context.initialModel.canHandleStatementWithOrder:        
+        if not context.initialModel.canHandleStatementWithOrder:
             #statement-level list order info not supported by the model, try to find the list resource
             pred = propname #XXX convert to URI
             if pred.startswith(RDF_MS_BASE+'_'):
@@ -1024,16 +1033,18 @@ class SimpleQueryEngine(object):
             ordered = []
             rows = list(rows)
             if rows:                
+                leftovers = list(listval)
                 for row in rows:
                     predicate = row[1]
                     if predicate.startswith(RDF_MS_BASE+'_'): #rdf:_n
                         ordinal = int(predicate[len(RDF_MS_BASE+'_'):])
-                        #this assert isn't valid if duplicate values are in the sequence
-                        #assert row[2] in listval, '%s not in %s' % (row[2], listval)
-                        ordered.append( (ordinal, row[2]) )
                         if row[2] in listval:
-                            listval.remove(row[2])
-                leftovers = listval
+                            #only include list items that matched the result
+                            ordered.append( (ordinal, row[2]) )
+                            try:
+                                leftovers.remove(row[2])
+                            except ValueError:
+                                pass #this can happen if the list has duplicate items
             else:
                 return (False, listval)
         else:
@@ -1044,8 +1055,8 @@ class SimpleQueryEngine(object):
             #XXX this is expensive, just reuse the getColumn results used by build listval
             listcol = context.currentTupleset.findColumnPos(listposLabel) 
             assert listcol
-            listpositions = flatten(c[0] for c in getColumn(listcol, context.currentRow))
-            if not listpositions: #no position info, so not a json list
+            listpositions = flatten((c[0] for c in getColumn(listcol, context.currentRow)))
+            if not listpositions or not isinstance(listpositions, tuple): #no position info, so not a json list
                 return (False, listval)
             ordered = []
             leftovers = []
@@ -1131,16 +1142,36 @@ class SimpleQueryEngine(object):
 
             current = self._groupby(result, joincond,debug=context.debug)
             if previous:
-                def bindjoinFunc(jointype, current):
+                def mergeColumns(left, right):
+                    def find(col):
+                        try:
+                            return left.index(col)
+                        except ValueError:
+                            return -1
+                    #skip right-side columns that match a left column 
+                    #except for the first one, since we are joining on that one
+                    indexToLeft = [-1]+[find(col) for col in right[1:]]
+                    newright = [col for i, col in enumerate(right) if indexToLeft[i] < 0]
+                    return left+newright, newright, indexToLeft
+
+                def bindjoinFunc(jointype, current, indexToLeft, nullrows):
                     '''
                     jointypes: inner, left outer, semi- and anti-
                     '''
-                    if jointype=='l':
-                        nullrows = getNullRows(current.columns)
-                    elif jointype=='a':
-                        nullrows = [] #no match, so include leftRow
-                    else:
-                        nullrows = None
+                    def mergeRow(leftRow, rightRow):
+                        #for each shared column, merge values
+                        rows = []
+                        for i, cell in enumerate(rightRow):
+                            if indexToLeft[i] > -1:
+                                lv = leftRow[ indexToLeft[i] ]
+                                #print 'mergerow', lv, 'li', indexToLeft[i], 'ri', i, 'cell', cell
+                                #only include values that both rows have
+                                for c in cell:
+                                    if c not in lv:
+                                        lv.append(c)
+                            else:
+                                rows.append(cell)
+                        return rows
 
                     def joinFunc(leftRow, rightTable, lastRow):
                         match = False
@@ -1151,7 +1182,7 @@ class SimpleQueryEngine(object):
                                 elif jointype=='s': #semijoin
                                     yield []
                                 else:
-                                    yield row
+                                    yield mergeRow(leftRow, row)
                                 match = True
                         if not match:
                             yield nullrows
@@ -1162,22 +1193,32 @@ class SimpleQueryEngine(object):
                 assert current.columns and len(current.columns) >= 1
                 assert previous.columns is not None
                 #columns: (left + right)
+                indexToLeft = None
                 jointype = joincond.join
                 if jointype in ('i','l'):
-                    columns = previous.columns + current.columns
+                    columns, rightColumns, indexToLeft = mergeColumns(
+                                                previous.columns, current.columns)
                 elif jointype in ('a','s'):
                     columns = previous.columns
                 elif jointype == 'r':
                     columns = current.columns + previous.columns
                 else:
                     assert False, 'unknown jointype: '+ jointype
+
+                if jointype=='l':
+                    nullrows = getNullRows(rightColumns)
+                elif jointype=='a':
+                    nullrows = [] #no match, so include leftRow
+                else:
+                    nullrows = None
+                    
                 if jointype == 'r': #right outer 
                     previous = IterationJoin(current, previous,
-                                    bindjoinFunc('l', previous),
+                            bindjoinFunc('l', previous, indexToLeft, nullrows),
                                     columns,joincond.name,debug=context.debug)
                 else:
                     previous = IterationJoin(previous, current,
-                                    bindjoinFunc(jointype, current),
+                        bindjoinFunc(jointype, current, indexToLeft, nullrows),
                                     columns,joincond.name,debug=context.debug)
             else:
                 previous = current
@@ -1347,9 +1388,10 @@ class SimpleQueryEngine(object):
         # range of types we could first project on type and use that result to
         # choose the type index. On the other hand, if that projection uses an
         # iteration join it might be nearly expensive as doing the iteration join
-        # on the subject only.
+        # on the subject only
         if context.projectValues: #already evaluated
             return context.projectValues[op.name]
+
         if isinstance(op.name, int):
             pos = (op.name,)
         else:            
@@ -1361,7 +1403,7 @@ class SimpleQueryEngine(object):
         #val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
         if op.constructRefs:            
             val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=True)
-            assert isinstance(val, list)
+            assert isinstance(val, list)            
             isJsonList, val = self.reorderWithListInfo(context, op, val)    
             handleNil = isJsonList or len(val) > 1            
             val = [self.buildObject(context, v, handleNil) for v in val]

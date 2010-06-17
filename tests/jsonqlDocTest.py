@@ -419,10 +419,23 @@ Otherwise, it will be evaluated on each result, so the result set will equivalen
 '''
 
 t%'''
-Filtering (the WHERE() clause)
+Datatypes
+=========
+
+'''
+
+t%'''
+Filtering (the WHERE clause)
 ==============================
 
-..note Note: Unlike SQL the WHERE expression must be in a parentheses.
+* filter select which objects should appear in the result set. In addition, if the construct clause references a property whose 
+values are filtered, only those filters will be included in the result.
+
+value = 1 and value = 2
+value = 1 or value = 2
+value > 3
+substring(value) = 3
+values includes all values
 
 * property references in construct
 * matching lists 

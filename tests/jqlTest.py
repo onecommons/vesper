@@ -64,7 +64,6 @@ t("(foo)",['bar', 'bar'])
 
 t("(id)",['3', '2', '_:2', '_:1'])
 
-#XXX serialize -- do we really want these to be serialized as object references?
 t("(id)",['@3', '@2', '@_:2', '@_:1'], useSerializer=True)
 
 t("('@constant')", ['@constant'])
@@ -666,6 +665,44 @@ t('''
  ['_:j:t:object:8', 8, 4]],
 model=groupbymodel)
 
+#note: with { 'parents' : id group by children } the id will refer to children object id that's why we need the label reference
+t('''
+{
+?parent
+'parents' : ?parent.id, 
+'child' : children
+
+group by children 
+}
+''',
+[{'child': 'a', 'parents': ['1', '2']},
+ {'child': 'c', 'parents': ['1', '2']},
+ {'child': 'b', 'parents': ['1', '2']}]
+ , model = modelFromJson([
+    { 'id' : '1',
+       'name' : '1',
+      'children' : ['a', 'b', 'c']
+    },
+    { 'id' : '2',
+      'name' : '2',
+      'children' : ['a', 'b', 'c']
+    },
+    {
+    'id':'a',
+    'label':'a'
+    },
+    {
+    'id':'b',
+    'label':'b'
+    },
+    {
+    'id':'c',
+    'label':'c'
+    }
+  ])
+)
+
+
 t('''
 [val, count(val), sum(val)]
 ''', 
@@ -1135,7 +1172,8 @@ values
  {'id': '4', 'values': [1, '1', 1.1]}]
  )
 
-t.model = modelFromJson([
+t.group = 'filter'
+filterModel = modelFromJson([
       { 'id' : '1',
         'values' :  None
       },
@@ -1163,14 +1201,19 @@ t.model = modelFromJson([
      ]
  )
 
-#XXX: the matches below contain full list values correct per implementation 
-#but it'd be much more intuitive if the results 
-#filtered list to only contain matching value
-#current semantics only make sense if the value is a first-class list object
-#but even in that case the list shouldn't match the filter 
+t.model = filterModel
+
+t('''{ id, values where values = @1 and values = 1 }''',
+[{'id': '4', 'values': [1, '1']}
+])
+
+#adding "and values" matches all values so all values ends up in the result
+t('''{ id, values where values = @1 and values = 1 and values}''',
+[{'id': '4', 'values': [1, '1', 1.1]}]
+)
 
 t('''{ id, values where values == @1 }''',
-[{'id': '4', 'values': [1, '@1', 1.1]},
+[{'id': '4', 'values': ['@1']},
  {'id': '7', 'values': '@1'}], useSerializer=True
 )
 
@@ -1179,7 +1222,7 @@ t('''{ id, values where values != @1 }''',
  {'id': '3', 'values': ['', 0, None, False]},
  {'id': '2', 'values': 0},
  {'id': '5', 'values': ''},
- {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '4', 'values': [1,1.1]},
  {'id': '6', 'values': 1},
  {'id': '8', 'values': '1'}]
 )
@@ -1200,7 +1243,7 @@ t('''{ id, values where values != '1' }''',
 )
 
 t('''{ id, values where values == 1 }''',
-[{'id': '4', 'values': [1, '1', 1.1]}, {'id': '6', 'values': 1}]
+[{'id': '4', 'values': [1, ]}, {'id': '6', 'values': 1}]
 ) 
 
 t('''{ id, values where values != 1 }''',
@@ -1208,17 +1251,17 @@ t('''{ id, values where values != 1 }''',
  {'id': '3', 'values': ['', 0, None, False]},
  {'id': '2', 'values': 0},
  {'id': '5', 'values': ''},
- {'id': '4', 'values': [1, '1', 1.1]},
+ {'id': '4', 'values': ['1', 1.1]},
  {'id': '7', 'values': '1'},
  {'id': '8', 'values': '1'}
  ]
 ) 
 
 t('''{ id, values where values = null }''',
-[{'id': '1', 'values': None}, {'id': '3', 'values': ['', 0, None, False]}]) 
+[{'id': '1', 'values': None}, {'id': '3', 'values': [None]}]) 
 
 t('''{ id, values where values != null }''',
-[{'id': '3', 'values': ['', 0, None, False]},
+[{'id': '3', 'values': ['', 0, False]},
  {'id': '2', 'values': 0},
  {'id': '5', 'values': ''},
  {'id': '4', 'values': [1, '1', 1.1]},
@@ -1228,13 +1271,13 @@ t('''{ id, values where values != null }''',
 ) 
 
 t('''{ id, values where values = '' }''',
-[{'id': '3', 'values': ['', 0, None, False]}, 
+[{'id': '3', 'values': ['']}, 
 {'id': '5', 'values': ''}]
 )
 
 t('''{ id, values where values != '' }''',
 [{'id': '1', 'values': None},
- {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '3', 'values': [0, None, False]},
  {'id': '2', 'values': 0},
  {'id': '4', 'values': [1, '1', 1.1]},
  {'id': '7', 'values': '1'},
@@ -1243,13 +1286,13 @@ t('''{ id, values where values != '' }''',
 ) 
 
 t('''{ id, values where values = 0 }''',
-[{'id': '3', 'values': ['', 0, None, False]}, 
+[{'id': '3', 'values': [0, False]}, 
  {'id': '2', 'values': 0}]
 ) 
 
 t('''{ id, values where values != 0 }''',
 [{'id': '1', 'values': None},
- {'id': '3', 'values': ['', 0, None, False]},
+ {'id': '3', 'values': ['', None]},
  {'id': '5', 'values': ''},
  {'id': '4', 'values': [1, '1', 1.1]},
  {'id': '7', 'values': '1'},
@@ -1627,13 +1670,13 @@ where (label = 'tag 1')
 }
 ''')
 
-t('''
-    { ?tag, id,
-    'shared' : ?posts.tags
+t(query='''
+    { ?tag, id, 
+    'shared' : ?posts.tags #other tags that posts with this tag have
      where({ ?posts ?tag = tags} and ?tag = 'tag1')
     }
 ''',
-[{'id': 'tag1', 'shared': 'tag1'}]
+results=[{'id': 'tag1', 'shared': 'tag1'}]
 )
 
 t.model = modelFromJson([
@@ -1644,6 +1687,17 @@ t.model = modelFromJson([
         { "id" : "2", "type" : "post", "tags" : "tag2"},
         { "id" : "3", "type" : "post"}
     ])
+
+t(query='''
+        { ?tag, id, 
+        'shared' : ?posts.tags #other tags that posts with this tag have
+         where {?posts 
+                ?tag = tags} 
+            and ?tag = 'tag1'
+        }
+    ''',
+ results=[{'id': 'tag1', 'shared': ['tag1', 'tag2']}]
+)
 
 t('''
 {   ?post, id, 
@@ -1874,6 +1928,20 @@ where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'eve
 #test that ?bar = 1 doesn't join with foo = 1
 # {* where (?bar = 1 and foo = 1)}
 
+t.group = 'test'
+
+#XXX AssertionError: cant find children in <vesper.data.store.basic.MemStore 
+#even after adding "where children" and "where ?parent.children"
+skip('''
+{
+?parent
+'parents' : ?parent.id, 
+'child' : children,
+'children' : ?parent.children #show all children for the parent
+group by children 
+}
+''')
+   
 
 import unittest
 class JQLTestCase(unittest.TestCase):
