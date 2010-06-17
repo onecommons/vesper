@@ -171,7 +171,7 @@ def evalAST(ast, model, bindvars=None, explain=None, debug=False,
                     forUpdate=False, contextShapes=None, useSerializer=True):
     from vesper.query import engine
     if useSerializer:
-        serializer = pjson.Serializer(ast.namemap)
+        serializer = pjson.Serializer(getattr(ast,'namemap',None))
     else:
         serializer = None
     if bindvars:
