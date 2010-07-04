@@ -331,14 +331,16 @@ class Except(ResourceSetOp):
 
 class JoinConditionOp(QueryOp):
     '''
-    helper op
+    describe how the child filter participates in the parent join
     '''
+    #join types:
     INNER = 'i'
     LEFTOUTER = 'l'
     RIGHTOUTER = 'r'
     #FULLOUTER = 'f'
     ANTI = 'a'
     SEMI = 's'
+    CROSS = 'x'
 
     def __init__(self, op, position=SUBJECT, join=INNER):
         self.op = op
@@ -456,17 +458,23 @@ class Filter(QueryOp):
 
         self.labels = []
         if 'subjectlabel' in kw:
-            self.labels.append( (kw['subjectlabel'], SUBJECT) )
+            subjectlabel = kw['subjectlabel']
+            if not isinstance(subjectlabel, list):
+                subjectlabel = (subjectlabel, )
+            for name in subjectlabel:
+                self.labels.append( (name, SUBJECT) )
         if 'propertylabel' in kw:
-            self.labels.append( (kw['propertylabel'], PROPERTY) )
+            propertylabel = kw['propertylabel']
+            if not isinstance(propertylabel, list):
+                propertylabel = (propertylabel, )
+            for name in propertylabel:
+                self.labels.append( (name, PROPERTY) )
         if 'objectlabel' in kw:
-            objectlabel = kw['objectlabel']
-            self.labels.append( (objectlabel, OBJECT) )
-            if isinstance(objectlabel, tuple):
-                prefix, name = objectlabel
-                self.labels.append( ( (prefix, name +':type'), OBJTYPE_POS) )
-                self.labels.append( ( (prefix, name +':pos'), LIST_POS) )
-            else:
+            objectlabels = kw['objectlabel']
+            if not isinstance(objectlabels, list):
+                objectlabels = (objectlabels, )
+            for objectlabel in objectlabels:
+                self.labels.append( (objectlabel, OBJECT) )
                 self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
                 self.labels.append( (objectlabel+':pos', LIST_POS) )
  
@@ -498,11 +506,15 @@ class Filter(QueryOp):
 
     def _getExtraReprArgs(self, indent):
         args = ''
+        kws = {}
         for (name, pos) in self.labels:
             if pos <= 2:
                 kwname = ['subjectlabel', 'propertylabel', 'objectlabel'][pos]
-                args += (args and ', ' or indent+'  ') + kwname + '=' + repr(name)
-        
+                kws.setdefault(kwname, []).append(name)
+
+        if kws:
+            args = indent+'  '+ (', ').join( [kw+'='+repr(vals)
+                                              for kw, vals in kws.items()] )
         return args
 
 class Label(QueryOp):

@@ -25,7 +25,7 @@ class ColumnInfo(object):
         self.type = type
 
     def __repr__(self):
-        return 'ColInfo'+repr((self.labels,self.type))
+        return 'ColumnInfo'+repr((self.labels,self.type))
 
     def __eq__(self, other):
         if not isinstance(other, ColumnInfo):

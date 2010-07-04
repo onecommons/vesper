@@ -64,12 +64,6 @@ class _ParseState(object):
         #assumes this is called in bottoms-up parse order
         self.labeledjoinorder.append(name)
 
-    def getLabeledJoin(self, name):
-        jlist = self.labeledjoins.get(name)
-        if not jlist:
-            return None
-        return jlist[0]
-
     def nextAnonJoinId(self):
         self._anonJoinCounter += 1
         return '@' + str(self._anonJoinCounter)
@@ -146,28 +140,15 @@ class _ParseState(object):
                         assert child
                         left = And(left, cchild )
         
-        if left:
-            left = self.makeJoinExpr(left)
-            assert left
 
-        if not left:
-            left = Join()
-    
-        if construct.id:
-            name = construct.id.getLabel()
-            assert left            
-            try:                
-                if not name and left.name:
-                    #no name given to the id, but the join is named, so use that
-                    construct.id.appendArg(Label(left.name))
-                else:
-                    self.addLabeledJoin(name, left)
-            except:
-                #print construct
-                #print where
-                #print left
-                raise
-    
+        name = construct.id and construct.id.getLabel() or self.nextAnonJoinId()
+        if left:
+            left = self.makeJoinExpr(left,name)
+            assert left
+        else:
+            left = Join(name=name)
+        self.addLabeledJoin(name, left)
+
         return left
 
     logicalops = {
@@ -175,7 +156,7 @@ class _ParseState(object):
      Or : Union,
     }
 
-    def _getASTForProject(self, project):
+    def _getASTForProject(self, project, name):
         '''
         Return an op that will retrieve the values that match the projection
     
@@ -218,9 +199,8 @@ class _ParseState(object):
         #XXX we need to disabiguate labels with the same name
         op = None
         if project.name == SUBJECT:
-            assert not project.varref
             return None
-    
+
         for propname in reversed(project.fields):
             #XXX if propname == '*', * == OBJECT? what about foo = * really a no-op
             if not op:
@@ -238,11 +218,14 @@ class _ParseState(object):
                         Join( JoinConditionOp(op, SUBJECT),
                             JoinConditionOp(filter, OBJECT)), subjectlabel)
         
-        if project.varref:
+        if project.varref and project.varref != name:
+            #project is on a different join
             op.addLabel(project.varref)
             op = Join(op)
-            self.addLabeledJoin(project.varref, op)        
-        return op
+            self.addLabeledJoin(project.varref, op)
+            return None
+        else:
+            return op
 
     def replaceJoinWithLabel(self, child):
         if not child.name:
@@ -255,7 +238,7 @@ class _ParseState(object):
             child.parent.replaceArg(child,newchild)
         return newchild
     
-    def makeJoinExpr(self, expr):
+    def makeJoinExpr(self, expr, name):
         '''
         Rewrite expression into Filters, operations that filter rows,
         and ResourceSetOps (Join, Union, Except), which group together the Filter
@@ -298,7 +281,7 @@ class _ParseState(object):
                             parent = notOp
     
                     if not parent:
-                        parent = newexpr = optype()
+                        parent = newexpr = optype(name=name)
                     elif type(parent) != optype:
                         #skip patterns like: and(and()) or(or())
                         newop = optype()
@@ -310,7 +293,7 @@ class _ParseState(object):
                     to_visit.extend([(parent, a) for a in v.args]) #descend
                 else: #if not isinstance(v, Join): #joins has already been processed
                     if not parent: #default to Join
-                        parent = newexpr = Join()
+                        parent = newexpr = Join(name=name)
                     if notcount % 2:
                         v = Not(v)
                     cmproots.append( (parent, v) )
@@ -343,9 +326,10 @@ class _ParseState(object):
                         skipRoot = True
                     else:
                         self.replaceJoinWithLabel(child)
+                    #print 'adding orphan', child, 'to', parent
                     self.orphanedJoins.setdefault(parent,[]).append(child)
                 elif isinstance(child, Project):
-                    projectop = self._getASTForProject(child)                    
+                    projectop = self._getASTForProject(child, name)
                     if projectop:
                         projectops.append( (child, projectop) )
                     if child is root:
@@ -402,14 +386,24 @@ class _ParseState(object):
         Combine joins that share the same join label
         '''
         labeledjoins = {}
+        #sort labels by the order in which they appear in labeledjoinorder list
         for label, joins in sorted(self.labeledjoins.items(),
                      key=lambda a: self.labeledjoinorder.index(a[0]) ):
             if not joins or not label: #don't combine unlabeled joins
                 continue
             #construct that only have id labels will not have a join
             #we only want to add the join if there are no another joins for the label
-            firstjoin = joins.pop(0)
+            firstjoin = None
             for join in joins:
+                if join.parent:
+                    firstjoin = join
+                    break
+            if not firstjoin:
+                firstjoin = joins[0]
+            
+            for join in joins:
+                if firstjoin:
+                    continue
                 self.prepareJoinMove(join)
                 for child in join.args:
                     firstjoin.appendArg(child)
@@ -423,11 +417,11 @@ class _ParseState(object):
         for child in root.depthfirst():
             if isinstance(child, ResourceSetOp):
                 joinsInDocOrder.append(child)
-                for orphan in self.orphanedJoins.get(child,[]):
+                for orphan in self.orphanedJoins.pop(child,[]):
                     self._findJoinsInDocOrder(orphan, joinsInDocOrder)
 
-    def _analyzeJoinPreds(self, join, preds):
-        remainingPreds = []
+    def _findJoinAliases(self, join, preds):
+        remainingPreds = {}
         joinPreds = []
         aliasingPreds = []
         aliases = set([join.name])
@@ -456,8 +450,9 @@ class _ParseState(object):
                     if isinstance(otherside, Project):
                         if otherside.name == SUBJECT:
                             #e.g. id = ?label
+                            #XXX handle varref, e.g. ?foo.id
                             addAlias(label.name)
-                        elif otherside.name == OBJECT:
+                        else:#if otherside.name == OBJECT or otherside.varref in aliases:
                             #e.g. prop = ?label
                             filter = pred.parent
                             assert isinstance(filter, Filter), filter
@@ -481,27 +476,48 @@ class _ParseState(object):
                         #if self, replace with subject
                         label.parent.replaceArg(label, Project(SUBJECT))
                     else:
-                        remainingPreds.append(pred)
+                        remainingPreds[pred] = label
 
             #remove from joinPreds and remainingPreds any preds that a subsequent
             #pass figured out was an alias to itself
             for pred, label, filter in aliasingPreds:
                 if (pred, label, filter) in joinPreds:
                     joinPreds.remove( (pred, label, filter) )
-                if pred in remainingPreds:
-                    remainingPreds.remove(pred)
+
+                remainingPreds.pop(pred, None)
 
             #print 'analyzepreds', aliases, joinPreds, remainingPreds
-            if not all(pred.isIndependent() for pred in remainingPreds):
-                raise QueryException("only equijoins currently supported")
+            depPreds = [pred for pred, label in remainingPreds.items() 
+                         if not pred.isIndependent()]
+            #not join with correct join:
+            #or type(pred) == Eq and label.parent is pred and otherside.isIndependent()
+            if depPreds:
+                raise QueryException("only equijoins currently supported: %s" % depPreds)
         return aliases, joinPreds, remainingPreds
 
+    def _analyzeJoinPreds(self, join, preds):
+        pass #XXX
+
     def _getJoinPreds(self, joins):
+        '''
+        Return a dictionary mapping joins to a set of alias names and a list of 
+          join predicate expressions that reference that join
+        '''
+        #any filter expression with a label or project with a varref is candidate
+        #for a join condition.
+        #first, look for expessions that just indicate equivalency between join objects
+        #e.g. ?foo = ?bar or ?foo.id = id and treat those equivalent labels as aliases
+        #second, simple equi-joins where one side is a label or subject project of the current join
+        #and the other is an expression that depends on one other join
+        #finally collect the remaining expressions that depend on more than one join
+        #these will be joined together as cross-joins so the filter has to both row sets
         predMap = {}
         for join in joins:
             preds = []
+            #find the expressions in each that have a label reference
             for label in join.depthfirst(
               descendPredicate=lambda op: op is join or not isinstance(op, ResourceSetOp)):
+                
                 if not isinstance(label, Label):
                     continue
                 assert label.parent
@@ -514,11 +530,13 @@ class _ParseState(object):
                     parent = parent.parent
                 assert pred
                 preds.append((pred, label))
-            aliases, joinPreds, remainingPreds = self._analyzeJoinPreds(join, preds)
-            predMap[join] = (join, aliases, joinPreds)
+            #look at the expessions to find ones which indicate equivalency
+            #between labels (aliases) or are equijoins (joinPreds)
+            aliases, joinPreds, remainingPreds = self._findJoinAliases(join, preds)
+            predMap[join] = (aliases, joinPreds)
         return predMap
 
-    def _makeJoin(self, join, followingJoins, joinReferences, joinPredicates):
+    def _makeJoin(self, followingJoins, joinReferences, labels, aliases, joinPreds):
         """
         Join refs
         we want to build joins deepest first so that the top level join stays
@@ -533,6 +551,8 @@ class _ParseState(object):
         Join(...,'foo') + Join(Filter('prop' = ?foo)) => Join(...,
                                                Join(Filter('prop')) on 'prop')
         """
+        join = followingJoins.pop(0)
+
         def getTopJoin(join, top):
             candidate = parent = join
             while parent:
@@ -543,21 +563,24 @@ class _ParseState(object):
                 parent = parent.parent
             return candidate
 
-        ignore, aliases, joinPreds = joinPredicates[join]
-        labels = {}
-        for k, v in joinPredicates.items():
-            for a in v[1]:
-                labels[a] = k
-        assert ignore is join
         for joinPred, label, filter in joinPreds:
             refname = label.name
             refjoin = labels.get(refname)
             if not refjoin:
                 raise QueryException("reference to unknown label: %r" % refname)
+                #XXX
+                #print 'unreferenced label', refname, filter, joinPred
+                #assert isinstance(joinPred, Eq)
+                #otherside = label is joinPred.left and joinPred.right or joinPred.left
+                #assert isinstance(otherside, Project)
+                #filter.appendArg( Eq(Project(PROPERTY), PropString(otherside.name)))
+                #filter.addLabel(otherside.name, OBJECT)
+                #assert joinPred.parent is None
+                continue                
             if refjoin not in followingJoins:
                 #we only want to handle included joins
                 joinReferences.append( (label, joinPred, filter, join) )
-                continue
+                continue    
             topjoin = getTopJoin(refjoin, join)
             propname = flatten( (name for name, pos in filter.labels if pos == OBJECT) )
             assert isinstance(filter.parent, JoinConditionOp)
@@ -608,18 +631,38 @@ class _ParseState(object):
     def buildJoins(self, root):
         #first join together any joins that share the same name:
         validateTree(root)
-        self.labeledjoins = self._joinLabeledJoins() #XXX
+        #combine joins that have the same label:
+        labeledjoins = self._joinLabeledJoins()
         validateTree(root)
         joinsInDocOrder = []
         self._findJoinsInDocOrder(root, joinsInDocOrder)
-        #build a list of predicates that the join participate in
+        assert not self.orphanedJoins, 'orphaned joins left-over: %s' % self.orphanedJoins
+
+        #build a mapping between joins and predicates that each join participates in
         joinPredicates = self._getJoinPreds(joinsInDocOrder)
+
         #next, in reverse document order (i.e. start with the most nested joins)
         #join together joins that reference each other
         refs = []
         validateTree(*joinsInDocOrder)
+        labels = {}
+        for k, v in joinPredicates.items():
+            for alias in v[0]:
+                labels[alias] = k
         for i in xrange(len(joinsInDocOrder)-1, -1, -1):
-            self._makeJoin(joinsInDocOrder[i], joinsInDocOrder[i+1:], refs, joinPredicates)
+            aliases, joinPreds = joinPredicates[joinsInDocOrder[i]]
+            self._makeJoin(joinsInDocOrder[i:], refs, labels, aliases, joinPreds)
+
+        #finally, make any non-empty labeled joins that we didn't merge into another
+        #query a cross-join
+        #print 'labeledjoins', labeledjoins 
+        for k,v in labeledjoins.items():
+            if not v.parent and v.args:
+                if not root.where:
+                    root.appendArg(v)
+                else:
+                    root.where.appendArg( JoinConditionOp(v, k, 'x') )
+        assert all(join.parent or not join.args for join in joinsInDocOrder)
 
 def consolidateFilter(filter, projections):
     '''

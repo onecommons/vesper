@@ -126,39 +126,10 @@ t(
                        })
                  }
     }
-''',skipParse=0,
+''',
 results = [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
   'derivedprop': 2.0,
-  }],
-skipast=Select(Construct([   #XXX
-    cp('derivedprop',  qF.getOp('mul', Project(0), Constant(2))),
-    cp('children', Select(Construct([            
-            cp(Project('*')),
-            cs('id', 'childid'),
-        ]))),
-    cs('id', 'parentid'),
-    ]),
-Join(
- jc(
-    Join(
-      jc(
-        Join(
-           Filter(Eq('parent',Project(PROPERTY)), objectlabel='parent'),
-           Filter(Eq('child',Project(PROPERTY)), objectlabel='child'),
-        name='@1'
-        ),
-        Eq(Project('child'), Project(SUBJECT)) 
-       ), name='childid'
-    ),
-    Eq(Project('parent'), Project(SUBJECT)) ), name='parentid'
- )
-),
-#expected rows: id, (child, parent)
-skiprows=[['1',
-    [
-      ['3', '_:1', '_:1'], ['2', '_:2', '_:2']
-    ]
-]]
+  }]
 )
 
 t(
@@ -174,38 +145,7 @@ t(
     }
 ''',
 [{'children': [{'foo': 'bar', 'id': '3'}, {'foo': 'bar', 'id': '2'}],
-  'id': '1'}],
-
-skipParse=0,
-skipast=Select( #XXX fix
-  Construct([
-    cp('children', Select(Construct([            
-            cp('foo', Project('foo')), #find all props
-            cs('id', 'childid'),
-        ]))),
-    cs('id', 'parentid'),
-    ]),
- Join( #row  : (subject, (subject, foo, ("child", ("child", "parent"))))
-  jc(
-    Join( #row : subject, foo, ("child", ("child", "parent"))
-     Filter(Eq(Project(OBJECT),'bar'), Eq(Project(PROPERTY),'foo'), objectlabel='foo'),
-     jc(Join( #row : subject, ("child", "parent")
-       Filter(Eq('parent',Project(PROPERTY)), objectlabel='parent'),
-       Filter(Eq('child', Project(PROPERTY)), objectlabel='child'),
-       name = '@1'
-       ),'child')
-    , name='childid'),
-    'parent'),  #this can end up with child cell as a list
-    name='parentid'
-)
-),
-#expected results (id, (child, foo), parent)
-skiprows=[['1',
-    [
-       ['3', [['bar']], '3', '_:1', '_:1'],
-       ['2', [['bar']], '2', '_:2', '_:2']
-    ]
-]]
+  'id': '1'}]
 )
 
 t('''
@@ -248,6 +188,7 @@ t('''{ * order by child desc, id asc }''', res)
 
 t.group = 'parse'
 
+#XXX add real tests for this
 t('''{ 'foo' : ?bar.baz.id }''')
 
 t('''
@@ -536,8 +477,6 @@ t('''{
 [{'count': 2, 'count2': 2, 'subject': 'commons'}, {'count': 1, 'count2': 1, 'subject': 'rhizome'}])
 
 #expression needs to be evaluated on each item
-#XXX consolidate filters -- multiple references to the same property create 
-#duplicate filters and joins
 
 groupbymodel = [dict(key=key, type=type, 
   val=(type%2 and -1 or 1) * key * val)
@@ -583,7 +522,6 @@ model = [{'key': 1, 'type': [1, 1, 2, 2], 'val': [-2, -4, 2, 4]},
 groupbymodel2 = [{ 'id': 1, 'type': [1, 1, 2, 2], 'val': [2, 4]},
  {'id' : 10, 'type': [1, 1, 2, 2], 'val': [20, 40]},
  {'id': 2, 'val' : 1},
- # XXX functions and operator that expect numbers explode
  {'id': 3, 'val' : None} 
  ]
 
@@ -595,9 +533,7 @@ id, val, type,
 'valIfType': if(type==2, val, 3),
 'sumOfValIfType' : sum(if(type==2, val, 3)),  # 2 + 4  = 6
 
-#XXX differenceOfSums raises
-#self.addFunc('sub', lambda a, b: float(a)-float(b), NumberType)
-#TypeError: float() argument must be a string or a number
+#XXX differenceOfSums evaluates to null for some reason
 #'differenceOfSums' : sum(if(type==1, val, 0)) - sum(if(type==2, val, 0))
 }
 ''',
@@ -848,8 +784,20 @@ skip('''{
  }
 )
 
+##XXX returns [{2: [{'id': '1', 'subsumedby': 2}]}] -- 2 isn't a valid id
+#but it shouldn't match anything (empty result)
+#XXX add support for maybe nestedconstruct
+skip('''{
+?parent 
+ id : [{* where(subsumedby = ?parent)}]
+}''', model =  {
+   "subsumedby": 2, 
+   "id": "1"
+ }
+)
+
 ##XXX returns parent [[{'id': '1', 'subsumedby': []}]]
-#treating empty list as the parent resource
+#treating the empty list as the parent resource
 #but it shouldn't match anything (empty result)
 skip('''{
 ?parent 
@@ -1764,14 +1712,96 @@ skip('''
 }''',
 [{'id': '2', 'tags': 'tag1'}])
 
+
+t.group = 'crossjoin'
+
+#XXX:  File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 641, in buildJoins
+#    root.where.appendArg( JoinConditionOp(v, k, 'c') )
+#AttributeError: 'NoneType' object has no attribute 'appendArg'
+#why a cross-join? why is where none?
+skip('''
+{
+?posts
+'tags' : ?tag.id
+where ?posts.tags = ?tag
+}
+''')
+
+#this give the same error as above
+skip('''
+{
+?posts
+'tags' : {?tag id where ?posts.tags = id}
+where type = @post
+}
+''')
+
+
+#    self._makeJoin(joinsInDocOrder[i:], refs, labels, aliases, joinPreds)
+#  File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 560, in _makeJoin
+#    raise QueryException("reference to unknown label: %r" % refname)
+#vesper.query._query.QueryException: reference to unknown label: 'tag'
+skip('''
+{
+?posts
+'tags' : ?tag.id
+where tags = ?tag
+}
+''')
+
+t('''
+{
+?posts
+'tags' : ?tag.id
+where {?tag ?posts.tags = ?tag} and type = @post
+}
+''')
+
+crossjoinResults = [{'alltags': ['tag 1', 'tag 2'], 'id': '3', 'tags': None},
+ {'alltags': ['tag 1', 'tag 2'], 'id': '2', 'tags': ['tag1', 'tag2']}]
+ 
+t('''
+{
+id,
+maybe tags,
+'alltags' : ?alltags.label
+where type = @post 
+}
+''',crossjoinResults)
+
+#equivlent to previous query
+t('''
+{
+id,
+maybe tags,
+'alltags' : ?alltags.label
+where type = @post and {?alltags label}
+}
+''', crossjoinResults)
+
+t('''
+{
+?alltags
+
+id,
+'posts' : ?post.id,
+label
+where {?post type = @post}
+}
+''',
+[{'id': 'tag1', 'label': 'tag 1', 'posts': ['3', '2']},
+ {'id': 'tag2', 'label': 'tag 2', 'posts': ['3', '2']}]
+)
+
 t.group= 'semijoins' #(and antijoins)
-'''
+
 #XXX throws only equijoins supported
+skip('''
 {
 * 
 where (tags in { id = 'tag1' })
 }
-'''
+''')
 
 skip('''{
 * 
@@ -1812,28 +1842,28 @@ skip('''{* where(
 #test equivalent inline joins'
 
 #XXX raises error: "tags" projection not found
-'''{ ?tag
+skip('''{ ?tag
  * 
  where (?tag = ?item.tags and
    { id = ?item and type = "post"} 
  )
-}'''
+}''')
 
 #XXX id = ?item raise exception, removing it fix things
-'''{ ?tag
+skip('''{ ?tag
  * 
  where ( 
    { id = ?item and type = "post" and ?tag = tags }
  )
-}'''
+}''')
 
 #XXX raises construct: could not find subject label "@1"
-'''{ ?tag  
+skip('''{ ?tag  
      "attributes" : { id where (id=?tag) }, 
      "state" : "closed", 
      "data" : label  
      where (type = "tag")  
-   }''' 
+   }''')
 
 #XXX the id = ?post raises 
 #File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 434, in analyzeJoinPreds
@@ -1929,6 +1959,14 @@ where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'eve
 # {* where (?bar = 1 and foo = 1)}
 
 t.group = 'test'
+
+#txn tests 
+skip('''
+{
+id where type = @post and ?firsttxn = string(1) #getfirsttxn(id) 
+
+#order by ?firsttxn.createdtime
+}''')
 
 #XXX AssertionError: cant find children in <vesper.data.store.basic.MemStore 
 #even after adding "where children" and "where ?parent.children"

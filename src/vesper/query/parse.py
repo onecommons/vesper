@@ -511,10 +511,12 @@ def p_join(p):
             assert len(p) == 4
             expr = p[2]
             label = None
-        p[0] = p.parser.jqlState.makeJoinExpr(expr)
-        if label:
-            p[0].name = label
-            p.parser.jqlState.addLabeledJoin(label, p[0])
+
+        if not label:
+            label = p.parser.jqlState.nextAnonJoinId()
+        p[0] = join = p.parser.jqlState.makeJoinExpr(expr, label)
+        assert label
+        p.parser.jqlState.addLabeledJoin(label, join)
     except QueryException, e:
         import traceback
         traceback.print_exc()#file=sys.stdout)

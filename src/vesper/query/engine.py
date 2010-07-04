@@ -581,10 +581,10 @@ class SimpleQueryEngine(object):
         if context.serializer:
             parseContext = vesper.pjson.ParseContext(op.namemap, context.serializer.parseContext)
             context.serializer = pjson.Serializer(parseContext = parseContext)
-        #context.serializer = pjson.Serializer(parseContext = op.parseContext)
+        
         if op.isIndependent(): #constant expression
             context.currentTupleset = MutableTupleset(
-                        [ColumnInfo('', object)], ([1],))
+                        [ColumnInfo('', object)], ([1],), op='constant')
         else: 
             if op.where:
                 context.currentTupleset = op.where.evaluate(self, context)
@@ -937,7 +937,8 @@ class SimpleQueryEngine(object):
 
     def evalOrderBy(self, op, context):
         #XXX only order by if orderby is different then current order of tupleset
-        tupleset = MutableTupleset(context.currentTupleset.columns, context.currentTupleset)
+        tupleset = context.currentTupleset
+        tupleset = MutableTupleset(tupleset.columns, tupleset, hint=tupleset, op='order by')
 
         assert all(isinstance(s.exp, jqlAST.Project) for s in op.args), 'only property name lists currently implemented'        
         #print 'c', tupleset.columns, [s.exp.name for s in op.args]
@@ -992,6 +993,10 @@ class SimpleQueryEngine(object):
         return 1.0
 
     def _groupby(self, tupleset, joincond, msg='group by ',debug=False):
+        '''
+        group the given tupleset by the column specified by given join condition
+        and return a tupleset whose first column is the group by key.
+        '''
         #XXX use groupbyOrdered if we know tupleset is ordered by groupby key
         position = tupleset.findColumnPos(joincond.position)
         assert position is not None, 'cant find %r in %s %s' % (
@@ -1010,7 +1015,7 @@ class SimpleQueryEngine(object):
         return SimpleTupleset(
             lambda: groupbyUnordered(tupleset, position,
                                     debug and columns, outerjoin, includekey),
-            columns=columns, 
+            columns=columns,
             hint=tupleset, op=msg + repr((joincond.join, joincond.position)),  debug=debug)
 
     def reorderWithListInfo(self, context, op, listval):
@@ -1020,7 +1025,7 @@ class SimpleQueryEngine(object):
         else:
             propname = op.name
         subject = context.currentRow[SUBJECT]
-        
+
         if not context.initialModel.canHandleStatementWithOrder:
             #statement-level list order info not supported by the model, try to find the list resource
             pred = propname #XXX convert to URI
@@ -1032,7 +1037,7 @@ class SimpleQueryEngine(object):
             rows = pjson.findPropList(context.initialModel, str(subject), pred)
             ordered = []
             rows = list(rows)
-            if rows:                
+            if rows:
                 leftovers = list(listval)
                 for row in rows:
                     predicate = row[1]
@@ -1053,7 +1058,7 @@ class SimpleQueryEngine(object):
             else:
                 listposLabel = propname+':pos'
             #XXX this is expensive, just reuse the getColumn results used by build listval
-            listcol = context.currentTupleset.findColumnPos(listposLabel) 
+            listcol = context.currentTupleset.findColumnPos(listposLabel)
             assert listcol
             listpositions = flatten((c[0] for c in getColumn(listcol, context.currentRow)))
             if not listpositions or not isinstance(listpositions, tuple): #no position info, so not a json list
@@ -1066,8 +1071,8 @@ class SimpleQueryEngine(object):
                         ordered.append( (p, listval[i]) )
                 else:
                     leftovers.append( listval[i] )
-                    
-        
+
+
         ordered.sort()
         #include any values left-over in listval
         return (True, [v for p, v in ordered] + leftovers)
@@ -1075,16 +1080,16 @@ class SimpleQueryEngine(object):
     def evalJoin(self, op, context):
         return self._evalJoin(op, context)
 
-    #def evalNotExists(self, op, context):                
+    #def evalNotExists(self, op, context):
     #    return self._evalJoin(op, context, 'a')
 
     #def evalSemiJoin(self, op, context):
         #semi-join (?id in { foo = 1})
-    #    return self._evalJoin(op, context, 's') 
+    #    return self._evalJoin(op, context, 's')
 
     def evalUnion(self, op, context):
         #foo = 1 or bar = 2
-        #Union(filter(foo=1), filter(bar=2)) 
+        #Union(filter(foo=1), filter(bar=2))
         #columns: subject foo bar
         #merge join, add null if match isn't found
         #args = self.consolidateJoins(args)
@@ -1094,39 +1099,34 @@ class SimpleQueryEngine(object):
             assert isinstance(result, Tupleset)
 
             current = self._groupby(result, joincond,debug=context.debug)
-         
+
     def _evalJoin(self, op, context):
         #XXX context.currentTupleset isn't set when returned
-        args = sorted(op.args, key=lambda arg: 
+        args = sorted(op.args, key=lambda arg:
                 #put non-inner joins last
                 (arg.join != 'i', arg.op.cost(self, context)) )
-        
+
         tmpop = None
         if not args or args[0].join != 'i':
+            #XXX we also need to do this in query like
+            #{?parent id, 'child' : {* where(parent = ?parent)} }
+            #because otherwise any value of the parent property will be treated
+            #as an object reference even if it doesn't exist
+            #but for efficiency it shouldn't be inserted first
             tmpop = jqlAST.JoinConditionOp(jqlAST.Filter())
-            #tmpop = jqlAST.JoinConditionOp(
-            #    jqlAST.Filter(jqlAST.Not(
-            #        self.queryFunctions.getOp('isbnode', jqlAST.Project(0)))))
             tmpop.parent = op
             args.insert(0, tmpop)
 
-        
-        #else:
-        #   combine separate filters into one filter
-        #   by default, filters that are operating on the same projection
-        #   engine subclasses that support table-based stores will combine projections on the same table
-        #   args = self.consolidateJoins(args)
-
         #evaluate each op, then join on results
         #XXX optimizations:
-        # 1. if the result of a projection can used for a filter, apply it and
+        # 1. if the result of a prior filter can used for the filter
         # use that as source of the filter
-        # 2. estimate and compare cost of projecting the prior result so next filter
+        # 2. estimate and compare cost of using the prior result so next filter
         # can use that as source (compare with cost of filtering with current source)
         # 3.if we know results are ordered properly we can do a MergeJoin
         #   (more efficient than IterationJoin):
         #lslice = slice( joincond.position, joincond.position+1)
-        #rslice = slice( 0, 1) #curent tupleset is a
+        #rslice = slice( 0, 1) #curent tupleset
         #current = MergeJoin(result, current, lslice,rslice)
         previous = None
         #print 'evaljoin', args
@@ -1138,9 +1138,13 @@ class SimpleQueryEngine(object):
                 #joincond = args.pop(0)
             result = joincond.op.evaluate(self, context)
             assert isinstance(result, Tupleset), repr(result) + repr(joincond.op)
-            #print 'results', joincond.op, result
-
-            current = self._groupby(result, joincond,debug=context.debug)
+            #group by the join key so that it is first column in the result
+            #(except when its a cross-join, which has no key).
+            #note: this guarantees one row on each side.
+            if joincond.join == 'x':
+                current = result
+            else:
+                current = self._groupby(result, joincond,debug=context.debug)
             if previous:
                 def mergeColumns(left, right):
                     def find(col):
@@ -1148,7 +1152,7 @@ class SimpleQueryEngine(object):
                             return left.index(col)
                         except ValueError:
                             return -1
-                    #skip right-side columns that match a left column 
+                    #skip right-side columns that match a left column
                     #except for the first one, since we are joining on that one
                     indexToLeft = [-1]+[find(col) for col in right[1:]]
                     newright = [col for i, col in enumerate(right) if indexToLeft[i] < 0]
@@ -1174,18 +1178,34 @@ class SimpleQueryEngine(object):
                         return rows
 
                     def joinFunc(leftRow, rightTable, lastRow):
-                        match = False
-                        for row in rightTable.filter({0 : leftRow[0]},
-                            hints={ 'makeindex' : 0 }):
-                                if jointype=='a': #antijoin, skip leftRow if found
-                                    return
-                                elif jointype=='s': #semijoin
-                                    yield []
-                                else:
-                                    yield mergeRow(leftRow, row)
+                        match = []
+                        if jointype != 'x': #if not cross-join
+                            filters = {0 : leftRow[0]}
+                            hints={ 'makeindex' : 0 }
+                        else:
+                            filters = {}
+                            hints = None
+                        for row in rightTable.filter(filters, hints):
+                            if jointype=='a': #antijoin, skip leftRow if found
+                                return
+                            elif jointype=='s': #semijoin
+                                yield []
                                 match = True
+                            elif jointype=='x': #crossjoin
+                                #print 'cj row', len(row), row
+                                match.append(row)
+                            else:
+                                yield mergeRow(leftRow, row)
+                                match = True
+
                         if not match:
                             yield nullrows
+                        elif jointype=='x':
+                            #with crossjoins, instead of calling groupby on the
+                            #join key (there isn't one) group the rows together now
+                            row =  [MutableTupleset(None,match)]
+                            #validateRowShape([ColumnInfo('', MutableTupleset(current.columns))], row)
+                            yield row
 
                     return joinFunc
 
@@ -1197,9 +1217,12 @@ class SimpleQueryEngine(object):
                 jointype = joincond.join
                 if jointype in ('i','l'):
                     columns, rightColumns, indexToLeft = mergeColumns(
-                                                previous.columns, current.columns)
+                                              previous.columns, current.columns)
                 elif jointype in ('a','s'):
                     columns = previous.columns
+                elif jointype == 'x':
+                    columns = previous.columns + [ColumnInfo('', 
+                                              MutableTupleset(current.columns))]
                 elif jointype == 'r':
                     columns = current.columns + previous.columns
                 else:
@@ -1211,8 +1234,8 @@ class SimpleQueryEngine(object):
                     nullrows = [] #no match, so include leftRow
                 else:
                     nullrows = None
-                    
-                if jointype == 'r': #right outer 
+
+                if jointype == 'r': #right outer
                     previous = IterationJoin(current, previous,
                             bindjoinFunc('l', previous, indexToLeft, nullrows),
                                     columns,joincond.name,debug=context.debug)
@@ -1254,7 +1277,7 @@ class SimpleQueryEngine(object):
                 value, objectType = vesper.pjson.getDataType(value, parseContext)
                 simplefilter[3] = objectType
             simplefilter[proj.name] = value
-            complexargs.pop()        
+            complexargs.pop()
         return simplefilter, complexargs
 
     def evalFilter(self, op, context):
@@ -1272,7 +1295,7 @@ class SimpleQueryEngine(object):
                 yield row[pos]
 
         tupleset = context.currentTupleset
-        #first apply all the simple predicates that we assume are efficient       
+        #first apply all the simple predicates that we assume are efficient
         if simplefilter or not complexargs:
             #XXX: optimization: if cost is better filter on initialmodel
             #and then find intersection of result and currentTupleset
@@ -1285,12 +1308,17 @@ class SimpleQueryEngine(object):
         if not complexargs:
             return tupleset
 
+        if op.isIndependent(): #constant expression
+            tupleset = MutableTupleset([ColumnInfo('', object)], ([1],), op='constant')
+
         #now create a tupleset that applies the complex predicates to each row
         def getArgs():
             for i, pred in enumerate(complexargs):
                 for arg in jqlAST.flattenOp(pred, jqlAST.And):
                      yield (arg.cost(self, context), i, arg)
 
+        #XXX if filter is dependent on labels of other objects don't copy the
+        #context until evaluating each row and merge the row with the currentRow  
         fcontext = copy.copy( context )
         def filterRows():
             args = [x for x in getArgs()]
@@ -1303,11 +1331,11 @@ class SimpleQueryEngine(object):
 
             for row in tupleset:
                 value = None
-                for cost, i, arg in args:                    
+                for cost, i, arg in args:
                     fcontext.currentRow = row
                     #fcontext.currentValue = row[i]
                     value = arg.evaluate(self, fcontext)
-                    #if a filter function returns a tupleset 
+                    #if a filter function returns a tupleset
                     #yield those rows instead of the input rows
                     #otherwise, treat return value as a boolean and use it to
                     #filter the input row
@@ -1320,44 +1348,44 @@ class SimpleQueryEngine(object):
                         break
 
                 if not value:
-                    continue                
+                    continue
                 yield row
 
         opmsg = 'complexfilter:'+ str(complexargs)
         return SimpleTupleset(filterRows, hint=tupleset,columns=columns,
                 colmap=colmap, op=opmsg, debug=context.debug)
-    
+
     def buildObject(self, context, v, handleNil):
         if handleNil and v == NilResource:
             #special case to force empty list
-            return []        
+            return []
         refFunc = self.queryFunctions.getOp('isref')
-        isrefQ = refFunc.execFunc(context, v)    
+        isrefQ = refFunc.execFunc(context, v)
         isref = isinstance(v, base.ResourceUri)
         assert isrefQ == isref, "q %s r %s" % (isrefQ,isref)
-        bnodeFunc = self.queryFunctions.getOp('isbnode') 
-        isbnode = bnodeFunc.execFunc(context, v)           
+        bnodeFunc = self.queryFunctions.getOp('isbnode')
+        isbnode = bnodeFunc.execFunc(context, v)
         if ( (isref and context.depth > 0) or isbnode):
                             #and v not in context.constructStack):
-            
-            #XXX because we can generate a duplicate objects it'd be nice 
-            #to cache the results. but this is a little complicated because             
-            #of depth -- cache different versions based on needed depth            
+
+            #XXX because we can generate a duplicate objects it'd be nice
+            #to cache the results. but this is a little complicated because
+            #of depth -- cache different versions based on needed depth
             #have context track maxdepth, so we know how deep the object is
             #don't use cache object if maxdepth > context.depth
             #    v = context.constructCache[v]
             #    return v
-                            
+
             query = jqlAST.Select(
                         jqlAST.Construct([jqlAST.Project('*')]),
                         jqlAST.Join())
             ccontext = copy.copy(context)
             ccontext.currentTupleset = SimpleTupleset([[v]],
-                    columns=[ColumnInfo('', object)], 
-                    op='recursive project on %s'%v, 
+                    columns=[ColumnInfo('', object)],
+                    op='recursive project on %s'%v,
                     debug=context.debug)
             if not isbnode:
-                ccontext.depth -= 1            
+                ccontext.depth -= 1
             result = list(query.evaluate(self, ccontext))
             if result:
                 assert len(result) == 1, (
@@ -1369,11 +1397,11 @@ class SimpleQueryEngine(object):
                 else:
                     #only write out dict if has more property than just the id
                     #XXX handle case where id name isn't 'id'
-                    count = int('id' in obj) 
+                    count = int('id' in obj)
                     if len(obj) > count:
                         v = obj
-        return v                
-    
+        return v
+
     def evalProject(self, op, context):
         '''
         Operates on current row and returns a value
@@ -1394,14 +1422,14 @@ class SimpleQueryEngine(object):
 
         if isinstance(op.name, int):
             pos = (op.name,)
-        else:            
+        else:
             pos = context.currentTupleset.findColumnPos(op.name)
+            #print '!!', op.name, context.currentTupleset.columns
             if not pos:
                 #print 'raise', context.currentTupleset.columns, 'row', context.currentRow
                 raise QueryException("'%s' projection not found" % op.name)
-        
-        #val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=op.constructRefs)
-        if op.constructRefs:            
+
+        if op.constructRefs:
             val = flatten( (c[0] for c in getColumn(pos, context.currentRow)), keepSeq=True)
             assert isinstance(val, list)            
             isJsonList, val = self.reorderWithListInfo(context, op, val)    

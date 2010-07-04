@@ -27,7 +27,7 @@ def _colrepr(self):
 def validateRowShape(columns, row):
     if columns is None:
         return
-    assert isinstance(row, (tuple,list)), row
+    assert isinstance(row, (tuple,list)), 'row doesnt look like a list: %r' % row
     #this next assertion should be ==, not <=, but can't figure how that is happening 
     assert len(columns) <= len(row), '(c %d:%s, r %d:%s)'%(len(columns), columns,  len(row), row)
     for (i, (ci, ri)) in enumerate(itertools.izip(columns, row)):
@@ -86,7 +86,7 @@ class SimpleTupleset(Tupleset):
             makecache = hints['makeindex']
         else:
             makecache = None
-
+        
         if self.cache is not None and makecache == self.cachekey:
             assert len(conditions)==1 and makecache in conditions
             for row in self.cache.get(conditions[makecache], ()):
@@ -143,8 +143,10 @@ class MutableTupleset(list, Tupleset):
     '''
     columns = None
 
-    def __init__(self, columns=None, seq=()):        
+    def __init__(self, columns=None, seq=(), hint=None, op='',):
         self.columns = columns
+        self.hint = hint
+        self.op = op
         return list.__init__(self, [row for row in seq])
     
     def filter(self, conditions=None, hints=None):
@@ -165,12 +167,18 @@ class MutableTupleset(list, Tupleset):
         return len(self)
     
     def __repr__(self):
-        #return 'MutableTupleset('+repr(self.columns)+','+ list.__repr__(self)+')'
-        if self.columns:
-            return 'MutableTupleset'+repr(self.columns)
-        else:
-            return 'MutableTupleset'+ list.__repr__(self)
-                 
+        return 'MutableTupleset('+repr(self.columns)+','+ list.__repr__(self)+')'
+
+    def explain(self, out, indent=''):
+        print >>out, indent, 'MutableTupleset for', self.op, _colrepr(self)
+        if self.hint:
+            print >>out, 'with:'
+            indent += ' '*4
+            if isinstance(self.hint, Tupleset):
+                self.hint.explain(out,indent)
+            else:
+                print >>out, self.hint
+
 def joinTuples(tableA, tableB, joinFunc):
     '''
     given two tuple sets and join function
