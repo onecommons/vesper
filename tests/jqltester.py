@@ -238,21 +238,27 @@ def main(t, cmdargs=None):
             groupcount += 1
         if options.group:
             if options.skip:
-                if options.num == -1 and options.group == currentgroup:
-                    skipped += 1
-                    continue                
+                if options.group == currentgroup:
+                    if options.num == -1 or groupcount == options.num:
+                        skipped += 1
+                        continue                
             elif options.group != currentgroup:
                 skipped += 1
                 continue
         
         if options.num > -1:
-            if options.group:
-                if groupcount != options.num or (options.skip and groupcount == options.num):
+            if options.skip:
+                if i == options.num:
                     skipped += 1
                     continue
-            elif i != options.num or (options.skip and i == options.num):
-                skipped += 1
-                continue
+            else:
+                if options.group:
+                    if groupcount != options.num:
+                        skipped += 1
+                        continue
+                elif i != options.num:
+                    skipped += 1
+                    continue
                 
         if test.skip:
             skipped += 1
