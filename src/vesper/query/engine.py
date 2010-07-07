@@ -1103,8 +1103,9 @@ class SimpleQueryEngine(object):
     def _evalJoin(self, op, context):
         #XXX context.currentTupleset isn't set when returned
         args = sorted(op.args, key=lambda arg:
-                #put non-inner joins last
-                (arg.join != 'i', arg.op.cost(self, context)) )
+            #put non-inner joins and filters with complex predicates last
+            (arg.join != 'i', getattr(arg.op, 'complexPredicates', False),
+                                                arg.op.cost(self, context)) )
 
         tmpop = None
         if not args or args[0].join != 'i':
@@ -1158,7 +1159,7 @@ class SimpleQueryEngine(object):
                     newright = [col for i, col in enumerate(right) if indexToLeft[i] < 0]
                     return left+newright, newright, indexToLeft
 
-                def bindjoinFunc(jointype, current, indexToLeft, nullrows):
+                def bindjoinFunc(jointype, current, indexToLeft, nullrows, leftpos=0):
                     '''
                     jointypes: inner, left outer, semi- and anti-
                     '''
@@ -1177,37 +1178,77 @@ class SimpleQueryEngine(object):
                                 rows.append(cell)
                         return rows
 
-                    def joinFunc(leftRow, rightTable, lastRow):
-                        match = []
-                        if jointype != 'x': #if not cross-join
-                            filters = {0 : leftRow[0]}
-                            hints={ 'makeindex' : 0 }
-                        else:
-                            filters = {}
-                            hints = None
-                        for row in rightTable.filter(filters, hints):
-                            if jointype=='a': #antijoin, skip leftRow if found
-                                return
-                            elif jointype=='s': #semijoin
-                                yield []
-                                match = True
-                            elif jointype=='x': #crossjoin
-                                #print 'cj row', len(row), row
-                                match.append(row)
+                    if isinstance(leftpos, int): #simple case
+                        def joinFunc(leftRow, rightTable, lastRow):
+                            match = []
+                            if jointype != 'x': #if not cross-join
+                                filters = {0 : leftRow[leftpos] }
+                                hints={ 'makeindex' : 0 }
                             else:
-                                yield mergeRow(leftRow, row)
-                                match = True
+                                filters = {}
+                                hints = None
+                            for row in rightTable.filter(filters, hints):
+                                if jointype=='a': #antijoin, skip leftRow if found
+                                    return
+                                elif jointype=='s': #semijoin
+                                    yield []
+                                    match = True
+                                elif jointype=='x': #crossjoin
+                                    #print 'cj row', len(row), row
+                                    match.append(row)
+                                else:
+                                    yield mergeRow(leftRow, row)
+                                    match = True
 
-                        if not match:
-                            yield nullrows
-                        elif jointype=='x':
-                            #with crossjoins, instead of calling groupby on the
-                            #join key (there isn't one) group the rows together now
-                            row =  [MutableTupleset(None,match)]
-                            #validateRowShape([ColumnInfo('', MutableTupleset(current.columns))], row)
-                            yield row
+                            if not match:
+                                yield nullrows
+                            elif jointype=='x':
+                                #with crossjoins, instead of calling groupby on the
+                                #join key (there isn't one) group the rows together now
+                                row =  [MutableTupleset(None,match)]
+                                #validateRowShape([ColumnInfo('', MutableTupleset(current.columns))], row)
+                                yield row
+                    else:
+                        def joinFunc(leftRow, rightTable, lastRow):
+                            match = []
+                            for c in getColumn(leftpos, leftRow):
+                                if jointype != 'x': #if not cross-join
+                                    filters = {0 : c[0] }
+                                    hints={ 'makeindex' : 0 }
+                                else:
+                                    filters = {}
+                                    hints = None
+                                for row in rightTable.filter(filters, hints):
+                                    if jointype=='a': #antijoin, skip leftRow if found
+                                        return
+                                    elif jointype=='s': #semijoin
+                                        yield []
+                                        match = True
+                                    elif jointype=='x': #crossjoin
+                                        #print 'cj row', len(row), row
+                                        match.append(row)
+                                    else:
+                                        match.append(mergeRow(leftRow, row))
+
+                            if not match:
+                                yield nullrows
+                            elif jointype!='s':
+                                #with crossjoins, instead of calling groupby on the
+                                #join key (there isn't one) group the rows together now
+                                row =  [MutableTupleset(None,match)]
+                                #validateRowShape([ColumnInfo('', MutableTupleset(current.columns))], row)
+                                yield row
 
                     return joinFunc
+
+                if isinstance(joincond.leftPosition, int):
+                    leftpos = joincond.leftPosition
+                else:
+                    leftpos = previous.findColumnPos(joincond.leftPosition)
+                    assert leftpos is not None, 'cant find left pos %r in <%s> %s' % (
+                              joincond.leftPosition, previous, previous.columns)
+                    if len(leftpos) == 1:
+                        leftpos = leftpos[0]
 
                 coltype = object #XXX
                 assert current.columns and len(current.columns) >= 1
@@ -1218,6 +1259,9 @@ class SimpleQueryEngine(object):
                 if jointype in ('i','l'):
                     columns, rightColumns, indexToLeft = mergeColumns(
                                               previous.columns, current.columns)
+                    if not isinstance(leftpos, int):
+                        rightColumns = [ColumnInfo('', MutableTupleset(rightColumns))]
+                    columns = previous.columns + rightColumns
                 elif jointype in ('a','s'):
                     columns = previous.columns
                 elif jointype == 'x':
@@ -1237,11 +1281,11 @@ class SimpleQueryEngine(object):
 
                 if jointype == 'r': #right outer
                     previous = IterationJoin(current, previous,
-                            bindjoinFunc('l', previous, indexToLeft, nullrows),
+                    bindjoinFunc('l', previous, indexToLeft, nullrows, leftpos),
                                     columns,joincond.name,debug=context.debug)
                 else:
                     previous = IterationJoin(previous, current,
-                        bindjoinFunc(jointype, current, indexToLeft, nullrows),
+                    bindjoinFunc(jointype, current, indexToLeft, nullrows, leftpos),
                                     columns,joincond.name,debug=context.debug)
             else:
                 previous = current
@@ -1464,6 +1508,7 @@ class SimpleQueryEngine(object):
 
     def evalLabel(self, op, context):
         position = context.currentTupleset.findColumnPos(op.name)
+        assert position is not None, 'missing label: '+ op.name
         if position is None:
             return None
         return flatten( (c[0] for c in getColumn(position, context.currentRow)) )        

@@ -142,7 +142,6 @@ class QueryOp(object):
             parent = parent.parent
 
         return indent
-            
 
     def _getExtraReprArgs(self, indent):
         if self.name is not None:
@@ -151,6 +150,7 @@ class QueryOp(object):
             return ''
 
     def __repr__(self):
+        #XXX need to include self.maybe if True
         if self.args:
             self._validateArgs()
 
@@ -342,7 +342,7 @@ class JoinConditionOp(QueryOp):
     SEMI = 's'
     CROSS = 'x'
 
-    def __init__(self, op, position=SUBJECT, join=INNER):
+    def __init__(self, op, position=SUBJECT, join=INNER, leftPosition=SUBJECT):
         self.op = op
         op.parent = self
         self.setJoinPredicate(position)
@@ -352,8 +352,9 @@ class JoinConditionOp(QueryOp):
             label = "#%d" % self.position
             op.addLabel(label, self.position)
             self.position = label
+        self.leftPosition = leftPosition
 
-    name = property(lambda self: '%s:%s' % (str(self.position),self.join) )
+    name = property(lambda self: '%s:%s:%s' % (str(self.position),self.join,self.leftPosition) )
     args = property(lambda self: (self.op,))
     
     def setJoinPredicate(self, position):
@@ -439,15 +440,20 @@ class JoinConditionOp(QueryOp):
         import re
         match = re.match(r'#(\d)', self.position) #hack!
         if match:
-            args = match.group(1)
+            args = match.group(1) #retrieve number
         else:
             args = repr(self.position)
-        return indent + '  ' + args +','+repr(self.join)
+        return indent + '  ' + args +','+repr(self.join)+','+repr(self.leftPosition)
+
+    #Note: __eq__ not needed since extra attributes are encoded in name property 
 
 class Filter(QueryOp):
     '''
     Filters rows out of a tupleset based on predicate
     '''
+
+    #true if it references more than one project (set during analysis)
+    complexPredicates = False
 
     def __init__(self, *args, **kw):
 
@@ -477,6 +483,9 @@ class Filter(QueryOp):
                 self.labels.append( (objectlabel, OBJECT) )
                 self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
                 self.labels.append( (objectlabel+':pos', LIST_POS) )
+
+        if 'complexPredicates' in kw:
+            self.complexPredicates = kw['complexPredicates']
  
     def getType(self):
         return Tupleset
@@ -487,7 +496,8 @@ class Filter(QueryOp):
                 if p == pos:
                     return
                 else:
-                    raise QueryException("label already used " + label)
+                    raise QueryException("label '%s' already used on "
+                                        "different position: %s" % (label, p))
         self.labels.append( (label, pos) )
         if pos == OBJECT:
             if isinstance(label, tuple):
@@ -497,6 +507,12 @@ class Filter(QueryOp):
             else:
                 self.labels.append( (label+':type', OBJTYPE_POS) )
                 self.labels.append( (label+':pos', LIST_POS) )
+
+    def labelFromPosition(self, pos):
+        for (name, p) in self.labels:
+            if p == pos:
+                return name
+        return None
 
     def _resolveNameMap(self, parseContext):
         def resolve(name):
@@ -512,6 +528,8 @@ class Filter(QueryOp):
                 kwname = ['subjectlabel', 'propertylabel', 'objectlabel'][pos]
                 kws.setdefault(kwname, []).append(name)
 
+        if self.complexPredicates:
+            kws['complexPredicates'] = self.complexPredicates
         if kws:
             args = indent+'  '+ (', ').join( [kw+'='+repr(vals)
                                               for kw, vals in kws.items()] )

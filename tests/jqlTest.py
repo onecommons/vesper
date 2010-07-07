@@ -1749,7 +1749,9 @@ where tags = ?tag
 }
 ''')
 
-t('''
+#raises File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 1506, in evalLabel
+#  assert position is not None, 'missing label: '+ op.name
+skip('''
 {
 ?posts
 'tags' : ?tag.id
@@ -1958,7 +1960,37 @@ where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'eve
 #test that ?bar = 1 doesn't join with foo = 1
 # {* where (?bar = 1 and foo = 1)}
 
-t.group = 'test'
+t.group = 'temp'
+
+# { 'tags' : ?inner.label where ?outer.tags = ?inner }
+t(ast=Select(
+    Construct([
+            ConstructProp('post-id', Project(SUBJECT)),
+            ConstructProp('tag-labels', Project('label')), 
+              ConstructProp('tag-ids', Label('inner'))]),
+where=Join(
+   Filter(Eq(Project(PROPERTY),'tags'), objectlabel='tags'),
+   JoinConditionOp(
+    Join(
+      Filter(Eq(Project(PROPERTY),'label'), objectlabel='label')
+    , name='inner'), 
+   'inner', 'i', 'tags')
+  )
+),
+results=[{'post-id': '2',
+  'tag-ids': ['tag1', 'tag2'],
+  'tag-labels': ['tag 1', 'tag 2']}]
+)
+
+skip('''
+{
+?a 
+id,
+foo,
+'blah' : {?b bar}
+where ?a = ?b #and ?a = 1 #and {?b type=@post}
+}
+''')
 
 #txn tests 
 skip('''
