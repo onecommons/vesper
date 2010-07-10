@@ -8,7 +8,7 @@
 """
 from vesper.query.jqlAST import *
 import copy, itertools
-from vesper.utils import debugp
+from vesper.utils import debugp, getTransitiveClosure
 from vesper.pjson import ParseContext
 
 class _ParseState(object):
@@ -59,7 +59,7 @@ class _ParseState(object):
         self.labeledjoins.setdefault(name,[]).append(join)
 
         if name in self.labeledjoinorder:
-            #outermost wins
+            #outermost wins (this assumes we're calling addLabeledJoin during bottom-up parsing)
             self.labeledjoinorder.remove(name)
         #assumes this is called in bottoms-up parse order
         self.labeledjoinorder.append(name)
@@ -139,7 +139,7 @@ class _ParseState(object):
                     else:
                         assert child
                         left = And(left, cchild )
-        
+
 
         name = construct.id and construct.id.getLabel() or self.nextAnonJoinId()
         if left:
@@ -156,7 +156,7 @@ class _ParseState(object):
      Or : Union,
     }
 
-    def _getASTForProject(self, project, name):
+    def _getASTForProject(self, project, name, parentJoin):
         '''
         Return an op that will retrieve the values that match the projection
     
@@ -222,7 +222,8 @@ class _ParseState(object):
             #project is on a different join
             op.addLabel(project.varref)
             op = Join(op)
-            self.addLabeledJoin(project.varref, op)
+            self.addLabeledJoin(project.varref, op)            
+            self.orphanedJoins.setdefault(parentJoin,[]).append(op)
             return None
         else:
             return op
@@ -329,7 +330,7 @@ class _ParseState(object):
                     #print 'adding orphan', child, 'to', parent
                     self.orphanedJoins.setdefault(parent,[]).append(child)
                 elif isinstance(child, Project):
-                    projectop = self._getASTForProject(child, name)
+                    projectop = self._getASTForProject(child, name, parent)
                     if projectop:
                         projectops.append( (child, projectop) )
                     if child is root:
@@ -388,6 +389,7 @@ class _ParseState(object):
         Combine joins that share the same join label
         '''
         consolidatedjoins = []
+        removed = []
         #sort labels by the order in which they appear in labeledjoinorder list
         for label, joins in sorted(self.labeledjoins.items(),
                      key=lambda a: self.labeledjoinorder.index(a[0]) ):
@@ -413,51 +415,51 @@ class _ParseState(object):
                 for child in join.args:
                     firstjoin.appendArg(child)
                 join.parent = None
+                removed.append(join)
 
             consolidatedjoins.append(firstjoin)
             firstjoin.name = label
-        return consolidatedjoins
+        return consolidatedjoins, removed
 
-    def _findJoinsInDocOrder(self, root, joinsInDocOrder):
+    def _findJoinsInDocOrder(self, root, joinsInDocOrder, removed):
         for child in root.depthfirst():
             if isinstance(child, ResourceSetOp):
                 joinsInDocOrder.append(child)
                 for orphan in self.orphanedJoins.pop(child,[]):
-                    self._findJoinsInDocOrder(orphan, joinsInDocOrder)
+                    if orphan in removed:
+                        continue
+                    self._findJoinsInDocOrder(orphan, joinsInDocOrder, removed)
 
     def buildJoins(self, root):
         #combine joins that have the same label:
-        joins = self._joinLabeledJoins()
+        joins, removedJoins = self._joinLabeledJoins()
         validateTree(root)
         joinsInDocOrder = []
-        self._findJoinsInDocOrder(root, joinsInDocOrder)
+        self._findJoinsInDocOrder(root, joinsInDocOrder, removedJoins)
         assert not self.orphanedJoins, 'orphaned joins left-over: %s' % self.orphanedJoins
-        assert len(joinsInDocOrder) <= len(joins), '%d %d' % (len(joinsInDocOrder), len(joins)) 
-        labelAliases, simpleJoins, complexJoins = self._findJoinPreds(joins)
-        #join together aliased joins
-        pass #XXX
+        assert set(joinsInDocOrder) == set(joins), 'missing join in doc: %s' % (
+                                              set(joins) - set(joinsInDocOrder))
 
+        joinsInDocOrder, simpleJoins, complexJoins = self._findJoinPreds(root, joinsInDocOrder)
         #next, in reverse document order (i.e. start with the most nested joins)
         #join together simpleJoinPreds that reference each other
         #need to follow this order to ensure that the outermost joins are on the
         #left-side otherwise right outer joins (the "maybe" operator) will break
+
         validateTree(*joinsInDocOrder)
         joinFromLabel = {}
-        for join in joins:
-            for alias in labelAliases[join.name]:
-                assert alias not in joinFromLabel
-                joinFromLabel[alias] = join
-
+        for join in joinsInDocOrder:
+            joinFromLabel[join.name] = join
         for i in xrange(len(joinsInDocOrder)-1, -1, -1):
             simpleJoins = self._makeSimpleJoins(joinsInDocOrder[i:],
-                                    joinFromLabel, labelAliases, simpleJoins)
+                                            joinFromLabel, simpleJoins)
         assert not simpleJoins
 
         #XXX join together complexJoinPreds as crossjoins
 
         #finally, make any non-empty labeled joins that we didn't merge into another
         #query a cross-join
-        for join in joins:
+        for join in joinsInDocOrder:
             if not join.parent and join.args:
                 if not root.where:
                     root.appendArg(join)
@@ -465,19 +467,25 @@ class _ParseState(object):
                     root.where.appendArg( JoinConditionOp(join, join.name, 'x') )
         assert all(join.parent or not join.args for join in joinsInDocOrder)
 
-    def _findJoinPreds(self, joins):
-        aliases = {}
+        #finally, removed empty joins from nested selects
+        for join in joinsInDocOrder:
+            if isinstance(join.parent, Select) and join.parent.parent and not join.args:
+                join.parent = None
+
+    def _findJoinPreds(self, root, joins):
+        joinsByName = {}
         simpleJoinCandidates = []; complexJoinCandidates = []
+        aliases = {}
         for join in joins:
             #for each filter
             #if Eq and both sides are simple references (?label or id or ?ref.id)
             #add to aliases and remove filter from join (we'll join together later)
-            aliases.setdefault(join.name,[join.name])
+            aliases[join.name] = []
+            joinsByName[join.name] = join
             for filter in join.depthfirst(
               descendPredicate=lambda op: op is join or not isinstance(op, ResourceSetOp)):
                 if not isinstance(filter, Filter):
                     continue
-                #print 'filter', filter
                 for arg in filter.args:                    
                     if isinstance(arg, Eq):
                         leftname, leftprop = getNameIfSimpleJoinRef(arg.left, join.name, filter)
@@ -501,24 +509,54 @@ class _ParseState(object):
                                 continue
                         #elif leftname or rightname:
                             #XXX support cases where one side is a complex expression
-                    complexJoinCandidates.append( (join, filter ) )
+                    complexJoinCandidates.append(filter)
                 if not filter.args:
                     #we must have removed all its predicates so
                     #remove the filter and its join condition
                     join.removeArg(filter.parent)
 
+        #combine together joins that are just aliases of each other
+        #assumes join list is in doc order so taht nested joins gets subsumed by outermost join
+        aliases = getTransitiveClosure(aliases)
+        renamed = {}
+        removed = []
+        for j in joins:
+            for name in aliases[j.name]:
+                if name == j.name:
+                    continue
+                renamed[name] = j.name 
+                ja = joinsByName.get(name)
+                if not ja:
+                    continue
+                for child in ja.args:
+                    j.appendArg(child)
+                ja.name = j.name
+                self.prepareJoinMove(ja)
+                ja.parent = None
+                removed.append(ja)
+        joins = [j for j in joins if j not in removed]
 
-        #XXX closure on aliases
-        #print 'aliases', aliases
+        import itertools
+        for join in itertools.chain((root,), joins):
+            for child in join.depthfirst(
+              descendPredicate=lambda op: op is join or not isinstance(op, ResourceSetOp)):
+                if isinstance(child, (Label,Join)):
+                    if child.name in renamed:
+                        child.name = renamed[child.name]
+                elif isinstance(child, Project) and child.varref:
+                    if child.varref in renamed:
+                        child.varref = renamed[child.varref]
+
+        #assert len(set([j.name for j in joins])) == len(joins), 'join names not unique'
 
         #now that we figured out all the aliases, we can look for join predicates
         simpleJoins = []
         for joinname, pred, leftname, leftprop, rightname, rightprop in simpleJoinCandidates:
+            leftname = renamed.get(leftname,leftname)
+            rightname = renamed.get(rightname,rightname)
             filter = pred.parent
-            jointype = filter.parent.join
-            labelAliases = aliases[joinname]
-            if leftname in aliases[rightname]:
-                assert rightname in aliases[leftname]
+            jointype = filter.parent.join        
+            if leftname == rightname:
                 #both references point to same join, so not a join predicate after all
                 if leftprop == rightprop:
                     #identity (a=a), so remove predicate
@@ -537,58 +575,58 @@ class _ParseState(object):
                 pred.parent = None
                 if not filter.args:
                     filter.parent.parent = None            
-
+        
         #xxx handle case like { ?bar ?foo.prop = func() or func(?foo) }
         #aren't these complex (cross) joins but rather misplaced filters
         #that belong in the ?foo join?
 
         #check if the remaining filter predicates are complex joins
-        complexJoins = []
-        for (join, filter) in complexJoinCandidates:
-            labelAliases = aliases[join.name]
+        complexJoins = []        
+        
+        for filter in complexJoinCandidates:
+            if not filter.parent:
+                continue
+            join = filter.parent.parent
             #if the filter predicates have reference to another join, its a complex join
             #while we're at it, check for complex filters too (on same join but more than one Project)
-            isComplexJoin = False
-            selfReferenceCount = 0
-            for label in filter.depthfirst(
-              descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
-                #check if the filter has reference to a different join
-                if isinstance(label, Label):
-                    if label.name not in labelAliases:
-                        isComplexJoin = True
-                    else:
-                        selfReferenceCount += 1
-                        #for simplicities sake, replace this with Project(SUBJECT)
-                        newchild = Project(SUBJECT)
-                        newchild.maybe = label.maybe
-                        label.parent.replaceArg(label,newchild)
+            for pred in filter.args:
+                isComplexJoin = False
+                selfReferenceCount = 0
+                for label in pred.depthfirst():
+                    #check if the filter has reference to a different join
+                    if isinstance(label, Label):
+                        if label.name != join.name:
+                            isComplexJoin = True
+                        else:
+                            selfReferenceCount += 1
+                            #for simplicities sake, replace this with Project(SUBJECT)
+                            newchild = Project(SUBJECT)
+                            newchild.maybe = label.maybe
+                            label.parent.replaceArg(label,newchild)
+                    elif isinstance(label, Project):
+                        if label.varref and label.varref != join.name:
+                            isComplexJoin = True
+                        else:
+                            selfReferenceCount += 1
+                if isComplexJoin:
+                    complexJoins.append(filter)
+                elif selfReferenceCount > 1:
+                    filter.complexPredicates = True
 
-                elif isinstance(label, Project):
-                    if label.varref and label.varref not in labelAliases:
-                        isComplexJoin = True
-                    else:
-                        selfReferenceCount += 1
-            if isComplexJoin:
-                complexJoins.append(filter)
-            elif selfReferenceCount > 1:
-                filter.complexPredicates = True
+        return joins, simpleJoins, complexJoins
 
-        return aliases, simpleJoins, complexJoins
-
-    def _makeSimpleJoins(self, followingJoins, joinFromLabel, labelAliases, simpleJoins):
+    def _makeSimpleJoins(self, followingJoins, joinFromLabel, simpleJoins):
         """
-        joinByLabel: f(label) => join
-        labelsFromJoin: f(join) => labels
         """
         #find the simplepreds that reference this join
         unhandledJoins = []
         join = followingJoins.pop(0)
-        joinnames = labelAliases[join.name]
+        joinname = join.name
         for joinInfo in simpleJoins:
             leftname, leftprop, rightname, rightprop, filter = joinInfo
-            if leftname in joinnames:
+            if leftname == joinname:
                 refname = rightname
-            elif rightname in joinnames:
+            elif rightname == joinname:
                 refname = leftname
                 #reverse them
                 leftprop, rightprop = rightprop, leftprop
@@ -596,7 +634,11 @@ class _ParseState(object):
                 unhandledJoins.append( joinInfo )
                 continue #no references to this join
          
-            #XXX if refname not in joinsByLabel: just add object label to filter with prop
+            if refname not in joinFromLabel: #just add object label to filter with prop
+                assert filter.parent.parent
+                filter.addLabel(refname, OBJECT)
+                continue
+
             if joinFromLabel[refname] not in followingJoins:
                 #only want to join with a more inner join,
                 #so don't do this join yet
@@ -623,11 +665,18 @@ class _ParseState(object):
                 join.appendArg( JoinConditionOp(topjoin, rightprop, jointype, leftprop) )
             else:
                 #empty join occur in nested constructs like {* where id = ?tag}
-                filter.addLabel(topjoin.name, OBJECT)
+                if filter.parent.parent:
+                    filter.addLabel(topjoin.name, OBJECT)
+                elif leftprop:
+                    found = False
+                    for joincond in join.args:
+                        if isinstance(joincond.op, Filter) and joincond.op.labelFromPosition(OBJECT) == leftprop:
+                            joincond.op.addLabel(topjoin.name, OBJECT)
+                            found = True
+                    assert found, (topjoin.name, refname, leftprop, rightprop, join)
                 topjoin.parent = None
             
         return unhandledJoins
-
 
 def getTopJoin(join, top):
     candidate = parent = join
@@ -725,8 +774,7 @@ def removeDuplicateConstructFilters(root):
                 else:
                     filterProjects.append(propertyName)
             
-            #print 'constructProjects', constructFilters, 'filterProjects', filterProjects
-            #remove filters generated by construct expressions that match 
+            #remove filters generated by construct expressions that match
             #where-clause filters
             for propertyName in filterProjects:
                 constructJCs = constructFilters.get(propertyName)

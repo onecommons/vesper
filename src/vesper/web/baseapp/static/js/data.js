@@ -672,6 +672,21 @@ Binder.FormBinder.bind = function( form, obj ) {
 };
 
 /* not currently used
+the idea is enable method dispatching based on a jQuery selector
+so DOM elements can be typed.
+E.g.
+$('.class1').dBind({
+  save : function() {...}
+});
+$('.class2').dBind({
+  save : function() {...}
+});
+//"base class":
+$('div').dBind({
+   save : function() {}
+});
+$('container [itemid]').dCall('save', 1,2);
+
 var _funcmap = {};
 function addDispatches(selector, methods) {
     for (var name in methods) {

@@ -91,6 +91,19 @@ def package_import(name):
         mod = getattr(mod, comp)
     return mod
 
+def getTransitiveClosure(aMap):
+    def close(done, super, subs):
+        done[super] = set(subs)
+        for sub in subs:
+            if not sub in done:
+                close(done, sub, aMap[sub])
+            done[super].update(done[sub])
+
+    closure = {}
+    for key, value in aMap.items():
+        close(closure, key, value)
+    return dict([(x, list(y)) for x, y in closure.items()])
+    
 class ObjectWithThreadLocals(object):
     '''
     Creates an attribute whose value will be local to the current

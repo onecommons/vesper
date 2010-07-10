@@ -9,6 +9,7 @@ from vesper.data.base.utils import parseTriples
 from vesper.data.base.utils import BNODE_BASE, BNODE_BASE_LEN,RDF_MS_BASE,RDF_SCHEMA_BASE
 from vesper.data.base.utils import OBJECT_TYPE_RESOURCE, OBJECT_TYPE_LITERAL,Statement
 from vesper.data.store.basic import TransactionMemStore
+from vesper.utils import getTransitiveClosure
 
 class BaseSchema(object):
     '''
@@ -177,20 +178,6 @@ class RDFSSchema(BaseSchema, base.MultiModel):
             subTypes = map.get(wantType, [wantType])            
             return testType in subTypes
             
-    def _makeClosure(self, aMap):
-        #for each sub class, get its subclasses and append them
-        def close(done, super, subs):
-            done[super] = set(subs) 
-            for sub in subs:                
-                if not sub in done:                    
-                    close(done, sub, aMap[sub])                
-                done[super].update(done[sub])
-
-        closure = {}           
-        for key, value in aMap.items():
-            close(closure, key, value)
-        return dict([(x, list(y)) for x, y in closure.items()])
-
     def _addTypeStatement(self, stmt, addStmt=True):    
         if addStmt:
             self._addEntailment(stmt)    
@@ -380,14 +367,14 @@ class RDFSSchema(BaseSchema, base.MultiModel):
                                 self.inferences[key] += 1                                                    
 
         if typesChanged:
-            self.currentSubTypes = self._makeClosure(self.currentSubTypes)
+            self.currentSubTypes = getTransitiveClosure(self.currentSubTypes)
             #XXX if self.saveSubtypes: 
             #    self.saveSubtypes()   XXX                
             if self.autocommit:
                 self.subtypes = self.currentSubTypes
             
         if propsChanged:
-            self.currentSubProperties = self._makeClosure(self.currentSubProperties)
+            self.currentSubProperties = getTransitiveClosure(self.currentSubProperties)
             if self.autocommit:
                 self.subproperties = self.currentSubProperties
         
@@ -508,7 +495,7 @@ class RDFSSchema(BaseSchema, base.MultiModel):
                 for supertype in v:
                     newsubtypes.setdefault(supertype, []).append(k)
 
-            self.currentSubTypes = self._makeClosure(newsubtypes)
+            self.currentSubTypes = getTransitiveClosure(newsubtypes)
             if self.autocommit:
                 self.subtypes = self.currentSubTypes
             
@@ -518,7 +505,7 @@ class RDFSSchema(BaseSchema, base.MultiModel):
                 for superprop in v:
                     newsubprops.setdefault(superprop, []).append(k)
             
-            self.currentSubProperties = self._makeClosure(newsubprops)
+            self.currentSubProperties = getTransitiveClosure(newsubprops)
             if self.autocommit:
                 self.subproperties = self.currentSubProperties
 

@@ -716,8 +716,7 @@ t('''
 
 t.group = 'nestedconstruct'
 
-#XXX throws: vesper.query.QueryException: only equijoins currently supported
-skip('''
+t('''
     {
     *
      where (subjectof= ?tag and
@@ -911,8 +910,8 @@ t( '''
  {'content': 'some more text about the commons', 'subject': 'commons'}]
 )
 
-#throws jql.QueryException: only equijoin supported for now
-skip( '''
+#XXX results shouldn't be empty, should be same as above
+t( '''
     { *
      where (subjectof= ?tag and
           { id = ?start and id = @commons }
@@ -923,17 +922,6 @@ skip( '''
         )
     }
     ''',[])
-
-#XXX creating bad AST
-skip('''
-{ ?a
-    where (
-        {id=?a and ?a = 1} and {id=?b and ?b = 2}
-        and ?b = ?a
-    )
-}
-'''
-)
 
 t('''
 { ?a,
@@ -1557,66 +1545,55 @@ t('''
 [{'id': '3', 'tags': None}, {'id': '2', 'tags': ['tag1']}]
 , unordered=True)
 
-t.group = 'onetomany'
+#nested constructs that don't have their own join, just reference outer join
+t.group = 'dependentconstructs'
 
-#XXX throws jql.QueryException: reference to unknown label(s): tag
-#'tags' : ?tag should be treated like 'tags' : {?tag}  
-skip('''
+t('''
 { 
     'tags' : ?tag 
     where (tags = ?tag)
 }
-'''
-)
+''',
+[{'tags': 'tag1'}])
 
-#XXX error: inner construct not joining on outer
-#we need to make isConstant check in evalSelect exclude references to outer joins
-#in construct props
-skip('''
+t('''
 {
 ?tag, label,
 'attributes' : { 'itemid' : ?tag.id }
 where (label = 'tag 1')
 }
-''')
+''',
+[{'attributes': {'itemid': 'tag1'}, 'label': 'tag 1'}])
 
-#XXX fails: File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 446, in addAlias
-#   assert join is pred.parent.parent.parent, pred.parent.parent.parent
-# pred.parent.parent.parent is none
-skip('''
+t('''
 {
 ?tag, label,
 'attributes' : { ?inner 'itemid' : ?tag where (?inner = ?tag)}
 where (label = 'tag 1')
 }
-''')
+''',
+[{'attributes': {'itemid': 'tag1'}, 'label': 'tag 1'}]
+)
 
-#fails, erroneously returns: 
-#{'attributes': [{'itemid': None},
-#                 {'itemid': None},
-#                 {'itemid': None},
-#                 {'itemid': None}],
-#  'label': 'tag 1'}]
-skip('''
+t('''
 {
 ?tag, label,
 'attributes' : { 'itemid' : ?tag }
-where (label = 'tag 1')
+where label = 'tag 1'
 }
-''')
+''',
+[{'attributes': {'itemid': 'tag1'}, 'label': 'tag 1'}])
 
-#XXX fails
-#toplevel join is missing
-#vesper.query._query.QueryException: construct: could not find subject label "tag" in (ColInfo('subject', <type 'unicode'>),
-#ColInfo('predicate', <type 'unicode'>), ColInfo('object', <type 'unicode'>), ColInfo('objecttype', <type 'unicode'>),
-#ColInfo('context', <type 'object'>), ColInfo('listpos', <type 'unicode'>))
-skip('''
+t('''
 {
 ?tag, label,
 'attributes' : { 'itemlabel' : ?tag.label }
-where (label = 'tag 1')
+where label = 'tag 1'
 }
-''')
+''',
+[{'attributes': {'itemlabel': 'tag 1'}, 'label': 'tag 1'}])
+
+t.group = 'onetomany'
 
 t(query='''
     { ?tag, id, 
@@ -1701,9 +1678,7 @@ t('''
 }''',
 [{'id': '2', 'tags': 'tag1'}])
 
-#XXX results should be the same as query label 
-#but can't find label 'tag', it doesn't look set on the join
-skip('''
+t('''
 {   ?post, id, 
     'tags' : ?tag
     where (tags = ?tag and type=@post
@@ -1712,52 +1687,54 @@ skip('''
 }''',
 [{'id': '2', 'tags': 'tag1'}])
 
+t.group = 'nojoin'
 
-t.group = 'crossjoin'
+t('''
+{ ?a
+    where (
+        {id=?a and ?a = 1} and {id=?b and ?b = 2}
+        and ?b = ?a
+    )
+}
+''', [])
 
-#XXX:  File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 641, in buildJoins
-#    root.where.appendArg( JoinConditionOp(v, k, 'c') )
-#AttributeError: 'NoneType' object has no attribute 'appendArg'
-#why a cross-join? why is where none?
-skip('''
+t('''
 {
 ?posts
 'tags' : ?tag.id
 where ?posts.tags = ?tag
 }
-''')
+''',
+[{'tags': ['tag1', 'tag2']}])
 
-#this give the same error as above
-skip('''
-{
-?posts
-'tags' : {?tag id where ?posts.tags = id}
-where type = @post
-}
-''')
-
-
-#    self._makeJoin(joinsInDocOrder[i:], refs, labels, aliases, joinPreds)
-#  File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 560, in _makeJoin
-#    raise QueryException("reference to unknown label: %r" % refname)
-#vesper.query._query.QueryException: reference to unknown label: 'tag'
-skip('''
+t('''
 {
 ?posts
 'tags' : ?tag.id
 where tags = ?tag
 }
-''')
+''',
+[{'tags': ['tag1', 'tag2']}])
 
-#raises File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 1506, in evalLabel
-#  assert position is not None, 'missing label: '+ op.name
-skip('''
+t('''
 {
 ?posts
 'tags' : ?tag.id
 where {?tag ?posts.tags = ?tag} and type = @post
 }
-''')
+''',
+[{'tags': ['tag1', 'tag2']}])
+
+t('''
+{
+?posts
+'tags' : {?tag id where ?posts.tags = id}
+where type = @post
+}
+''',
+[{'tags': [{'id': 'tag1'}, {'id': 'tag2'}]}])
+
+t.group = 'crossjoin'
 
 crossjoinResults = [{'alltags': ['tag 1', 'tag 2'], 'id': '3', 'tags': None},
  {'alltags': ['tag 1', 'tag 2'], 'id': '2', 'tags': ['tag1', 'tag2']}]
@@ -1797,7 +1774,7 @@ where {?post type = @post}
 
 t.group= 'semijoins' #(and antijoins)
 
-#XXX throws only equijoins supported
+#XXX throws AssertionError: missing label: @1
 skip('''
 {
 * 
@@ -1843,38 +1820,37 @@ skip('''{* where(
 #not ?foo
 #test equivalent inline joins'
 
-#XXX raises error: "tags" projection not found
-skip('''{ ?tag
+t('''{ ?tag
  * 
  where (?tag = ?item.tags and
-   { id = ?item and type = "post"} 
+   { id = ?item and type = @post} 
  )
-}''')
+}''',
+[{'id': 'tag1', 'label': 'tag 1'}, {'id': 'tag2', 'label': 'tag 2'}]
+)
 
-#XXX id = ?item raise exception, removing it fix things
-skip('''{ ?tag
+t('''{ ?tag
  * 
- where ( 
-   { id = ?item and type = "post" and ?tag = tags }
- )
-}''')
+ where { id = ?item and type = @post and ?tag = tags }
+}''',
+[{'id': 'tag1', 'label': 'tag 1'}, {'id': 'tag2', 'label': 'tag 2'}]
+)
 
-#XXX raises construct: could not find subject label "@1"
-skip('''{ ?tag  
+t('''{ ?tag  
      "attributes" : { id where (id=?tag) }, 
      "state" : "closed", 
      "data" : label  
-     where (type = "tag")  
-   }''')
+     where (label = "tag 1")  
+   }''',
+ [{'attributes': {'id': 'tag1'}, 'data': 'tag 1', 'state': 'closed'}]
+)
 
-#XXX the id = ?post raises 
-#File "/_dev/rx4rdf/vesper/src/vesper/query/rewrite.py", line 434, in analyzeJoinPreds
-#   assert isinstance(filter, Filter), filter
-#filter must be None -- has the parent already been removed?
-#(without id = ?post, query is fine)
-#{ ?tag, id  where (
-#{id=?tag1 and @tagid1 in follow(?tag1, subsumedby)} 
-# and {id = ?post and ?tag = tags and tags = ?tag1})}
+t('''
+{ ?tag, id  where (
+{id=?tag1 and @tagid1 in follow(?tag1, subsumedby)} 
+ and {id = ?post and ?tag = tags and tags = ?tag1})
+}
+''',[])
 
 #XXX turn these into tests:
 '''
@@ -1982,27 +1958,26 @@ results=[{'post-id': '2',
   'tag-labels': ['tag 1', 'tag 2']}]
 )
 
-skip('''
+t('''
 {
 ?a 
 id,
 foo,
 'blah' : {?b bar}
-where ?a = ?b #and ?a = 1 #and {?b type=@post}
+where ?a = ?b and ?a = 1 and {?b type=@post}
 }
 ''')
 
-#txn tests 
+#txn tests
+#XXX ?firsttxn = string(1) needs to be moved to the ?firsttxn.createtime join  
 skip('''
 {
 id where type = @post and ?firsttxn = string(1) #getfirsttxn(id) 
 
-#order by ?firsttxn.createdtime
+order by ?firsttxn.createdtime
 }''')
 
-#XXX AssertionError: cant find children in <vesper.data.store.basic.MemStore 
-#even after adding "where children" and "where ?parent.children"
-skip('''
+t('''
 {
 ?parent
 'parents' : ?parent.id, 

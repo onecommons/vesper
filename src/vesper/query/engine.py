@@ -853,7 +853,7 @@ class SimpleQueryEngine(object):
                             if isinstance(prop.value, jqlAST.Select):
                                 #evaluate the select using a new context with the
                                 #the current column as the tupleset
-                            
+
                                 #if id label is set use that 
                                 label = prop.value.construct.id.getLabel()
                                 if label:
@@ -861,8 +861,11 @@ class SimpleQueryEngine(object):
                                 else:
                                     col = None                                
                                 if not col:
-                                    #assume we're doing a cross join:
-                                    ccontext.currentTupleset = ccontext.initialModel
+                                    if prop.value.where:
+                                        #assume we're doing a cross join:
+                                        ccontext.currentTupleset = ccontext.initialModel
+                                    else: #this construct just references the parent rows
+                                        ccontext.currentTupleset = tupleset
                                 else:
                                     pos, rowInfoTupleset = col
                                     v = list([irow for cell, i, irow in getColumn(pos, outerrow)])

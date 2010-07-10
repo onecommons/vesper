@@ -224,7 +224,7 @@ ${call(caller).style}
    <textarea name='contents' class='expand' style='width: 100%'>${editcontents}</textarea>
    <div class='preview-contents'></div>
   </div>
-  <div class='item${i%2 and " altband" or ""}'>${call(caller).renderItemProperties}
+  <div class='item'>${call(caller).renderItemProperties}
       ## contents are block elements (p) so bullet doesnt appear inline as we want
       <span class='item-bullet'>&bull;</span>
       <div class='item-contents'>
@@ -331,7 +331,7 @@ function initItems(context) {
    
    $('.item', context).click(editEntry);
    $('.item-properties, .item-contents a').click(function(event) { event.stopPropagation(); } );
-   ##doesn't work: '$('a').live('click', function(event) { console.log('huh!!'); event.stopPropagation(); } );
+   ##doesn't work: $('a').live('click', function(event) { console.log('huh!!'); event.stopPropagation(); } );
    $('.entry-edit-button', context).click(editEntry);
    
    $('.entry-canceledit-button', context).click(function(event) {
