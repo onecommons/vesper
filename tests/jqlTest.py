@@ -213,11 +213,9 @@ t(r'''
 ("unicode\u000alinefeed")
 ''', ["unicode\nlinefeed"])
 
-#note: user-defined datatype is ignored when Constant is evaluated, 
-#so they probably should be a subtype of json type
-t('''
-(1 - -1^^fooble)
-''', [2.0])
+t('''(1 - -1)''', [2.0])
+
+t('''[-1.001, -1e2, -0.1e-3, 0.1e+3]''', [[-1.001, -100.0, -0.0001, 100.0]])
 
 syntaxtests = [
 #test comments
@@ -250,13 +248,6 @@ syntaxtests = [
 '''{* where (foo = { id = 'd' }) }''',
 
 '''{ * where foo = @<{what a ref}>}''',
-
-#user-defined datatypes
-'''
-{ * where foo = "1/1/200"^^date}
-''',
-
-'''(-1.001^^<http://foobar#decimal>)''',
 ]
 
 #XXX fix failing queries!
@@ -1204,6 +1195,10 @@ t('''{ id, values where values == 1 }''',
 [{'id': '4', 'values': [1, ]}, {'id': '6', 'values': 1}]
 ) 
 
+#floats are distinct from ints so this doesn't match
+#XXX do we want to do to this? JSON (and javascript) don't distinguish between them
+t('''{ id, values where values = 1.0 }''', [])
+
 t('''{ id, values where values != 1 }''',
 [{'id': '1', 'values': None},
  {'id': '3', 'values': ['', 0, None, False]},
@@ -1270,8 +1265,6 @@ t('''{ id, values where values != '0' }''',
  {'id': '6', 'values': 1},
  {'id': '8', 'values': '1'}]
 ) 
-
-t('''{ id, values where values = 1.1 }''')
  
 from vesper.data.store.basic import MemStore
 from vesper.data.base import Statement, OBJECT_TYPE_LITERAL, OBJECT_TYPE_RESOURCE

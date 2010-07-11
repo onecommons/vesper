@@ -77,7 +77,7 @@ tokens = reserved + (
     'LBRACE', 'RBRACE',
     'COMMA', 'PERIOD', 'COLON',
 
-    'TWOCARETS', 'PROPSTRING', 'LABEL', 'BINDVAR', 'REF', 'REFSTRING'
+    'PROPSTRING', 'LABEL', 'BINDVAR', 'REF', 'REFSTRING'
 )
 
 # Operators
@@ -104,8 +104,6 @@ t_COMMA            = r','
 t_PERIOD           = r'\.'
 t_COLON            = r':'
 
-t_TWOCARETS        = r'\^\^'
-
 reserved_map = { }
 for r in reserved:
     reserved_map[r.lower()] = r
@@ -119,7 +117,7 @@ reserved_constants = {
 _namere = r'[A-Za-z_\$][\w_\$]*'
 
 def t_FLOAT(t):
-    r'-?\d+((\.\d+)|((e|E)(\+|-)?\d+)|(\.\d+(e|E)(\+|-)?\d+))'
+    r'-?\d+((\.\d+(e|E)(\+|-)?\d+)|(\.\d+)|((e|E)(\+|-)?\d+))'
     #note: float pattern can't match int, hence the complexity
     t.value = float(t.value)
     return t
@@ -386,16 +384,6 @@ def p_atom_constant(p):
             | REFSTRING
     '''
     p[0] = Constant(p[1])
-
-def p_atom_typedconstant(p):
-    '''constant : INT TWOCARETS NAME
-                | FLOAT TWOCARETS NAME
-                | STRING TWOCARETS NAME
-                | INT TWOCARETS PROPSTRING
-                | FLOAT TWOCARETS PROPSTRING
-                | STRING TWOCARETS PROPSTRING
-    '''
-    p[0] = Constant(p[1],p[3])
 
 def p_atom(p):
     """atom : columnref

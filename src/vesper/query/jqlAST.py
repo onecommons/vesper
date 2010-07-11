@@ -561,7 +561,7 @@ class Constant(QueryOp):
             elif isinstance(value, type(True)):
                 value = bool(value)
         self.value = value
-        self.datatype = datatype
+        self.datatype = datatype #not used
 
     def getType(self):
         if isinstance(self.value, QueryOpTypes):
@@ -573,7 +573,7 @@ class Constant(QueryOp):
         if isinstance(self.value, ResourceUri):
             self.value = ResourceUri( parseContext.parseId(self.value.uri) )
         #XXX: elif parseContext.datatypemap ?
-        if self.datatype:     #pjson should expand datatype names as well
+        if self.datatype:   #XXX pjson should expand datatype names as well
             self.datatype = parseContext.parseProp(self.datatype)
 
     def __eq__(self, other):
