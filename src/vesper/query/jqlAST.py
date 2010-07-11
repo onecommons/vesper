@@ -551,7 +551,7 @@ class Constant(QueryOp):
     '''
     '''
 
-    def __init__(self, value):
+    def __init__(self, value, datatype = None):
         if not isinstance( value, QueryOpTypes):
             #coerce
             if isinstance(value, str):
@@ -561,6 +561,7 @@ class Constant(QueryOp):
             elif isinstance(value, type(True)):
                 value = bool(value)
         self.value = value
+        self.datatype = datatype
 
     def getType(self):
         if isinstance(self.value, QueryOpTypes):
@@ -571,14 +572,19 @@ class Constant(QueryOp):
     def _resolveNameMap(self, parseContext):
         if isinstance(self.value, ResourceUri):
             self.value = ResourceUri( parseContext.parseId(self.value.uri) )
-        #XXX: elif parseContext.datatypemap
+        #XXX: elif parseContext.datatypemap ?
+        if self.datatype:     #pjson should expand datatype names as well
+            self.datatype = parseContext.parseProp(self.datatype)
 
     def __eq__(self, other):
         return super(Constant,self).__eq__(other) and self.value == other.value
 
     def __repr__(self):
         indent = self.getReprIndent()
-        return indent + self.__class__.__name__ + "("+repr(self.value)+")"
+        args = repr(self.value)
+        if self.datatype:
+            args += ','+repr(self.datatype)
+        return indent + self.__class__.__name__ + "("+args+")"
 
     @classmethod
     def _costMethodName(cls):

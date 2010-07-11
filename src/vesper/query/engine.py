@@ -1315,13 +1315,17 @@ class SimpleQueryEngine(object):
             if proj.name in simplefilter:
                 #position already taken, treat as complex
                 continue
+            #if isinstance(value, Constant) and value.datatype:
             value = other.evaluate(self, context)
             if proj.name == OBJECT:
-                if context.serializer:
-                    parseContext = context.serializer.parseContext
+                if isinstance(other, jqlAST.Constant) and other.datatype:
+                    objectType = other.datatype
                 else:
-                    parseContext = None
-                value, objectType = vesper.pjson.getDataType(value, parseContext)
+                    if context.serializer:
+                        parseContext = context.serializer.parseContext
+                    else:
+                        parseContext = None
+                    value, objectType = vesper.pjson.getDataType(value, parseContext)
                 simplefilter[3] = objectType
             simplefilter[proj.name] = value
             complexargs.pop()

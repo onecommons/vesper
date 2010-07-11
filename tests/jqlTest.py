@@ -213,6 +213,12 @@ t(r'''
 ("unicode\u000alinefeed")
 ''', ["unicode\nlinefeed"])
 
+#note: user-defined datatype is ignored when Constant is evaluated, 
+#so they probably should be a subtype of json type
+t('''
+(1 - -1^^fooble)
+''', [2.0])
+
 syntaxtests = [
 #test comments
 '''{
@@ -231,7 +237,7 @@ syntaxtests = [
 }
 ''',
 #test qnames:
-'''{ <rdfs:comment>:* where(<rdfs:label>='foo')}''', #propname : *
+'''{ <rdfs:comment>:* where(<rdfs:label>='foo')}''', 
 '''
 [<rdfs:comment> where(<rdfs:label>='foo')]
 ''',
@@ -244,6 +250,13 @@ syntaxtests = [
 '''{* where (foo = { id = 'd' }) }''',
 
 '''{ * where foo = @<{what a ref}>}''',
+
+#user-defined datatypes
+'''
+{ * where foo = "1/1/200"^^date}
+''',
+
+'''(-1.001^^<http://foobar#decimal>)''',
 ]
 
 #XXX fix failing queries!
@@ -258,7 +271,14 @@ failing = [
 #XXX there's ambguity here: construct vs. join (wins)
 # throws AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
 "{foo: {*} }", 
-#XXXAssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
+
+#next two have same error:
+#    assert position is not None, 'missing label: '+ op.name
+#AssertionError: missing label: @1
+#also, rename aliases better: choose user-defined names over auto-generated ones
+
+"{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'}) }",
+
 '''
 {
 ?artist,
@@ -267,13 +287,15 @@ foo : { ?join, id },
 where( {
     ?id == 'http://foaf/friend' and
     topic_interest = ?ss and
-    <foaf:topic_interest> = ?artist.foo.bar #Join(
+    <foaf:topic_interest> = ?artist.foo 
   })
 GROUP BY foo
 }
 ''',
-#jql.QueryException: only equijoin supported for now:
-"{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'}) }",
+"", #an empty query
+'''
+#just a comment
+''',
 # = is non-associative so this is illegal -- at least have better error msg
 """
 { * where (?a = b = ?c)}
@@ -1249,6 +1271,8 @@ t('''{ id, values where values != '0' }''',
  {'id': '8', 'values': '1'}]
 ) 
 
+t('''{ id, values where values = 1.1 }''')
+ 
 from vesper.data.store.basic import MemStore
 from vesper.data.base import Statement, OBJECT_TYPE_LITERAL, OBJECT_TYPE_RESOURCE
 

@@ -1,5 +1,47 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
+'''
+Table Of Contents - jsonQL Reference
+    Basic Grammar and Processing Model (note reserved words are not case-sensitive)
+    Construct Patterns
+        Abbreviated properties
+        constructing arrays
+        constructing simple values
+        Property Names and id
+        Property wildcard ("*")
+        "forcelist" syntax
+        optional properties and Null values
+        Sub-queries (nested constructs)
+    Datatypes
+      Value types
+      Lists, list values, and multiple values
+      null values
+      object references
+         distinct from string/value representation
+         anonymous objects (object as value)
+    Filtering (WHERE clause)
+      constant queries
+    Joins
+        object references
+        labels
+        maybe (outer joins)
+        uncorrelated references (cross joins)
+        follow() (recursive joins)
+    Expressions and functions
+        filter vs. construct context
+        Type coercion
+        Built-in Functions
+    ORDER BY
+    GROUP BY and aggregate Functions
+        Built-in aggregate functions
+    output modifiers
+        mergeall
+        limit and offset
+        depth
+    Bind variables
+    namemap
+'''
+
 import sys
 sys.path.append('.')
 from jqltester import *
@@ -77,6 +119,9 @@ Basic Grammar
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
+A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
+
+
 .. productionlist::
  query  : `constructobject` 
         :| `constructarray` 
@@ -96,14 +141,21 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
  propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
- query_criteria  : ["WHERE(" `expression` ")"]
-                 : ["GROUPBY(" (`expression`[","])+ ")"]
-                 : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
+ comments : "#" CHAR* <end-of-line> 
+          : | "//" CHAR* <end-of-line> 
+          : | "/*" CHAR* "*/"
+
+.. productionlist::
+ query_criteria  : ["WHERE" `expression`]
+                 : ["GROUP BY" (`expression`[","])+]
+                 : ["ORDER BY" (`expression` ["ASC"|"DESC"][","])+]
                  : ["LIMIT" number]
                  : ["OFFSET" number]
                  : ["DEPTH" number]
                  : ["MERGEALL"]
                  : ["NAMEMAP" "=" `jsondict`]
+
+.. productionlist::                 
  expression : `expression` "and" `expression`
             : | `expression` "or" `expression`
             : | "maybe" `expression`
@@ -115,23 +167,23 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
  operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
             : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
  join       : "{" [`label`] `expression` "}"
- atom       : `label` | `bindvar` | `constant` 
-            : | `functioncall` | `propertyreference`
+ atom       : `label` | `bindvar` | `constant` | `typedconstant`
+            : | `functioncall` | `propertyreference` | `objectreference`
  label      : "?"NAME
  bindvar    : ":"NAME
+ objectreference : "@"NAME | "@<" CHAR+ ">"
  propertyreference : [`label`"."]`propertyname`["."`propertyname`]+
  functioncall : NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
  constant : STRING | NUMBER | "true" | "false" | "null"
- comments : "#" CHAR* <end-of-line> 
-          : | "//" CHAR* <end-of-line> 
-          : | "/*" CHAR* "*/"
+ typedconstant : (STRING | NUMBER) "^^" `datatypename`
+ datatypename  : NAME | "<" CHAR+ ">"
 
 Construct Patterns
 ==================
 
 There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
-JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
+A jsonQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
 
 '''
 
@@ -198,7 +250,7 @@ t%'''
 :token:`constructvalue`
 -----------------------
 
-You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
+You can select simple values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
 '''
 
 t("(displayname)",
@@ -212,7 +264,7 @@ Property Names and `id`
 -----------------------
 
 Name tokens not used elsewhere in the grammar are treated as a reference to object properties.
-You can specify properties whose name match reserved keywords or have invalid characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
+You can specify properties whose name match reserved keywords or have illegal characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
 
 `id` is a reserved name that always refers to the id of the object, not a property named "id".
 Such a property can written as `<id>`.
@@ -430,6 +482,7 @@ Filtering (the WHERE clause)
 
 * filter select which objects should appear in the result set. In addition, if the construct clause references a property whose 
 values are filtered, only those filters will be included in the result.
+In other words, results are grouped by the object id. 
 
 value = 1 and value = 2
 value = 1 or value = 2
@@ -439,6 +492,8 @@ values includes all values
 
 * property references in construct
 * matching lists 
+* matching datatypes
+* no distinction between 
 '''
 
 t%'''
