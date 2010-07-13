@@ -311,6 +311,7 @@ class _ParseState(object):
             projectops = []
             skipRoot = False
             labels ={}
+            dependentVarCount = 0
             for child in root.depthfirst(
                     descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
                 if isinstance(child, ResourceSetOp):                
@@ -327,9 +328,11 @@ class _ParseState(object):
                         skipRoot = True
                     else:
                         self.replaceJoinWithLabel(child)
+                        dependentVarCount += 1
                     #print 'adding orphan', child, 'to', parent
                     self.orphanedJoins.setdefault(parent,[]).append(child)
                 elif isinstance(child, Project):
+                    dependentVarCount += 1
                     projectop = self._getASTForProject(child, name, parent)
                     if projectop:
                         projectops.append( (child, projectop) )
@@ -348,8 +351,9 @@ class _ParseState(object):
                         #a filter like "not prop"
                         joinType = JoinConditionOp.ANTI
                         skipRoot = True
-                #elif isinstance(child, Label):
-                #    labels.setdefault(child.name,[]).append(child)
+                elif isinstance(child, Label):
+                    dependentVarCount += 1
+
                 if child.maybe:
                     if child is root or isinstance(child, (Project, Label, ResourceSetOp)):
                         joinType = JoinConditionOp.LEFTOUTER
@@ -359,7 +363,12 @@ class _ParseState(object):
             #try to consolidate the projection filters into root filter.
             if not skipRoot:
                 filter = Filter(root)
-                consolidateFilter(filter, projectops)
+                if dependentVarCount > 1:
+                    filter.complexPredicates = True
+                    #complexPredicates can't have their names replaced with positions
+                    #so don't call consolidateFilter() on them
+                else:
+                    consolidateFilter(filter, projectops)
 
             for (project, projectop) in projectops:
                 if isinstance(projectop, JoinConditionOp):
@@ -455,7 +464,10 @@ class _ParseState(object):
                                             joinFromLabel, simpleJoins)
         assert not simpleJoins
 
-        #XXX join together complexJoinPreds as crossjoins
+        #XXX join together complexJoins as crossjoins
+        #need to order by based on dependencies, and raise error if circular:
+        #e.g { ?a joinfunc(?a,?b) } and { ?b joinfunc(?a,?b) }
+        #need to follow doc order too?
 
         #finally, make any non-empty labeled joins that we didn't merge into another
         #query a cross-join
@@ -574,7 +586,7 @@ class _ParseState(object):
                 #(see makeJoinExpr() when skipRoot = True), so remove this one
                 pred.parent = None
                 if not filter.args:
-                    filter.parent.parent = None            
+                    filter.parent.parent = None
         
         #xxx handle case like { ?bar ?foo.prop = func() or func(?foo) }
         #aren't these complex (cross) joins but rather misplaced filters
@@ -590,28 +602,22 @@ class _ParseState(object):
             #if the filter predicates have reference to another join, its a complex join
             #while we're at it, check for complex filters too (on same join but more than one Project)
             for pred in filter.args:
-                isComplexJoin = False
-                selfReferenceCount = 0
+                joinrefs = set()
                 for label in pred.depthfirst():
                     #check if the filter has reference to a different join
                     if isinstance(label, Label):
                         if label.name != join.name:
-                            isComplexJoin = True
+                            joinrefs.add(label.name)
                         else:
-                            selfReferenceCount += 1
                             #for simplicities sake, replace this with Project(SUBJECT)
                             newchild = Project(SUBJECT)
                             newchild.maybe = label.maybe
                             label.parent.replaceArg(label,newchild)
                     elif isinstance(label, Project):
                         if label.varref and label.varref != join.name:
-                            isComplexJoin = True
-                        else:
-                            selfReferenceCount += 1
-                if isComplexJoin:
-                    complexJoins.append(filter)
-                elif selfReferenceCount > 1:
-                    filter.complexPredicates = True
+                            joinrefs.add(label.varref)
+                if joinrefs:                    
+                    complexJoins.append( (filter, joinrefs) )
 
         return joins, simpleJoins, complexJoins
 
@@ -633,10 +639,25 @@ class _ParseState(object):
             else:
                 unhandledJoins.append( joinInfo )
                 continue #no references to this join
-         
+
+            def addLabel(refname):
+                '''
+                just add object label to filter with prop
+                '''
+                for joincond in join.args:
+                    #find the filter that has the Project for the leftprop
+                    if (isinstance(joincond.op, Filter)
+                        and joincond.op.labelFromPosition(OBJECT) == leftprop):
+                        joincond.op.addLabel(refname, OBJECT)
+                        return True
+                return False
+
             if refname not in joinFromLabel: #just add object label to filter with prop
-                assert filter.parent.parent
-                filter.addLabel(refname, OBJECT)
+                assert leftprop
+                success = addLabel(refname)
+                assert success
+                #assert filter.parent.parent, (refname, filter.parent)
+                #filter.addLabel(refname, OBJECT)
                 continue
 
             if joinFromLabel[refname] not in followingJoins:
@@ -668,12 +689,8 @@ class _ParseState(object):
                 if filter.parent.parent:
                     filter.addLabel(topjoin.name, OBJECT)
                 elif leftprop:
-                    found = False
-                    for joincond in join.args:
-                        if isinstance(joincond.op, Filter) and joincond.op.labelFromPosition(OBJECT) == leftprop:
-                            joincond.op.addLabel(topjoin.name, OBJECT)
-                            found = True
-                    assert found, (topjoin.name, refname, leftprop, rightprop, join)
+                    success = addLabel(topjoin.name)
+                    assert success, (topjoin.name, refname, leftprop, rightprop, join)
                 topjoin.parent = None
             
         return unhandledJoins

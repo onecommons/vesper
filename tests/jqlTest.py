@@ -248,6 +248,23 @@ syntaxtests = [
 '''{* where (foo = { id = 'd' }) }''',
 
 '''{ * where foo = @<{what a ref}>}''',
+
+#XXX rename aliases better: choose user-defined names over auto-generated ones
+"{*  where (foo = ?var/2 and {id = ?var and bar = 'baz'}) }",
+
+'''
+{
+?artist,
+foo : { ?join, id },
+"blah" : [ {*} ]
+where( {
+    ?id == 'http://foaf/friend' and
+    topic_interest = ?ss and
+    <foaf:topic_interest> = ?artist.foo 
+  })
+GROUP BY foo
+}
+''',
 ]
 
 #XXX fix failing queries!
@@ -263,26 +280,6 @@ failing = [
 # throws AssertionError: pos 0 but not a Filter: <class 'jql.jqlAST.Join'>
 "{foo: {*} }", 
 
-#next two have same error:
-#    assert position is not None, 'missing label: '+ op.name
-#AssertionError: missing label: @1
-#also, rename aliases better: choose user-defined names over auto-generated ones
-
-"{*  where (foo = ?var/2 and {id = ?var and foo = 'bar'}) }",
-
-'''
-{
-?artist,
-foo : { ?join, id },
-"blah" : [ {*} ]
-where( {
-    ?id == 'http://foaf/friend' and
-    topic_interest = ?ss and
-    <foaf:topic_interest> = ?artist.foo 
-  })
-GROUP BY foo
-}
-''',
 "", #an empty query
 '''
 #just a comment
@@ -833,16 +830,7 @@ skip('''{
 
 t.group = 'follow'
 
-t("""
-{ id, 'top' : follow(id, subsumedby, true, true)
-}
-""", [{'id': 'anotherparent', 'top': None},
- {'id': 'noparents', 'top': None},
- {'id': 'parentsonly', 'top': 'noparents'},
- {'id': 'hasgrandparents3', 'top': ['noparents', 'anotherparent']},
- {'id': 'hasgrandparents2', 'top': 'noparents'},
- {'id': 'hasgrandparents1', 'top': 'noparents'}], 
- model=modelFromJson([
+graphModel = modelFromJson([
   { "id" : "noparents", 'type' : 'tag'
   },
   { "id" : "anotherparent", 'type' : 'tag'
@@ -860,7 +848,32 @@ t("""
     "subsumedby" : ["parentsonly","anotherparent"]
   }  
 ])
+
+t("""
+{ id, 'top' : follow(id, subsumedby, true, true)
+}
+""", [{'id': 'anotherparent', 'top': None},
+ {'id': 'noparents', 'top': None},
+ {'id': 'parentsonly', 'top': 'noparents'},
+ {'id': 'hasgrandparents3', 'top': ['noparents', 'anotherparent']},
+ {'id': 'hasgrandparents2', 'top': 'noparents'},
+ {'id': 'hasgrandparents1', 'top': 'noparents'}], 
+ model=graphModel
 )
+
+t("""
+{ id, 'leafs' : rfollow(id, subsumedby, true, true)
+}
+""", 
+[{'id': 'anotherparent', 'leafs': 'hasgrandparents3'},
+ {'id': 'noparents',
+  'leafs': ['hasgrandparents3', 'hasgrandparents1', 'hasgrandparents2']},
+ {'id': 'parentsonly',
+  'leafs': ['hasgrandparents3', 'hasgrandparents2', 'hasgrandparents1']},
+ {'id': 'hasgrandparents3', 'leafs': None},
+ {'id': 'hasgrandparents2', 'leafs': None},
+ {'id': 'hasgrandparents1', 'leafs': None}],
+ model=graphModel)
 
 t('''
 { ?tag, id, label, 
@@ -923,10 +936,11 @@ t( '''
  {'content': 'some more text about the commons', 'subject': 'commons'}]
 )
 
-#XXX results shouldn't be empty, should be same as above
-t( '''
+#XXX evalLabel AssertionError: missing label: @1
+#should have same result as previous query
+skip( '''
     { *
-     where (subjectof= ?tag and
+     where (subject = ?tag and
           { id = ?start and id = @commons }
           and
           {
@@ -934,7 +948,7 @@ t( '''
            }
         )
     }
-    ''',[])
+    ''')
 
 t('''
 { ?a,
@@ -1139,10 +1153,12 @@ filterModel = modelFromJson([
        'values' : ''
      },
      { 'id' : '6',
-       'values' : 1
+       'values' : 1,
+       'testint' : 1,
+       'testfloat' : 1.0       
      },
      { 'id' : '7',
-       'values' : '1'
+       'values' : '1',
      },
      { 'id' : '8',
        'values' : { 'datatype' : 'json', 'value' : '1' }
@@ -1196,8 +1212,14 @@ t('''{ id, values where values == 1 }''',
 ) 
 
 #floats are distinct from ints so this doesn't match
-#XXX do we want to do to this? JSON (and javascript) don't distinguish between them
+#XXX don't do this: JSON (and javascript) don't distinguish between them
+#and sql will automatically promote them
 t('''{ id, values where values = 1.0 }''', [])
+
+#these next two match because their complex predicates evaluated in python so 1 == 1.0
+t('''{ id, values where values = testint }''', [{'id': '6', 'values': 1}])
+
+t('''{ id, values where values = testfloat }''', [{'id': '6', 'values': 1}])
 
 t('''{ id, values where values != 1 }''',
 [{'id': '1', 'values': None},
@@ -1610,6 +1632,32 @@ where label = 'tag 1'
 ''',
 [{'attributes': {'itemlabel': 'tag 1'}, 'label': 'tag 1'}])
 
+#XXX raises  File "/_dev/rx4rdf/vesper/src/vesper/query/engine.py", line 743, in _findSubject
+#    % (subjectlabel, tupleset.columns))
+#vesper.query._query.QueryException: construct: could not find subject label "tag" in
+skip('''{
+?tag, id, 
+'attributes' : {?tag *}
+where id = @tag1
+}''',
+[{'attributes': {'id': 'tag1', 'label': 'tag 1'}, 'id': 'tag1'}]
+)
+
+#XXX returns no results because its looking for a prop named "*"
+skip('''{
+?tag, id,
+'attributes' : { ?tag.* }
+where id = @tag1
+}''')
+
+t('''{
+?tag, id, 
+'attributes' : *
+where id = @tag1
+}''',
+[{'attributes': {'id': 'tag1', 'label': 'tag 1'}, 'id': 'tag1'}]
+)
+
 t.group = 'onetomany'
 
 t(query='''
@@ -1791,45 +1839,61 @@ where {?post type = @post}
 
 t.group= 'semijoins' #(and antijoins)
 
-#XXX throws AssertionError: missing label: @1
-skip('''
+#XXX dont yet treat in as semijoins so this is being evaluated as complex cross-join 
+t('''
 {
 * 
 where (tags in { id = 'tag1' })
 }
-''')
+''',
+[{'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}]
+)
 
+#XXX wrong results: returning [] instead of post with id 1
 skip('''{
 * 
 where (tags not in { id = 'tag1' })
 }
 ''')
 
-skip('''{
+t('''{
 * 
 where (tags in { label = 'tag 1' })
 }
-''')
+''',
+[{'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}])
 
+#XXX wrong results return [] instead of post with id 1
 skip('''{
 * 
 where (tags not in { label = 'tag 1' })
 }
 ''')
 
-#XXX this is like a label evaluated as a boolean
+#afilter set is like a label evaluated as a boolean
 #which is true if it exists
 #so this should return an emty results
 #since there are no objects where {a=b and b=2}
-skip('''{* where(
-  {a=1 and b=2}
-)}''')
+t('''{
+* where {a=1 and b=2}
+}''', [])
 
-#{ { } } -- what does that mean? treat the same as { } or flag as error?
-skip('''{* where(
+#and this one should select all the objects in the store because 
+#the filter set matches objects
+t('''{
+* where { type = @post }
+}''',
+[{'id': '3', 'type': 'post'},
+ {'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'},
+ {'id': 'tag1', 'label': 'tag 1'},
+ {'id': 'tag2', 'label': 'tag 2'},
+ {'child': '3', 'id': '_:1', 'parent': '1'}]
+)
+
+#XXX { { } } -- what does that mean? treat the same as { } or flag as error?
+t('''{* where(
   {{a=1 and b=2}}
-)}''')
-
+)}''', [])
 
 #XXX test labels in property expressions
 #?foo 

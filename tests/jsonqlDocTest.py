@@ -21,9 +21,10 @@ Table Of Contents - jsonQL Reference
          anonymous objects (object as value)
     Filtering (WHERE clause)
       constant queries
-    Joins
-        object references
+    Joins    
         labels
+        filter set
+        inner joins
         maybe (outer joins)
         uncorrelated references (cross joins)
         follow() (recursive joins)
@@ -55,6 +56,20 @@ t.useSerializer = True
 ###################################
 ########### basic tests ###########
 ###################################
+
+'''
+XXX
+The processing model for JSONql is closely follows the relational algebra of SQL. Abstractly, a JSONql query is applied to collection of JSON objects that match `pjson` semantics: First, any specified :ref:`filters <filter>` are used to select objects in the store. Then each object is projected onto a row whose columns consist of properties of the object that were referenced by query. If a query has multiple filters, the resulting rows will be joined together join conditions or cartesian product if the. 
+
+After this, the "construct" phase
+
+multi-valued...
+
+terminology: 
+
+construct
+rows
+'''
 
 t % '''
 jsonQL Reference 
@@ -114,12 +129,13 @@ t.model = mainmodel = modelFromJson([
 t % printmodel(t.model)
 
 t % '''
+
 Basic Grammar
 =============
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
-A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
+XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
 
 
 .. productionlist::
@@ -137,7 +153,7 @@ A JSONQL consists of a pattern that describes the JSON output. It can be a dicti
                  :    `expression` [`query_criteria`] 
                  : ")"
  objectitem      : | "ID" | "*" | ["["] ["omitnull" | "maybe"] `propertyname` ["]"]
- propertypair    : ["omitnull"] `expression` ":" (`propertyvalue` | [`propertyvalue`])
+ propertypair    : ["omitnull"] `expression` ":" ["["] `propertyvalue` ["]"]
  propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
@@ -153,7 +169,8 @@ A JSONQL consists of a pattern that describes the JSON output. It can be a dicti
                  : ["OFFSET" number]
                  : ["DEPTH" number]
                  : ["MERGEALL"]
-                 : ["NAMEMAP" "=" `jsondict`]
+                 : ["NAMEMAP" "=" `namemapdict`]
+ namemapdict     : "{" [((NAME | STRING) ":" (STRING | `namemapdict`) ","?)+] "}"
 
 .. productionlist::                 
  expression : `expression` "and" `expression`
@@ -161,22 +178,20 @@ A JSONQL consists of a pattern that describes the JSON output. It can be a dicti
             : | "maybe" `expression`
             : | "not" `expression`
             : | `expression` `operator` `expression`
-            : | `join`
+            : | `filterset`
             : | `atom`
             : | "(" `expression` ")"
  operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
             : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
- join       : "{" [`label`] `expression` "}"
- atom       : `label` | `bindvar` | `constant` | `typedconstant`
-            : | `functioncall` | `propertyreference` | `objectreference`
+ filterset : "{" [`label`] `expression` "}"
+ atom       : `label` | `bindvar` | `constant` | `objectreference`
+            : | `functioncall` | `propertyreference`
  label      : "?"NAME
  bindvar    : ":"NAME
  objectreference : "@"NAME | "@<" CHAR+ ">"
  propertyreference : [`label`"."]`propertyname`["."`propertyname`]+
  functioncall : NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
  constant : STRING | NUMBER | "true" | "false" | "null"
- typedconstant : (STRING | NUMBER) "^^" `datatypename`
- datatypename  : NAME | "<" CHAR+ ">"
 
 Construct Patterns
 ==================
@@ -317,16 +332,6 @@ t("{*}", [{'id': 'tag:nonsense', 'label': 'Nonsense', 'type': 'tag'},
   'type': 'tag'}]
 )
 
-t.group = 'lists'
-
-t%'''
-Multiple values and lists
--------------------------
-* list construction -- multiple values are represented as lists
-
-Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
-does inserted a property that already exists on an object might add a new value or replace the current one.
-'''
 
 listModel = modelFromJson([
 { "id" : "1",
@@ -346,12 +351,6 @@ listModel = modelFromJson([
   "mixed" : None
 }
 ])
-#print listModel.getStatements()
-
-t("{ id, a_list }",
-[{'a_list': ['a', 'b', 'c', None], 'id': '1'}]
-,model = listModel
-)
 
 t % '''
 "forcelist" syntax
@@ -434,8 +433,8 @@ The above examples illustrate using MAYBE and OMITNULL on appreviated properties
 Specifically `maybe property` is an abbreviation for  `'property' : maybe property`
 and `omitnull property` is an abbreviation for `omitnull 'property' : maybe property`.
 
-`omitnull` must appear before the property name and takes effect when any property value expression returns null.
-For example, here's a silly query that has a "nullproperty" property with a constant value
+`omitnull` must appear before the property name and omits the property whenever its value evaluates to null.
+For example, here's a silly query that specifies a "nullproperty" property with a constant value
 but it will never be included in the result because of the "omitnull".
 '''
 
@@ -465,14 +464,90 @@ t%'''
 Sub-queries (nested constructs)
 -------------------------------
 
-The value of a property or array item can be a :token:`constructobject` or a :token:`constructarray` instead of an :ref:`expression`.
-If the nested query references an object in the outer query (via `labels`) it will be correlated with the outer query.
-Otherwise, it will be evaluated on each result, so the result set will equivalent to a cross-join.
+The value of a property or array item can be another query instead of an :ref:`expression`. These sub-query can construct objects or arrays (:token:`constructobject` or a :token:`constructarray`) -- :token:`constructvalue` queries are not allowed as sub-queries.
+
+If the sub-query doesn't have a :ref:`filter` associated with it, the sub-query will be  evaluated in the context of the parent object. For example:
 '''
 
 t%'''
-Datatypes
+If the sub-query's filter has references to the outer query (via :ref:`labels`) the filter will be joined with the outer query and it will be evaluated using the rows from the resulting join. For example:
+'''
+
+t%'''
+Otherwise, the sub-query will be evaluated independently for each result of the outer query. For example:
+'''
+
+t%'''
+Data Types
 =========
+
+A jsonQL implementation supports at least the data types defined by JSON and may support additional data types if the underlying datastore supports them.
+
+The JSON data types are: (unicode) strings, (floating point) numbers, booleans (true and false) and null. Limits such max string length or numeric range and precision and semantics such as numeric overflow behavior are not specified by jsonQL, they will be dependent on the underlying datastore and implementation language. Most database support richer basic basic data types, for example integer, floating point and decimal, the implementation is responsible for appropriate promotion. 
+
+The values of JSON data types can be expressed in a query as literals that match the JSON syntax. Datastore-specific data type values can be expressed using datastore-specific query functions which construct or convert its arguments, for example, date functions. 
+
+They will be serialized as pjson. If the data type is compatible with JSON type it may converted (for example, from exact precision decimal type to JSON's floating point number) depending on the fidelity needed. In addition, if a :ref:`NAMEMAP` is specified in the query customize the serialization. 
+
+Implicit type conversion, by default, is conversion is lenient [example] but the underlying datastore might be string. 
+
+.. question: should there by a strict mode so implementation matches underlying store?
+
+'''
+
+t%'''
+null handling
+-------------
+
+Unlike sql, null value are treated as distinct values, i.e. "null = null" evaluates to true and "null != null" evaluates to false. Operators and functions generally follow SQL: if one of the operands or arguments is null the result is null. 
+
+footnote: Follow SQL for functions and operators: systems that don't follow these null semantics, generally don't support functions (most NO-SQL) or don't support nulls at all (SPARQL). 
+Also, unlike SQL null equality, these semantics is generally intuitive.
+
+Aggregate functions, for example, `count()` ignores null values.  
+When using the :ref:`maybe` operator, It is not possible to distinguish between the absence of a property and property with null value.
+'''
+
+t%'''
+psuedo-value types
+-----------------
+
+matches value in the list not the list itself. The data-store may support data types that is serialized as a JSON array, the semantics will not apply. [Example]
+
+order may not be preserved.
+
+Objects without (public) unique identifiers can be treated as value types; 
+they may not be queried. Note the implementation may store these as object and even provide (for example, forUpdate).
+
+'''
+
+
+
+#mysql's null-safe equal: <=>
+#postgres null-safe not equal: IS DISTINCT FROM
+
+
+t.group = 'lists'
+
+t%'''
+Multiple values and lists
+-------------------------
+* list construction -- multiple values are represented as lists
+
+Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
+does inserted a property that already exists on an object might add a new value or replace the current one.
+'''
+
+t("{ id, a_list }",
+[{'a_list': ['a', 'b', 'c', None], 'id': '1'}]
+,model = listModel
+)
+
+t%'''
+object references and anonymous objects
+---------------------------------------
+
+If an object is anonymous it will be expanded, otherwise an object reference object will be output. This behavior can be overridden using the `DEPTH` directive, which will force object references to be expanded, even if objects are duplicated. 
 
 '''
 
@@ -480,34 +555,52 @@ t%'''
 Filtering (the WHERE clause)
 ==============================
 
-* filter select which objects should appear in the result set. In addition, if the construct clause references a property whose 
+The `where` clause select which objects should appear in the result set. 
+
+In addition, if the construct clause references a property whose 
 values are filtered, only those filters will be included in the result.
+
+
 In other words, results are grouped by the object id. 
 
 value = 1 and value = 2
-value = 1 or value = 2
-value > 3
-substring(value) = 3
-values includes all values
+value in (1, 2)
 
 * property references in construct
 * matching lists 
 * matching datatypes
-* no distinction between 
 '''
 
 t%'''
-joins
-=====
+all or nothing queries
+----------------------
 
-object references
------------------
+'''
 
-When a filter expression is surrounded by braces (`{` and `}`) the filter is applied 
-separately from the rest of the expression, and is evaluated as an object reference
-to the object that met that criteria. These object references have the same semantics 
-as label references. The object references can optionally be labeled and are typically 
-used to create joins.
+t.group = 'joins'
+t.model = joinModel = modelFromJson([
+{
+'id' : 'post1',
+'type' : 'post',
+'contents' : 'a post'
+},
+{
+'id' : 'comment1',
+'parent' : '@post1',
+'type' : 'comment',
+'contents' : 'a comment'
+},
+{
+'id' : 'comment2',
+'parent' : '@comment1',
+'type' : 'comment',
+ 'contents' : 'a reply'
+}
+])
+
+t%'''
+Object References and Joins
+===========================
 
 labels
 ------
@@ -522,17 +615,44 @@ This is example, value of the contains property will be any object that
 '''
 
 t('''
-    {
-    ?parent, 
+    { ?post 
     *,
-    'contains' : { * where (subsumedby = ?parent)}
+    'comments' : { * where parent = ?post}
+    where type = 'post'
     }
 ''')
 
+t%'''
+filter sets
+--------------
+
+When a filter expression is surrounded by braces (`{` and `}`) the filter is applied 
+separately from the rest of the expression, and is evaluated as an object reference
+to the object that met that criteria. These object references have the same semantics 
+as label references. The object references can optionally be labeled and are typically 
+used to create joins.
+
+Note that a filter expression like `{id = ?foo}` is logically equivalent to labeling the group `?foo`.
 '''
-You can also declare object name inside  
-`{ id = ?foo }`
-'''
+
+t('''
+{ * 
+where type = 'comment' and parent = { type = 'post'} 
+}
+''')
+
+t('''
+{ * 
+where type = 'comment' and parent = ?post and {?post type = 'post'} 
+}
+''')
+
+t('''
+{ * 
+where type = 'comment' and parent = ?post and { id = ?post and type = 'post'} 
+}
+''')
+
 #XXX document:
 # When evaluating, join expressions are replaced with a label reference to that join.
 # These labels evaluate to the object id of the object except when evaluating as a boolean, 
@@ -541,35 +661,63 @@ You can also declare object name inside
 #Note that following these rules, a join expression at the root of the where filter expression 
 #(e.g. "where ({ a=1 })") evaluates to true if there exists an object with "a = 1"
 
-t%"find all tag, include child tags in result"
-t('''
-    {
-    ?parent, 
+t%'''
+joins
+------
+
+
+
+'''
+
+t%'''
+`maybe` expressions (outer joins)
+---------------------------------
+
+* no distinction between existence or null value
+'''
+
+t%'''
+uncorrelated references (cross joins)
+-------------------------------------
+'''
+
+skip%'''
+the follow() function (recursive joins)
+---------------------------------------
+'''
+
+#this is broken until complex joins are supported
+skip('''
+    { ?post 
     *,
-    'contains' : { where(subsumedby = ?parent)}
+    'comments' : {* where id in rfollow(?post, parent)}
+    where type = 'post'
     }
-''')    
-
-t%'''
-`maybe` and outer joins
------------------------
-'''
-
-t%'''
-object references and anonymous objects
-=======================================
-
-If an object is anonymous it will be expanded, otherwise an object reference object will be output. This behavior can be overridden using the `DEPTH` directive, which will force object references to be expanded, even if objects are duplicated. 
-
-'''
+''')
 
 t % '''
 Expressions
 ===========
 
+Expressions can be evaluated in two contexts: when they appear inside the where clause and when they appear inside the construction
+WHAT ABOUT: order by, group by ?
+
 If an expression contains a property reference whose value a list and the expression doesn't contain any :ref:`aggregate functions', the expression will be evaluated for each item in that list, resulting in a list. If the expression contains more than one property reference, the expression will be evaluated on each tuple obtained from a cartesian product of the list values, using an order based on the depth-first appearance of the property references.
 
-XXX examples
+Operator Precedence
+-------------------
+
+Type coercion
+-------------
+
+Built-in functions
+------------------
+'''
+
+t%'''
+Sorting the results: ORDER BY 
+=============================
+
 '''
 
 t%'''
@@ -587,9 +735,41 @@ count, min, max, sum, avg follow standard SQL semantics with regard to null hand
 '''
 
 t%'''
+output modifiers
+================
+
+MERGEALL
+--------
+
+DEPTH
+-----
+
+DEPTH may result in duplicate objects being constructed if there are multiple reference to the same object, including circular references [hmmm... better not choose a arbitrary to number to expand all like DEPTH 1000].
+Objects no properties are not serialized as objects, they will remain an object reference.
+
+Note: expand a particular object, use ... or use DEPTH in a nested construct.
+
+LIMIT and OFFSET
+----------------
+
+LIMIT and OFFSET are applied to the final resultset, after any GROUP BY and ORDER BY operations, but before the MERGEALL operation.
+'''
+
+t%'''
 Bind variables
 ==============
 '''
+
+t%'''
+NAMEMAP
+========
+
+The value of a NAMEMAP declaration matches pjson's namemap and is used both when parsing the query and when serializing the resultset. 
+
+The namemap applies to the construct pattern it appears in and in any nested constructs. 
+If a nested construct has a NAMEMAP described, the effective namemap is the merger of this namemap with the effective parent namemap, as specified for pjson.
+'''
+#XXX Renaming properties are only used when serializing
 
 t.group = 'footnotes'
 t%'''

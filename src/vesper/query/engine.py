@@ -265,7 +265,7 @@ class QueryFuncs(object):
         self.addFunc('ltrim', lambda a,chars=None: a.lstrip(chars), StringType, checkForNulls=1)
         self.addFunc('rtrim', lambda a,chars=None: a.rstrip(chars), StringType, checkForNulls=1)
 
-def followFunc(context, startid, propname=None, excludeInitial=False, 
+def followFunc(reverse, context, startid, propname=None, excludeInitial=False,
                                                         edgesOnly=False):
     '''
     Starting with the given id, follow the given property
@@ -288,9 +288,13 @@ def followFunc(context, startid, propname=None, excludeInitial=False,
                     #this result allowing follow() to be used as a property expression.
                     yield MutableTupleset(columns, [visitId] )
             found = not edgesOnly
-            for row in context.initialModel.filter({0:visitId, 1:propname}):
+            if reverse:
+                from_ = 2; to = 0
+            else:
+                from_ = 0; to = 2
+            for row in context.initialModel.filter({ from_ :visitId, 1:propname}):
                 found = True
-                obj = row[2]                
+                obj = row[to]
                 if obj not in tovisit:
                     if not edgesOnly: yield MutableTupleset(columns, [obj])
                     tovisit.append(obj)
@@ -484,7 +488,10 @@ def _aggCount(context, x, y):
 class SimpleQueryEngine(object):
     
     queryFunctions = QueryFuncs() 
-    queryFunctions.addFunc('follow', followFunc, Tupleset, followOpFactory, needsContext=True)
+    queryFunctions.addFunc('follow', lambda *args: followFunc(False, *args),
+                           Tupleset, followOpFactory, needsContext=True)
+    queryFunctions.addFunc('rfollow', lambda *args: followFunc(True, *args),
+                           Tupleset, followOpFactory, needsContext=True)
     queryFunctions.addFunc('isbnode', isBnode, BooleanType, needsContext=True)
     queryFunctions.addFunc('if', ifFunc, ObjectType, lazy=True)
     queryFunctions.addFunc('isref', lambda a: isinstance(a, base.ResourceUri), BooleanType)
@@ -1104,10 +1111,11 @@ class SimpleQueryEngine(object):
             current = self._groupby(result, joincond,debug=context.debug)
 
     def _evalJoin(self, op, context):
-        #XXX context.currentTupleset isn't set when returned
         args = sorted(op.args, key=lambda arg:
             #put non-inner joins and filters with complex predicates last
-            (arg.join != 'i', getattr(arg.op, 'complexPredicates', False),
+            #XXX: we should do semantic ordering earlier so it shows up in the ast
+            #and maybe mark each group so we can do this cost-based ordering per group
+            (getattr(arg.op, 'complexPredicates', False), arg.join != 'i',
                                                 arg.op.cost(self, context)) )
 
         tmpop = None
@@ -1140,7 +1148,12 @@ class SimpleQueryEngine(object):
             #if isinstance(joincond.op, jqlAST.Filter) and not joincond.op.args and args:
                 #skipping empty filter but this break stuff
                 #joincond = args.pop(0)
-            result = joincond.op.evaluate(self, context)
+            if previous and isinstance(joincond.op, jqlAST.Filter) and joincond.op.complexPredicates:
+                fcontext = copy.copy(context)
+                fcontext.currentTupleset = previous
+            else:
+                fcontext = context
+            result = joincond.op.evaluate(self, fcontext)
             assert isinstance(result, Tupleset), repr(result) + repr(joincond.op)
             #group by the join key so that it is first column in the result
             #(except when its a cross-join, which has no key).
