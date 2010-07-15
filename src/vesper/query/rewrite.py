@@ -85,8 +85,6 @@ class _ParseState(object):
                             if not prop.nameFunc or not child.isDescendentOf(prop.nameFunc):
                                 prop.projects.append(child)
                             
-                            if prop.ifEmpty == PropShape.omit:
-                                child.maybe = True                                              
                             cchild = copy.copy( child )
                             cchild._parent = None
                             cchild.fromConstruct = True
@@ -104,13 +102,7 @@ class _ParseState(object):
                             left = And(left, child)                        
                     elif isinstance(child, AnyFuncOp) and child.isAggregate():
                         construct.hasAggFunc = prop.hasAggFunc = True
-                #if isinstance(child, ResourceSetOp):
-                #    print '!!!child', child
-                #treat ommittable properties as outer joins:
-                if prop.ifEmpty == PropShape.omit:
-                    for a in prop.args:
-                        a.maybe = True
-        
+
         if groupby and not isinstance(groupby.args[0], Label):
             project = copy.copy(groupby.args[0])
             project._parent = None
@@ -797,11 +789,11 @@ def removeDuplicateConstructFilters(root):
                 constructJCs = constructFilters.get(propertyName)
                 while constructJCs:
                     jc = constructJCs.pop()
-                    jc.parent.removeArg(jc)
-            
+                    jc.parent = None                    
+
             #look at the left-over construct filters and remove any duplicates
             #per property name
             for constructJCs in constructFilters.values():
                 while len(constructJCs) > 1:
                     jc = constructJCs.pop()
-                    jc.parent.removeArg(jc)
+                    jc.parent = None

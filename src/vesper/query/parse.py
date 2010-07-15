@@ -550,10 +550,9 @@ def p_constructitem3(p):
 
 def p_constructitem3b(p):
     '''
-    constructitem : OMITNULL expression COLON dictvalue
+    constructitem : expression COLON OMITNULL dictvalue
     '''
-    #omitnull implies maybe, see rewrite.joinFromConstruct()
-    p[0] = _makeConstructProp(p[2], p[4], False, True, True)
+    p[0] = _makeConstructProp(p[1], p[4], False, True, True)
 
 def p_constructitem4(p):
     '''
@@ -565,7 +564,6 @@ def p_constructitem4b(p):
     '''
     constructitem : OMITNULL barecolumnref
     '''
-    #omitnull implies maybe, see rewrite.joinFromConstruct()
     p[0] = _makeConstructProp(p[2], Project(p[2]), True, False, True)
 
 def p_constructitem4c(p):
@@ -575,6 +573,14 @@ def p_constructitem4c(p):
     op = Project(p[2])
     op.maybe = True
     p[0] = _makeConstructProp(p[2], op, True, False, False)
+
+def p_constructitem4d(p):
+    '''
+    constructitem : OMITNULL MAYBE barecolumnref
+    '''
+    op = Project(p[3])
+    op.maybe = True
+    p[0] = _makeConstructProp(p[3], op, True, False, True)
 
 def p_constructitem5(p): 
     '''
@@ -586,7 +592,6 @@ def p_constructitem5b(p):
     '''
     constructitem : LBRACKET OMITNULL barecolumnref RBRACKET
     '''
-    #omitnull implies maybe, see rewrite.joinFromConstruct()
     p[0] = _makeConstructProp(p[3], T.forcelist(Project(p[3])), True, False, True)
 
 def p_constructitem5c(p): 
@@ -596,6 +601,14 @@ def p_constructitem5c(p):
     op = Project(p[3])
     op.maybe = True
     p[0] = _makeConstructProp(p[3], T.forcelist(op), True, False, False)
+
+def p_constructitem5d(p):
+    '''
+    constructitem : LBRACKET OMITNULL MAYBE barecolumnref RBRACKET
+    '''
+    op = Project(p[4])
+    op.maybe = True
+    p[0] = _makeConstructProp(p[4], T.forcelist(op), True, False, True)
 
 #XXX
 """
