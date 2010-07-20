@@ -538,26 +538,8 @@ t("[null=null, null!=null, null=0, null='', 1+null, trim(null), null > 0, null <
 
 t("{id, value where value = null}", [{'id':'1', "value" : None}])
 
-#what about: {id, maybe values where values = null} -- will this match objects without a "value" property? yes
-
-#hmmm "maybe" operates on the whole expression -- does that make sense?
-
-skip("{id, maybe value where value = null}", 
-[{'id':'1', "value" : None}, {'id':'4', "value" : None}])
-
 t("{id, value where value != null}",
 [{'id': '3', 'value': True}, {'id': '2', 'value': ''}])
-
-t("{id, maybe value where value != null}",
-[{'id': '3', 'value': True}, {'id': '2', 'value': ''}])
-
-#** what about: {id, maybe value where value = 1} ? should it match an object without a "value" prop? no, not according to sql -- where clause is applied after join.
-
-t("{id, maybe value where value = ''}",
-[{ "id" : "2",
-  "value" : ""
-}]
-)
 
 t%'''
 pseudo-value types
@@ -725,22 +707,118 @@ t%'''
 `maybe` expressions (outer joins)
 ---------------------------------
 
+The "MAYBE" operator indicates that the expression it modifies is an optional part of the filter set. 
+MAYBE can modify property references and join conditions; it is an error to modify any other expression.
+When "maybe" modifies a property reference it indicates that the existence of a property not required. When "maybe" modifies a join condition (an expression that joins two filter sets together) if the condition does not match any objects, any references to the missing objects' id or properties will replaced with nulls (this is know as an "outer join"). 
 '''
 
-#use cases:
-# maybe foo -- joincond 'l' on prop, don't combine
-# maybe ?foo = blah (simple join) -- joincond '1'
-# maybe ?foo = ?bar (alias) -- instead joincond 'l' on SUBJECT 
-# maybe ?label / maybe { ... } -- might be cross-join, need a "lx" join type?
-#useless: maybe blah = 1 -- instead do outer join on referenced props
-#useless: maybe ?label = 1 -- error for now? 
-#really useless maybe :var = 1
-#possibly justified: maybe func-with-side-effect)()
+t%'''
+For example, object don't
 
-#on any join expression sets the jointype to 'l' or 'lx'
-#on any filter expression, finds project references and set those to 'l'; 
-# Project filter needs to be separate from expression
-# can't maybe alias, replace with join condition
+#property reference in filter prop = maybe ?label and ?label.type = 'type'
+
+#can also appear in the construction: { maybe foo}
+
+'''
+
+t('''
+{
+prop1, maybe prop2
+}
+''')
+
+'''
+One `maybe` operator is enough -- the "non-maybe" reference doesn't override that.
+
+#example: multiple references
+
+#note precedence: maybe prop = null will give error "maybe can not be used on a filter that is not a join condition", need to use (maybe prop) = null
+'''
+
+'''
+outer join example: maybe foo = ?bar
+
+Note that maybe foo = ?bar still requires 'foo' property to exist: the precedence rules imply maybe (foo = ?bar). To make the foo property optional, use maybe (maybe foo) = ?bar or, more readably, maybe foo and maybe foo = ?bar
+
+'''
+
+'''
+A filter expression that references an MAYBE-modified property will evaluated with null as the value for the missing property. That means an expression like "value = null" will match objects that don't have that property. For example:
+'''
+
+t("{id, maybe value where value = null}", 
+[{'id':'1', "value" : None}, {'id':'4', "value" : None}]
+,model=nullModel)
+
+'''
+Conversely, a filter expression that does not match null value on a MAYBE-modified property reference are not useful since the filter not match any object that don't have that property. For example:
+'''
+
+t("{id, maybe value where value != null}",
+[{'id': '3', 'value': True}, {'id': '2', 'value': ''}]
+,model=nullModel)
+
+'or:'
+
+t("{id, maybe value where value = ''}",
+[{ "id" : "2",
+  "value" : ""
+}]
+,model=nullModel)
+
+joinModel = modelFromJson([
+{
+'id' : '1',
+'foo' : 'hello'
+},
+{
+'id' : '2',
+'bar' : 'test'
+},
+{
+'id' : '1',
+'foo' : 'hello'
+},
+])
+
+#filter
+t('''
+{
+prop1, prop2 where (maybe prop2 = 'foo')
+}
+''', ast='error')
+
+#filter
+t('''
+{
+prop1, prop2, prop3 where maybe prop2 = prop3
+}
+''', ast='error')
+
+#what prop2 = null and prop3 doesn't exist? match on that object? yes
+t('''
+{
+prop1, prop2, prop3 where prop2 = maybe prop3
+}
+''')
+
+#XXX allow projects like ?blah.prop3 as an abbreviated prop?
+skip('''
+{
+prop1, prop2, ?blah.prop3 where maybe { ?blah foo = 1 and bar = 2 }
+}
+''')
+
+#XXX the use of maybe here doesn't make sense, should trigger error 
+skip('''{ * where 
+ maybe {?a foo = 1} and maybe {?b bar = 2} and ?a = ?b
+}''')
+
+'''
+Design note: maybe on a filter that isn't a join condition is useless because that expression will match every object. The only possible example I could think of was be a filter had some sort of side effect (e.g. a function call) but don't think its worth the trouble to support that. 
+
+jsonql doesn't currently allow MAYBE to operate on a filter-set or on a label but allowing this would enable something that isn't possible now: the ability to do an outer join on uncorrelated filter-sets. But full support of that syntax would require support for right outer and full outer joins, which isn't desirable.
+'''
 
 t%'''
 uncorrelated references (cross joins)

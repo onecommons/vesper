@@ -683,8 +683,14 @@ class SimpleQueryEngine(object):
         context.projectValues = projectValues
         if not listVals:
             return flatten(op.evaluate(self, context), flattenTypes=Tupleset)
-        
+
         v = []
+        #alternative idea: instead of product zip up lists, error if unequal lengths
+        #length = len(listVals[0])
+        #if not all(len(l) == length for l in listVals):
+        #    raise QueryException('Expression references multiple lists of unequal lengths')
+
+        #for pv in itertools.izip(*listVals):
         for pv in product(*listVals):
             context.projectValues.update( dict(zip(listNames, pv)) )
             v.append( flatten(op.evaluate(self, context), flattenTypes=Tupleset) )

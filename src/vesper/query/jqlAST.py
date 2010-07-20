@@ -144,13 +144,15 @@ class QueryOp(object):
         return indent
 
     def _getExtraReprArgs(self, indent):
+        args = ''
         if self.name is not None:
-            return repr(self.name)
-        else:
-            return ''
+            args = repr(self.name)
+        if self.maybe:
+            if args: args += ','
+            args += 'maybe=True'
+        return args
 
     def __repr__(self):
-        #XXX need to include self.maybe if True
         if self.args:
             self._validateArgs()
 
@@ -274,6 +276,7 @@ class ResourceSetOp(QueryOp):
         self.args = []
         self.labels = []
         self.name = kw.get('name')
+        self.maybe = kw.get('maybe', False)
         for a in args:
             self.appendArg(a)
 
@@ -309,10 +312,12 @@ class ResourceSetOp(QueryOp):
         #raise QueryException('unable to add label ' + label + ' to empty join: %s' % self)
 
     def _getExtraReprArgs(self, indent):
+        args = ''
         if self.name is not None:
-            return 'name='+repr(self.name)
-        else:
-            return ''
+            args += 'name='+repr(self.name)
+        if self.maybe:
+            args += 'maybe=True'
+        return args
 
 class Join(ResourceSetOp):
     '''
@@ -508,6 +513,12 @@ class Filter(QueryOp):
                 self.labels.append( (label+':type', OBJTYPE_POS) )
                 self.labels.append( (label+':pos', LIST_POS) )
 
+    def removeLabel(self, label, pos):
+        self.labels.remove( (label,pos) )
+        if pos == OBJECT:
+            self.labels.remove( (label+':type', OBJTYPE_POS) )
+            self.labels.remove( (label+':pos', LIST_POS) )
+
     def labelFromPosition(self, pos):
         for (name, p) in self.labels:
             if p == pos:
@@ -521,6 +532,7 @@ class Filter(QueryOp):
         self.labels = [ (resolve(name), p) for (name, p) in self.labels]
 
     def _getExtraReprArgs(self, indent):
+        assert not self.maybe
         args = ''
         kws = {}
         for (name, pos) in self.labels:
@@ -537,21 +549,23 @@ class Filter(QueryOp):
 
 class Label(QueryOp):
 
-    def __init__(self, name):
+    def __init__(self, name, maybe=False):
         self.name = name
+        self.maybe = maybe
 
     def isIndependent(self, exclude=None):
         return False
 
 class BindVar(QueryOp):
-    def __init__(self, name):
+    def __init__(self, name, maybe=False):
         self.name = name
+        self.maybe = maybe
 
 class Constant(QueryOp):
     '''
     '''
 
-    def __init__(self, value, datatype = None):
+    def __init__(self, value, datatype = None, maybe=False):
         if not isinstance( value, QueryOpTypes):
             #coerce
             if isinstance(value, str):
@@ -562,6 +576,7 @@ class Constant(QueryOp):
                 value = bool(value)
         self.value = value
         self.datatype = datatype #not used
+        self.maybe = maybe
 
     def getType(self):
         if isinstance(self.value, QueryOpTypes):
@@ -584,6 +599,8 @@ class Constant(QueryOp):
         args = repr(self.value)
         if self.datatype:
             args += ','+repr(self.datatype)
+        if self.maybe:
+            args += ',maybe=True'
         return indent + self.__class__.__name__ + "("+args+")"
 
     @classmethod
@@ -600,11 +617,12 @@ class PropString(Constant):
 
 class AnyFuncOp(QueryOp):
 
-    def __init__(self, key=(), metadata=None, *args):
+    def __init__(self, key=(), metadata=None, *args, **kw):
         self.name = key
         self.args = []
         for a in args:
             self.appendArg(a)
+        self.maybe = kw.get('maybe', False)
         self.metadata = metadata or self.defaultMetadata
 
     def getType(self):
@@ -638,6 +656,8 @@ class AnyFuncOp(QueryOp):
             argsRepr = ','+ ','.join([repr(a) for a in self.args])
         else:
             argsRepr = ''
+        if self.maybe:
+            argsRepr += ',maybe=True'
         indent = self.getReprIndent()
         return indent+ 'QueryOp.functions.getOp('+str(self.name) + argsRepr + ')'
 
@@ -654,10 +674,11 @@ class BooleanFuncOp(AnyFuncOp):
         return BooleanType
 
 class BooleanOp(QueryOp):
-    def __init__(self, *args):
+    def __init__(self, *args, **kw):
         self.args = []
         for a in args:
             self.appendArg(a)
+        self.maybe = kw.get('maybe', False)
 
     def getType(self):
         return BooleanType
@@ -740,13 +761,14 @@ AnyFuncOp.defaultMetadata = QueryFuncMetadata(None)
 
 class Project(QueryOp):      
 
-    def __init__(self, fields, var=None, constructRefs = None):
+    def __init__(self, fields, var=None, constructRefs = None, maybe=False):
         self.varref = var 
         if not isinstance(fields, list):
             self.fields = [ fields ]
         else:
             self.fields = fields
-        self.constructRefs = constructRefs #expand references to objects        
+        self.constructRefs = constructRefs #expand references to objects
+        self.maybe = maybe
 
     name = property(lambda self: self.fields[-1]) #name or '*'
     
@@ -771,10 +793,10 @@ class Project(QueryOp):
     def __repr__(self):
         indent = self.getReprIndent()
         return (indent+"Project(" + repr(self.fields) + ','+repr(self.varref)+
-                ','+repr(self.constructRefs) +')' )
+                ','+repr(self.constructRefs)+','+ repr(self.maybe) +')' )
 
 class PropShape(object):
-    omit = 'omit' #when MAYBE()
+    omit = 'omit'
     usenull= 'usenull'
     uselist = 'uselist' #when [] specified
     nolist = 'nolist'

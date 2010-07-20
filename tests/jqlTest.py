@@ -1007,6 +1007,89 @@ where (type = @Tag and not not subsumedby)
  {'id': 'rhizome', 'subsumedby': 'projects', 'type': 'Tag'}]
 )
 
+t.group = 'aliases'
+
+t.model = modelFromJson([
+ { 
+   'id' : '1', 
+   'prop1' : 1, 
+   'prop2' : 1, 
+ },
+ { 
+   'id' : '2',
+   'prop1' : 2, 
+   'prop2' : 2, 
+ }, 
+])
+
+t('''
+{
+?a id,
+prop1,
+'prop2' : ?b.prop2
+where ?a = ?b
+}
+''',
+[{'id': '1', 'prop1': 1, 'prop2': 1}, {'id': '2', 'prop1': 2, 'prop2': 2}])
+
+#XXX this triggers a useless cross join because the primary object is unrelated to ?a/?b
+#is that the best behavior? (at least issue warning?)
+t('''{ * where 
+ {?a prop1 = 1} and {?b prop2 = 1} and ?a = ?b
+}''',
+[{'id': '1', 'prop1': 1, 'prop2': 1}, {'id': '2', 'prop1': 2, 'prop2': 2}]
+)
+
+t('''{ ?a * where 
+ {?a prop1 = 1} and {?b prop2 = 1} and ?a = ?b
+}''',
+[{'id': '1', 'prop1': 1, 'prop2': 1}]
+)
+
+#this should be an error, its as useless a "maybe foo = 1"
+t('''
+{
+?a id,
+prop1,
+'prop2' : ?b.prop2
+where maybe ?a = ?b
+}
+''', ast='error')
+
+#XXX maybe { ... } should be treated as an error
+#maybe has no effect since nothing joins with ?a 
+skip('''
+{
+?a id, 
+prop1,
+'prop2' : ?b.prop2
+where maybe {?a foo = bar}
+}
+''', ast='error')
+
+#same as prior query
+skip('''
+{
+?a id, 
+prop1,
+'prop2' : ?b.prop2
+where maybe {?b foo = bar} and ?a = ?b 
+}
+''', ast='error')
+
+#the maybe ?b implies outer join on prop1 = ?c
+#and it applies to all filters including prop1 = 1
+skip('''
+{
+?a
+#this look relatively inuitive:
+#where maybe {?b foo = 'bar' and ?a.prop1 = id } and ?b = ?c #and prop1 = ?c
+#but the following looks like it might match an ?a with prop1 = null when not ?c and not match an ?a with a different value when not ?c:
+where maybe {?b foo = 'bar' } and ?b = ?c and prop1 = ?c
+}
+''')
+
+
 #XXX test circularity
 t.group = 'depth'
 t('''{*
@@ -1467,12 +1550,53 @@ exclude(*) [when]
 
 t.group = 'outer'
 
-#XXX join from foo property masks outer join 
-skip('''{
-    foo 
-    where(maybe foo = 1)
+t('''{
+    id, maybe foo 
+    where(foo = @bar)
     }
-''')
+''',
+[{'foo': 'bar', 'id': '_:j:e:object:1:3'}])
+
+#this should be an error: 'maybe can not be used on a filter that is not a join condition'
+t('''
+{ * from maybe upper(foo) = 'HELLO' }
+''', ast='error')
+
+#this should be an error: 'maybe can not be used on a filter that is not a join condition'
+t('''{
+    id, foo 
+    where maybe foo = @bar 
+    }
+''', ast='error')
+
+#this should be an error: 'maybe can not be used on a filter that is not a join condition'
+t('''{
+    id, foo 
+    where maybe foo = null 
+}''', ast='error')
+
+#matches all expect id #3 which has foo = bar
+allExcept3 = [['_:j:e:list:1:1', None],
+ ['_:j:e:list:1:2', None],
+ {'foo': None, 'id': '1'},
+ {'foo': None, 'id': '2'},
+ ['_:j:e:list:2:6', None],
+ ['_:j:e:list:2:4', None],
+ ['_:j:e:list:2:5', None]]
+ 
+t('''{
+    id, foo 
+    where 
+    maybe foo and foo = null
+    }
+''', allExcept3)
+
+t('''{
+    id, foo 
+    where     
+    (maybe foo) = null
+    }
+''', allExcept3)
 
 t.model = modelFromJson([
         { "label": "tag 1", 'id': 'tag1'},
@@ -1490,10 +1614,20 @@ skip('''
 }
 ''', [{'tags': 'tag1'}])
 
+#maybe tags = ?tag doesn't necessary imply the property is optional
+#so the standalone tags reference filters out the other objects
 t('''
 {   id, 
     'tags' : {id where (id=?tag)}
-    where (maybe tags = ?tag)
+    where tags and maybe tags = ?tag
+}
+''',
+[{'id': '2', 'tags': {'id': 'tag1'}}])
+
+t('''
+{   id, 
+    'tags' : {id where (id=?tag)}
+    where maybe tags = ?tag
 }
 ''',
 [{'id': '3', 'tags': None},
@@ -1515,7 +1649,6 @@ t('''
  {'id': '_:1', 'tags': None},
  {'id': '2', 'tags': ['tag1']}]
 , unordered=True)
-
 
 #construct an array but also force a list so empty list appears instead of null
 t('''

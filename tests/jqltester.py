@@ -7,13 +7,15 @@ t(query=None, result=None, **kw)
 
 where kw can be one of these (shown with defaults):
 
-ast=None if set, assert ast matches
+ast=None If set and query is set, assert ast matches query otherwise execute ast as query.
 rows=None if set, assert intermediate rows match
-skip=False
-skipParse=False don't parse query, use given AST instead
 model=None Execute the query with this model
 name=None name this test 
 group=None add this test to the given group
+skip=False
+skipParse=False don't parse query, use given AST instead
+
+bindvars, forUpdate, and useSerializer get passed to vesper.query.evalAST.
 
 If any of these attributes are set on `t` they will used as the default value 
 for subsequent calls to `t`. For example, setting `t.model` will apply that 
@@ -198,6 +200,7 @@ def listgroups(t):
             currentgroup = test.group
             count = 0
     if currentgroup: print currentgroup, count
+    print 'total:', len(list(flatten(t)))
 
 def main(t, cmdargs=None):
     from optparse import OptionParser
@@ -291,8 +294,12 @@ def main(t, cmdargs=None):
 
         if test.ast:
             if not test.skipParse and test.query:
-                (testast, errs) = jql.buildAST(test.query)
-                #jql.rewriteAST(testast)
+                try:
+                    (testast, errs) = jql.buildAST(test.query)
+                except:
+                    if test.ast != 'error':
+                        raise
+                    testast = None
                 if not options.quiet: print 'comparing ast'
                 if test.ast == 'error': #expect an error
                     assert testast is None, (
@@ -309,7 +316,10 @@ def main(t, cmdargs=None):
             else:
                 ast = test.ast
         else:
-            (ast, errs) = jql.buildAST(test.query)
+            if isinstance(test.query, QueryOp):
+                ast = test.query
+            else:
+                (ast, errs) = jql.buildAST(test.query)
             assert ast, "ast is None, parsing failed"
 
         if options.printast:

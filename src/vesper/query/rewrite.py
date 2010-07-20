@@ -10,6 +10,7 @@ from vesper.query.jqlAST import *
 import copy, itertools
 from vesper.utils import debugp, getTransitiveClosure
 from vesper.pjson import ParseContext
+from vesper.backports import all
 
 class _ParseState(object):
 
@@ -196,7 +197,7 @@ class _ParseState(object):
         for propname in reversed(project.fields):
             #XXX if propname == '*', * == OBJECT? what about foo = * really a no-op
             if not op:
-                op = Filter(Eq(PropString(propname), Project(PROPERTY)),
+                op = Filter(Eq(PropString(propname), Project(PROPERTY, maybe=project.maybe)),
                                                     objectlabel=propname)
                 op.fromConstruct = project.fromConstruct
             else:
@@ -225,8 +226,7 @@ class _ParseState(object):
             child.name = self.nextAnonJoinId()
             self.addLabeledJoin(child.name, child)
         #replace this join with a Label
-        newchild = Label(child.name)
-        newchild.maybe = child.maybe
+        newchild = Label(child.name, maybe = child.maybe)
         if child.parent:
             child.parent.replaceArg(child,newchild)
         return newchild
@@ -347,10 +347,8 @@ class _ParseState(object):
                     dependentVarCount += 1
 
                 if child.maybe:
-                    if child is root or isinstance(child, (Project, Label, ResourceSetOp)):
-                        joinType = JoinConditionOp.LEFTOUTER
-                    else:
-                        raise QueryException('illegal maybe expression: %s' % child)
+                    if child is not root and not isinstance(child, (Project,)):
+                        raise QueryException('illegal maybe expression', child)
 
             #try to consolidate the projection filters into root filter.
             if not skipRoot:
@@ -484,7 +482,7 @@ class _ParseState(object):
             #for each filter
             #if Eq and both sides are simple references (?label or id or ?ref.id)
             #add to aliases and remove filter from join (we'll join together later)
-            aliases[join.name] = []
+            aliases.setdefault(join.name, [])
             joinsByName[join.name] = join
             for filter in join.depthfirst(
               descendPredicate=lambda op: op is join or not isinstance(op, ResourceSetOp)):
@@ -498,6 +496,8 @@ class _ParseState(object):
                             #its an alias
                             if not leftprop and not rightprop: #None or 0 (SUBJECT)
                             #its an alias
+                                if arg.maybe:
+                                    raise QueryException("maybe on an aliasing join not allowed", arg)
                                 if leftname != rightname:
                                     aliases.setdefault(leftname, []).append(
                                             rightname)
@@ -559,9 +559,11 @@ class _ParseState(object):
             leftname = renamed.get(leftname,leftname)
             rightname = renamed.get(rightname,rightname)
             filter = pred.parent
-            jointype = filter.parent.join        
             if leftname == rightname:
                 #both references point to same join, so not a join predicate after all
+                if pred.maybe:
+                    raise QueryException(
+         'MAYBE can not be used on a filter that is not a join condition', pred)
                 if leftprop == rightprop:
                     #identity (a=a), so remove predicate
                     #XXX add user warning
@@ -573,7 +575,7 @@ class _ParseState(object):
                     #execute after both Projects have been retreived
                     filter.complexPredicates = True
             else:
-                simpleJoins.append((leftname, leftprop, rightname, rightprop, filter))
+                simpleJoins.append((leftname, leftprop, rightname, rightprop, filter, pred.maybe))
                 #pred is just a Projects so its already handled by another filter predicate
                 #(see makeJoinExpr() when skipRoot = True), so remove this one
                 pred.parent = None
@@ -585,7 +587,8 @@ class _ParseState(object):
         #that belong in the ?foo join?
 
         #check if the remaining filter predicates are complex joins
-        complexJoins = []        
+        complexJoins = []
+        projectPreds = []
         
         for filter in complexJoinCandidates:
             if not filter.parent:
@@ -602,14 +605,28 @@ class _ParseState(object):
                             joinrefs.add(label.name)
                         else:
                             #for simplicities sake, replace this with Project(SUBJECT)
-                            newchild = Project(SUBJECT)
-                            newchild.maybe = label.maybe
+                            newchild = Project(SUBJECT, maybe=label.maybe)
                             label.parent.replaceArg(label,newchild)
                     elif isinstance(label, Project):
                         if label.varref and label.varref != join.name:
                             joinrefs.add(label.varref)
-                if joinrefs:                    
-                    complexJoins.append( (filter, joinrefs) )
+                        propertyname = None
+                        if isinstance(label.name, int):
+                            if label.name == PROPERTY:
+                                propertyname = filter.labelFromPosition(OBJECT)
+                        else:
+                            propertyname = label.name                        
+                        if propertyname:
+                            projectPreds.append( (label.varref or join.name,
+                                              propertyname, label.maybe, pred) )
+
+                if joinrefs:
+                    complexJoins.append( (filter, joinrefs, pred.maybe) )
+                elif pred.maybe and not isinstance(pred, Project):
+                    raise QueryException(
+         'MAYBE can not be used on a filter that is not a join condition', pred)
+
+        _fixMaybeFilters(projectPreds)
 
         return joins, simpleJoins, complexJoins
 
@@ -621,7 +638,7 @@ class _ParseState(object):
         join = followingJoins.pop(0)
         joinname = join.name
         for joinInfo in simpleJoins:
-            leftname, leftprop, rightname, rightprop, filter = joinInfo
+            leftname, leftprop, rightname, rightprop, filter, maybe = joinInfo
             if leftname == joinname:
                 refname = rightname
             elif rightname == joinname:
@@ -641,6 +658,9 @@ class _ParseState(object):
                     if (isinstance(joincond.op, Filter)
                         and joincond.op.labelFromPosition(OBJECT) == leftprop):
                         joincond.op.addLabel(refname, OBJECT)
+                        if maybe:
+                            assert joincond.join in ['i', 'l']
+                            joincond.join = 'l'
                         return True
                 return False
 
@@ -674,7 +694,11 @@ class _ParseState(object):
                 #both left and right props are set
                 #add the join, setting leftposition to outerprop and (right)position to innerprop
 
-                jointype = filter.parent.join
+                if maybe:
+                    assert filter.parent.join in ['i', 'l']
+                    jointype = 'l'
+                else:
+                    jointype = filter.parent.join
                 join.appendArg( JoinConditionOp(topjoin, rightprop, jointype, leftprop) )
             else:
                 #empty join occur in nested constructs like {* where id = ?tag}
@@ -748,7 +772,7 @@ def consolidateFilter(filter, projections):
         name = p.name
         assert len(p.fields) == 1
         p.fields = [OBJECT] #replace label with pos
-        filter.appendArg( Eq(Project(PROPERTY), PropString(name)) )
+        filter.appendArg( Eq(Project(PROPERTY, maybe=p.maybe), PropString(name)) )
         filter.addLabel(name, OBJECT)
         #remove replaced filter:
         del projections[i]
@@ -758,7 +782,7 @@ def consolidateFilter(filter, projections):
 def removeDuplicateConstructFilters(root):
     '''
     find joinconditions marked as "bare project from construct" and see if there are
-    '''
+    '''    
     for join in root.depthfirst(
       descendPredicate=lambda op: not isinstance(op, ResourceSetOp)):
         if isinstance(join, ResourceSetOp):
@@ -771,11 +795,7 @@ def removeDuplicateConstructFilters(root):
                     removeDuplicateConstructFilters(child)
                     continue
                 assert isinstance(child, Filter)
-                propertyName = None
-                for label, pos in child.labels:
-                    if pos == OBJECT:                        
-                        propertyName = label
-                        break
+                propertyName = child.labelFromPosition(OBJECT)
                 if not propertyName:
                     continue                
                 if child.fromConstruct:
@@ -797,3 +817,60 @@ def removeDuplicateConstructFilters(root):
                 while len(constructJCs) > 1:
                     jc = constructJCs.pop()
                     jc.parent = None
+
+def _fixMaybeFilters(projectPreds):
+    from itertools import groupby
+    projectPreds.sort()
+    for k, v in groupby(projectPreds, lambda v: (v[0],v[1]) ):        
+        v = list(v)
+        if all(not ismaybe for (joinname, projectname, ismaybe, pred) in v):
+            continue #no MAYBEs for this project
+        #these are filters that have a predicate equivalent to the project
+        #if the predicate isn't the maybe one, remove it
+        #if it is and the filter has another predicate that not a simple selector
+        #or tries to match null, move the maybe predicate to its own filter
+        #otherwise make sure jointype = 'l'
+        for joinname, projectname, ismaybe, pred in v:
+            filter = pred.parent
+            if not filter or not filter.parent:
+                continue
+            separate = False
+            assert len(pred.siblings) <= 1
+            for sib in pred.siblings:
+                #if not simpleSelector(other): separate = True
+                #XXX refactor with SimpleEngine._findSimplePredicates()
+                if not isinstance(sib, Eq):
+                    separate = True
+                    break
+                elif isinstance(sib.left, Project):
+                    other = sib.right
+                elif isinstance(sib.right, Project):
+                    other = sib.left
+                else:
+                    separate = True
+                    break
+                if not other.isIndependent():
+                    separate = True
+                elif other == Constant(None):
+                    separate = True
+
+            if separate:
+                filter.complexPredicates = True
+                filter.removeLabel(projectname, OBJECT)
+                for project in sib.depthfirst():
+                    if isinstance(project, Project) and project.name == OBJECT:
+                        #convert OBJECT to name
+                        project.fields = [projectname]
+
+                #if mabye move pred to separate join condition
+                #otherwise just remove it
+                if not ismaybe:
+                    pred.parent = None                    
+                else:
+                    filter.parent.parent.appendArg( JoinConditionOp(
+                        Filter(pred, objectlabel=projectname), join='l') )
+            elif ismaybe:            
+                if filter.parent.join not in ['i', 'l']:
+                    raise QueryException(
+                    'property with "maybe" can not be used here',filter.parent)
+                filter.parent.join = 'l'
