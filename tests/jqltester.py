@@ -302,6 +302,8 @@ def main(t, cmdargs=None):
                     testast = None
                 if not options.quiet: print 'comparing ast'
                 if test.ast == 'error': #expect an error
+                    if not options.quiet: 
+                        print 'expected error in test', name
                     assert testast is None, (
                         'not expecting an ast for test %d: %s' % (i,testast))
                 else:

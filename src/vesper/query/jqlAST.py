@@ -350,8 +350,8 @@ class JoinConditionOp(QueryOp):
     def __init__(self, op, position=SUBJECT, join=INNER, leftPosition=SUBJECT):
         self.op = op
         op.parent = self
-        self.setJoinPredicate(position)
         self.join = join
+        self.setJoinPredicate(position)
         if isinstance(self.position, int):
             #assert isinstance(op, Filter), 'pos %i but not a Filter: %s' % (self.position, type(op))
             label = "#%d" % self.position
@@ -359,8 +359,10 @@ class JoinConditionOp(QueryOp):
             self.position = label
         self.leftPosition = leftPosition
 
-    name = property(lambda self: '%s:%s:%s' % (str(self.position),self.join,self.leftPosition) )
-    args = property(lambda self: (self.op,))
+    name = property(lambda self: '%s:%s:%s' % (isinstance(self.position, QueryOp)
+      and self.position.name or str(self.position),self.join,self.leftPosition) )
+    args = property(lambda self: isinstance(self.position, QueryOp)
+                            and (self.op, self.position) or (self.op,))
     
     def setJoinPredicate(self, position):
         if isinstance(position, QueryOp):
@@ -386,7 +388,12 @@ class JoinConditionOp(QueryOp):
                     self.position = pos
                     #self.appendArg(pred)
                     return
-            raise QueryException('only equijoin supported for now')
+            if self.join == self.CROSS:
+                assert isinstance(position, Filter)
+                self.position = position
+                position.parent = self
+            else:
+                raise QueryException('only equijoin supported for now')
         else:
             self.position = position #index or label
             #self.appendArg(Eq(Project(SUBJECT),Project(self.position)) )
@@ -422,8 +429,9 @@ class JoinConditionOp(QueryOp):
             return self.position
 
     def removeArg(self, child):
-        if self.op is child:
+        if self.op is child:            
             if self.parent:
+                #dont want to allow "dangling" join conditions so remove this op
                 self.parent.removeArg(self)
             else:
                 self.op = None
@@ -443,6 +451,9 @@ class JoinConditionOp(QueryOp):
 
     def _getExtraReprArgs(self, indent):
         import re
+        if isinstance(self.position, QueryOp):
+            return indent + '  ' + repr(self.join)+','+repr(self.leftPosition)
+
         match = re.match(r'#(\d)', self.position) #hack!
         if match:
             args = match.group(1) #retrieve number

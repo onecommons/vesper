@@ -252,19 +252,6 @@ syntaxtests = [
 #XXX rename aliases better: choose user-defined names over auto-generated ones
 "{*  where (foo = ?var/2 and {id = ?var and bar = 'baz'}) }",
 
-'''
-{
-?artist,
-foo : { ?join, id },
-"blah" : [ {*} ]
-where( {
-    ?id == 'http://foaf/friend' and
-    topic_interest = ?ss and
-    <foaf:topic_interest> = ?artist.foo 
-  })
-GROUP BY foo
-}
-''',
 ]
 
 #XXX fix failing queries!
@@ -287,7 +274,23 @@ failing = [
 # = is non-associative so this is illegal -- at least have better error msg
 """
 { * where (?a = b = ?c)}
-"""
+""",
+
+#raise vesper.query._query.QueryException: 
+#Filters that refer to a different filter set are not yet implemented.
+'''
+{
+?artist,
+foo : { ?join, id },
+"blah" : [ {*} ]
+where( {
+    ?id == 'http://foaf/friend' and
+    topic_interest = ?ss and
+    <foaf:topic_interest> = ?artist.foo 
+  })
+GROUP BY foo
+}
+'''
 ]
 
 for s in syntaxtests:
@@ -724,18 +727,21 @@ t('''
  #, name='labeled but no where'
  )
 
+#XXX raise vesper.query._query.QueryException: 
+#Filters that refer to a different filter set are not yet implemented.
+skip('''
+     {
+     *
+      where (subject= ?tag and
+           {
+             ?tag in follow('commons', subsumedby)
+            }
+         )
+     }
+     ''')
+
 t.group = 'nestedconstruct'
 
-t('''
-    {
-    *
-     where (subjectof= ?tag and
-          {
-            ?tag in follow('commons', subsumedby)
-           }
-        )
-    }
-    ''',[])
 
 t('''{ *, 'blah' : [{ *  where(id = ?tag and ?tag = 'dd') }]
  where ( subject = ?tag) }
@@ -1521,22 +1527,6 @@ id, type,
 
 '''
 {
-
-foo : [maybe foo]
-
-maybe foo, #omits 'foo' if null
-'foo' : maybe foo #'foo' : null
-
-#omits 'foo' if value is null
-isnull(prop()) and 'foo'
-
-maybe 'foo' : bar or baz #omits 'foo' if value is null
-val and 'foo' : 
-}
-'''
-
-'''
-{
 include {*}
 exclude(0,2) [when]
 exclude(*) [when]
@@ -1559,7 +1549,7 @@ t('''{
 
 #this should be an error: 'maybe can not be used on a filter that is not a join condition'
 t('''
-{ * from maybe upper(foo) = 'HELLO' }
+{ * where maybe upper(foo) = 'HELLO' }
 ''', ast='error')
 
 #this should be an error: 'maybe can not be used on a filter that is not a join condition'
@@ -1803,6 +1793,51 @@ results=[{'id': 'tag1', 'shared': 'tag1'}]
 )
 
 t.model = modelFromJson([
+{ 'id' : '1', 'type':'a', 'start' : ['2000', '2001'], 'pa' : 1},
+{ 'id' : '2', 'type':'a', 'start' : '2000', 'pa' : 2 },
+{ 'id' : '3', 'type':'a', 'start' : '2001', 'pa' : 1  },
+{ 'id' : '7', 'type':'a', 'start' : '2002' },
+{ 'id' : '4', 'type':'b', 'date' : '2000', 'pb' : 1},
+{ 'id' : '5', 'type':'b', 'date' : '2000', 'pb' : 2 },
+{ 'id' : '6', 'type':'b', 'date' : '2001', 'pb' : 2 }
+])
+
+#join on non-primary key
+t('''
+{
+id, start, 'b' : ?b
+where type=@a and start = ?b.date and {?b type=@b}
+}
+''',
+[{'b': ['5', '4', '6'], 'id': '1', 'start': ['2000', '2001']},
+ {'b': '6', 'id': '3', 'start': '2001'},
+ {'b': ['5', '4'], 'id': '2', 'start': '2000'}])
+
+#join on two non-primary keys:
+#XXX raises QueryException: multiple join conditions between the same filter sets is not yet supported
+skip('''
+{ 
+id, start, 'b' : ?b, pa, 'pb' : ?b.pb, 'date' : ?b.date
+where type=@a and start = ?b.date and pa = ?b.pb and {?b type=@b}
+}
+''', 
+[{
+  'id': '1',
+   'b': '4',
+  'date': '2000',
+  'pa': 1,
+  'pb': 1,
+  'start': ['2000', '2001']},
+ {
+ 'id': '2',
+ 'b': '5',
+  'date': '2000',
+  'pa': 2,
+  'pb': 2,
+  'start': '2000'
+}])
+
+t.model = modelFromJson([
         { "label": "tag 1", 'id': 'tag1'},
         { "label": "tag 2", 'id': 'tag2'},
         { "parent":"1", "child":"3", 'id': '_:1'},
@@ -1970,43 +2005,12 @@ where {?post type = @post}
  {'id': 'tag2', 'label': 'tag 2', 'posts': ['3', '2']}]
 )
 
-t.group= 'semijoins' #(and antijoins)
-
-#XXX dont yet treat in as semijoins so this is being evaluated as complex cross-join 
-t('''
-{
-* 
-where (tags in { id = 'tag1' })
-}
-''',
-[{'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}]
-)
-
-#XXX wrong results: returning [] instead of post with id 1
-skip('''{
-* 
-where (tags not in { id = 'tag1' })
-}
-''')
-
-t('''{
-* 
-where (tags in { label = 'tag 1' })
-}
-''',
-[{'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}])
-
-#XXX wrong results return [] instead of post with id 1
-skip('''{
-* 
-where (tags not in { label = 'tag 1' })
-}
-''')
 
 #afilter set is like a label evaluated as a boolean
 #which is true if it exists
 #so this should return an emty results
 #since there are no objects where {a=b and b=2}
+#XXX expensive, does a cross-join
 t('''{
 * where {a=1 and b=2}
 }''', [])
@@ -2066,6 +2070,90 @@ t('''
 }
 ''',[])
 
+# { 'tags' : ?inner.label where ?outer.tags = ?inner }
+t(Select(
+    Construct([
+            ConstructProp('post-id', Project(SUBJECT)),
+            ConstructProp('tag-labels', Project('label')), 
+              ConstructProp('tag-ids', Label('inner'))]),
+where=Join(
+   Filter(Eq(Project(PROPERTY),'tags'), objectlabel='tags'),
+   JoinConditionOp(
+    Join(
+      Filter(Eq(Project(PROPERTY),'label'), objectlabel='label')
+    , name='inner'), 
+   'inner', 'i', 'tags')
+  )
+),
+[{'post-id': '2',
+  'tag-ids': ['tag1', 'tag2'],
+  'tag-labels': ['tag 1', 'tag 2']}]
+)
+
+t.group= 'semijoins' #(and antijoins)
+
+#XXX we don't yet treat in as semijoins so these is being evaluated as complex cross-join 
+
+t.model = modelFromJson([
+        { "label": "tag 1", 'id': 'tag1'},
+        { "label": "tag 2", 'id': 'tag2'},        
+        { "id" : "1", "type" : "post", "tags" : ["tag1"]},
+        { "id" : "2", "type" : "post", "tags" : ["tag1", "tag2"]},        
+        { "id" : "3", "type" : "post", "tags" : ["tag1"]}
+    ])
+
+t('''
+{
+* 
+where (tags in { id = 'tag1' })
+}
+''',
+[{'id': '1', 'tags': ['tag1'], 'type': 'post'},
+ {'id': '3', 'tags': ['tag1'], 'type': 'post'},
+{'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}]
+)
+
+t('''{
+* 
+where (tags not in { id = 'tag2' })
+}
+''',
+[{'id': '1', 'tags': ['tag1'], 'type': 'post'},
+ {'id': '3', 'tags': ['tag1'], 'type': 'post'}]
+)
+
+t('''{
+* 
+where (tags not in { id = 'tag1' })
+}
+''',[])
+
+t('''{
+* 
+where (tags in { label = 'tag 1' })
+}
+''',
+[{'id': '1', 'tags': ['tag1'], 'type': 'post'},
+ {'id': '3', 'tags': ['tag1'], 'type': 'post'},
+ {'id': '2', 'tags': ['tag1', 'tag2'], 'type': 'post'}]
+)
+
+t('''{
+* 
+where (tags not in { label = 'tag 2' })
+}
+''',
+[{'id': '1', 'tags': ['tag1'], 'type': 'post'},
+ {'id': '3', 'tags': ['tag1'], 'type': 'post'}]
+)
+
+t('''{
+* 
+where (tags not in { label = 'tag 1' })
+}
+''', [])
+
+
 #XXX turn these into tests:
 '''
     this:
@@ -2124,20 +2212,8 @@ join( filter(eq(project('type'), 'dog')),
 XXX test multiple labels in one filter, e.g.: { a : ?foo, b : ?bar where (?foo = ?bar) }
 XXX test self-joins e.g. this nonsensical example: { * where(?foo = 'a' and ?foo = 'b') }
     '''
-
-'''
-XXX join on non-primary key:
-{ 
-where (date = ?foo.date and {id=?foo and type= 'events'})
-}
-
-XXX join on two non-primary keys:
-{ 
-where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'events'})
-}
-'''
-
-#XXX test:
+    
+#XXX add test or delete duplicates
 # { * where (1=2) }
 # { * where (1=1) }
 #test that constant evals first and just once and doesn't join on the id
@@ -2150,46 +2226,92 @@ where (date = ?foo.date and ownerid = ?event.ownerid and {id=?foo and type= 'eve
 #test that ?bar = 1 doesn't join with foo = 1
 # {* where (?bar = 1 and foo = 1)}
 
-t.group = 'temp'
+t.group = 'complexpredicates'
 
-# { 'tags' : ?inner.label where ?outer.tags = ?inner }
-t(ast=Select(
-    Construct([
-            ConstructProp('post-id', Project(SUBJECT)),
-            ConstructProp('tag-labels', Project('label')), 
-              ConstructProp('tag-ids', Label('inner'))]),
-where=Join(
-   Filter(Eq(Project(PROPERTY),'tags'), objectlabel='tags'),
-   JoinConditionOp(
-    Join(
-      Filter(Eq(Project(PROPERTY),'label'), objectlabel='label')
-    , name='inner'), 
-   'inner', 'i', 'tags')
-  )
-),
-results=[{'post-id': '2',
-  'tag-ids': ['tag1', 'tag2'],
-  'tag-labels': ['tag 1', 'tag 2']}]
+t('''{ id, maybe values where values = null }''',
+[{ 'id' : '1', 'values' : [None, None]},
+{ 'id' : '2', 'values' : [None, None]},
+{ 'id' : '3', 'values' : None},
+{ 'id' : '4', 'values' : None}
+],
+model = [
+{ 'id' : '1', 'values' : [None, None]},
+{ 'id' : '2', 'values' : [None, None]},
+{ 'id' : '3', 'novalues' : ''},
+{ 'id' : '4', 'novalues' : ''},
+], unordered=True
+) 
+
+t('''{ * where prop1 = prop2/2 }''',
+[{ 'id' : '1', 'prop1' : [1, 2], 'prop2' : [2, 4] },
+{ 'id' : '2', 'prop1' : [1, 2], 'prop2' : [2, 4] }
+],
+model = [
+{ 'id' : '1', 'prop1' : [1, 2], 'prop2' : [2, 4] },
+{ 'id' : '2', 'prop1' : [1, 2], 'prop2' : [2, 4] },
+{ 'id' : '3', 'prop1' : [1, 2], 'prop2' : [6, 7] },
+]
+) 
+
+#we want to support the same multivalue semantics as when joining
+#e.g. a = ?anotherobject.b will match if a matches one row with b
+#so we want a = b if b is a list
+t('''
+{ id where a = b }
+''',
+[{'id': '1'}, {'id': '2'}],
+model = [ 
+{ 'id' : '1', 'a' : [1,2], 'b' : 1 },
+{ 'id' : '2', 'a' : 2, 'b' : [1,2] }
+]
+)
+
+#XXX raise vesper.query._query.QueryException: Filters that refer to a different filter set are not yet implemented.
+#need to implement this
+skip('''
+{
+id where type = @post and ?firsttxn = ref('1') 
+
+order by ?firsttxn.createdtime
+}''')
+
+#use ref(txn) to force complex join
+t('''
+{
+id where ?firsttxn = ref(txn) 
+
+order by ?firsttxn.createtime
+}''',
+[ 
+{'id' : 'post2' }, # txn.b1
+{'id' : 'post1' }  # txn.a2 
+],
+model = [ {
+  'id' : 'post1',
+  'txn' : 'txn.a2'
+},
+{
+  'id' : 'post2',
+  'txn' : 'txn.b1' 
+},
+{
+  'id' : 'txn.a2',
+  'createtime' : 2
+},
+{
+  'id' : 'txn.b1',
+  'createtime' : 1
+}
+]
 )
 
 t('''
 {
-?a 
-id,
-foo,
+?a id, foo,
 'blah' : {?b bar}
 where ?a = ?b and ?a = 1 and {?b type=@post}
 }
 ''')
-
-#txn tests
-#XXX ?firsttxn = string(1) needs to be moved to the ?firsttxn.createtime join  
-skip('''
-{
-id where type = @post and ?firsttxn = string(1) #getfirsttxn(id) 
-
-order by ?firsttxn.createdtime
-}''')
 
 t('''
 {

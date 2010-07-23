@@ -202,6 +202,7 @@ class QueryContext(object):
     projectValues = None
     finalizedAggs = False
     groupby = None
+    complexPredicateHack = False
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False,
                  depth=0, forUpdate=False, shapes=None, serializer=None):

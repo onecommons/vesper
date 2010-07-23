@@ -452,16 +452,54 @@ class _ParseState(object):
         for i in xrange(len(joinsInDocOrder)-1, -1, -1):
             simpleJoins = self._makeSimpleJoins(joinsInDocOrder[i:],
                                             joinFromLabel, simpleJoins)
-        assert not simpleJoins
+        assert not simpleJoins        
 
-        #XXX join together complexJoins as crossjoins
-        #need to order by based on dependencies, and raise error if circular:
-        #e.g { ?a joinfunc(?a,?b) } and { ?b joinfunc(?a,?b) }
-        #need to follow doc order too?
+        #now join together complexJoins as crossjoins 
+        #and set the filter as a complex predicate                
+        for filter, refs, ismaybe in complexJoins:
+            if ismaybe:
+                raise QueryException(
+                "MAYBE operation not supported on complex join predicates")            
+            filter.complexPredicates = True
+            #find parent join to join with: give preference to one 
+            #that already joined with another join
+            parentjoin = None
+            otherjoins = []
+            for name in refs:
+                candidate = joinFromLabel.get(name)
+                if not candidate:
+                    raise QueryException(
+                        "unreferenced label '%s' in complex join" % name)
+                if candidate.parent and not isinstance(candidate.parent, Select):
+                    candidate = getTopJoin(candidate, root.where)
+                    if parentjoin and parentjoin is not candidate:
+                        raise QueryException("Not supported: complex join that"
+                            "joins more than one join that is already joined")
+                    else:
+                        parentjoin = candidate
+                elif candidate is root.where:
+                    parentjoin = candidate
+                else:
+                    otherjoins.append(candidate)
 
-        #finally, make any non-empty labeled joins that we didn't merge into another
-        #query a cross-join
+            for join in otherjoins:
+                if not parentjoin:                                        
+                    if root.where:
+                        parentjoin = root.where
+                    else:
+                        if filter.parent.parent is not join:
+                            join.appendArg(filter) #move filter to parentjoin
+                        root.appendArg(join)                
+                if parentjoin:
+                    assert parentjoin is not join, (join.name, root)
+                    parentjoin.appendArg( JoinConditionOp(join, filter, 'x') )
+                                                
+        #next, make any non-empty labeled joins that we haven't yet merged
+        #into another join a cross-join
         for join in joinsInDocOrder:
+            if join.maybe:
+                raise QueryException(
+                    "MAYBE operation not supported on uncorrelated filter sets")
             if not join.parent and join.args:
                 if not root.where:
                     root.appendArg(join)
@@ -490,12 +528,16 @@ class _ParseState(object):
                     continue
                 for arg in filter.args:                    
                     if isinstance(arg, Eq):
-                        leftname, leftprop = getNameIfSimpleJoinRef(arg.left, join.name, filter)
-                        rightname, rightprop = getNameIfSimpleJoinRef(arg.right, join.name, filter)
-                        if leftname and rightname: #both sides are either a project or label
+                        leftname, leftprop = getNameIfSimpleJoinRef(
+                                                arg.left, join.name, filter)
+                        rightname, rightprop = getNameIfSimpleJoinRef(
+                                                arg.right, join.name, filter)
+                        #if both sides are either a project or label
+                        if leftname and rightname:                             
                             #its an alias
-                            if not leftprop and not rightprop: #None or 0 (SUBJECT)
-                            #its an alias
+                            if not leftprop and not rightprop: 
+                                #None or 0 (SUBJECT)
+                                #its an alias
                                 if arg.maybe:
                                     raise QueryException("maybe on an aliasing join not allowed", arg)
                                 if leftname != rightname:
@@ -503,7 +545,8 @@ class _ParseState(object):
                                             rightname)
                                     aliases.setdefault(rightname, []).append(
                                             leftname)
-                                arg.parent = None #remove this predicate from the filter
+                                #remove this predicate from the filter
+                                arg.parent = None
                                 continue
                             else:
                                 #expressions like ?foo = ?bar.prop or ?a.prop = ?b.prop
@@ -543,7 +586,8 @@ class _ParseState(object):
         import itertools
         for join in itertools.chain((root,), joins):
             for child in join.depthfirst(
-              descendPredicate=lambda op: op is join or not isinstance(op, ResourceSetOp)):
+              descendPredicate=lambda op: 
+                        op is join or not isinstance(op, ResourceSetOp)):
                 if isinstance(child, (Label,Join)):
                     if child.name in renamed:
                         child.name = renamed[child.name]
@@ -551,7 +595,7 @@ class _ParseState(object):
                     if child.varref in renamed:
                         child.varref = renamed[child.varref]
 
-        #assert len(set([j.name for j in joins])) == len(joins), 'join names not unique'
+        assert len(set([j.name for j in joins])) == len(joins), 'join names not unique'
 
         #now that we figured out all the aliases, we can look for join predicates
         simpleJoins = []
@@ -576,11 +620,13 @@ class _ParseState(object):
                     filter.complexPredicates = True
             else:
                 simpleJoins.append((leftname, leftprop, rightname, rightprop, filter, pred.maybe))
-                #pred is just a Projects so its already handled by another filter predicate
-                #(see makeJoinExpr() when skipRoot = True), so remove this one
-                pred.parent = None
-                if not filter.args:
+                #pred is just a Projects so its already handled by another 
+                #filter predicate (see makeJoinExpr() when skipRoot = True)
+                #, so remove this one
+                if not pred.siblings:
                     filter.parent.parent = None
+                else:
+                    pred.parent = None
         
         #xxx handle case like { ?bar ?foo.prop = func() or func(?foo) }
         #aren't these complex (cross) joins but rather misplaced filters
@@ -595,21 +641,24 @@ class _ParseState(object):
                 continue
             join = filter.parent.parent
             #if the filter predicates have reference to another join, its a complex join
-            #while we're at it, check for complex filters too (on same join but more than one Project)
+            #and while we're at it, collect Project predicates for maybe analysis and fixup
             for pred in filter.args:
                 joinrefs = set()
                 for label in pred.depthfirst():
                     #check if the filter has reference to a different join
                     if isinstance(label, Label):
-                        if label.name != join.name:
-                            joinrefs.add(label.name)
-                        else:
-                            #for simplicities sake, replace this with Project(SUBJECT)
-                            newchild = Project(SUBJECT, maybe=label.maybe)
+                        joinrefs.add(label.name)
+                        if label.name == join.name:
+                            #to reduce the number of equivalent ops
+                            #replace this with Project(SUBJECT)
+                            newchild = Project(SUBJECT, label.name,
+                                                maybe=label.maybe)
                             label.parent.replaceArg(label,newchild)
                     elif isinstance(label, Project):
-                        if label.varref and label.varref != join.name:
-                            joinrefs.add(label.varref)
+                        if not label.varref:
+                            label.varref = join.name
+                        joinrefs.add(label.varref)
+                        
                         propertyname = None
                         if isinstance(label.name, int):
                             if label.name == PROPERTY:
@@ -620,11 +669,18 @@ class _ParseState(object):
                             projectPreds.append( (label.varref or join.name,
                                               propertyname, label.maybe, pred) )
 
-                if joinrefs:
+                if len(joinrefs) > 1:                        
                     complexJoins.append( (filter, joinrefs, pred.maybe) )
-                elif pred.maybe and not isinstance(pred, Project):
-                    raise QueryException(
+                else:                    
+                    if pred.maybe and not isinstance(pred, Project):
+                        raise QueryException(
          'MAYBE can not be used on a filter that is not a join condition', pred)
+                    #if there's only 1 joinref but it not referencing the join
+                    #that its part of, move the filter to the join that is referencing
+                    if len(joinrefs) == 1 and iter(joinrefs).next() != join.name:
+                        #XXX implement this
+                        raise QueryException(
+        'Filters that refer to a different filter set are not yet implemented.')
 
         _fixMaybeFilters(projectPreds)
 
@@ -680,6 +736,11 @@ class _ParseState(object):
 
             refjoin = joinFromLabel.get(refname)
             topjoin = getTopJoin(refjoin, join)
+            if topjoin is join:
+                #XXX implement this: the easiest way would be to move the filter 
+                #to the joincondition currently in place and do evalCrossJoin
+                raise QueryException('multiple join conditions between the'
+                ' same filter sets is not yet supported', filter)
             self.prepareJoinMove(topjoin)
             if topjoin.args:
                 #?outer.prop = ?inner
@@ -716,7 +777,7 @@ def getTopJoin(join, top):
     while parent:
         if isinstance(parent, ResourceSetOp):
             if parent is top:
-                return candidate
+                return top #candidate
             candidate = parent
         parent = parent.parent
     return candidate

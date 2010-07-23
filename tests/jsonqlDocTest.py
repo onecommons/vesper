@@ -629,7 +629,14 @@ t.model = joinModel = modelFromJson([
 'parent' : '@comment1',
 'type' : 'comment',
  'contents' : 'a reply'
+},
+{
+'id' : 'comment3',
+'parent' : '@comment4',
+'type' : 'comment',
+ 'contents' : 'different parent'
 }
+
 ])
 
 t%'''
@@ -825,19 +832,33 @@ uncorrelated references (cross joins)
 -------------------------------------
 '''
 
-skip%'''
+t%'''
 the follow() function (recursive joins)
 ---------------------------------------
 '''
 
-#this is broken until complex joins are supported
-skip('''
+#XXX { * where id in rfollow(...) } doesn't work, need explicit label
+t('''
     { ?post 
     *,
-    'comments' : {* where id in rfollow(?post, parent)}
+    'comments' : {?comment * where ?comment in rfollow(?post, parent, true)}
     where type = 'post'
     }
-''')
+''',
+[{
+'id': 'post1',
+'contents': 'a post',  
+'type': 'post',
+'comments': [{'contents': 'a comment',
+                'id': 'comment1',
+                'parent': '@post1',
+                'type': 'comment'},
+               {'contents': 'a reply',
+                'id': 'comment2',
+                'parent': '@comment1',
+                'type': 'comment'}]
+}]
+)
 
 t % '''
 Expressions

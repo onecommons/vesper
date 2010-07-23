@@ -258,6 +258,7 @@ class QueryFuncs(object):
         self.addFunc('bool', bool, BooleanType)
         self.addFunc('number', safeFloat, NumberType)
         self.addFunc('string', str, StringType) #XXX: unicode?
+        self.addFunc('ref', ResourceUri, ObjectType)
         #string functions
         self.addFunc('upper', lambda a: a.upper(), StringType)
         self.addFunc('lower', lambda a: a.lower(), StringType)
@@ -296,7 +297,8 @@ def followFunc(reverse, context, startid, propname=None, excludeInitial=False,
                 found = True
                 obj = row[to]
                 if obj not in tovisit:
-                    if not edgesOnly: yield MutableTupleset(columns, [obj])
+                    if not edgesOnly:
+                        yield MutableTupleset(columns, [obj])
                     tovisit.append(obj)
             if not found:
                 if not excludeInitial or visitId not in startList:
@@ -1159,6 +1161,7 @@ class SimpleQueryEngine(object):
                 fcontext.currentTupleset = previous
             else:
                 fcontext = context
+
             result = joincond.op.evaluate(self, fcontext)
             assert isinstance(result, Tupleset), repr(result) + repr(joincond.op)
             #group by the join key so that it is first column in the result
@@ -1168,6 +1171,7 @@ class SimpleQueryEngine(object):
                 current = result
             else:
                 current = self._groupby(result, joincond,debug=context.debug)
+            
             if previous:
                 def mergeColumns(left, right):
                     def find(col):
@@ -1181,10 +1185,11 @@ class SimpleQueryEngine(object):
                     newright = [col for i, col in enumerate(right) if indexToLeft[i] < 0]
                     return left+newright, newright, indexToLeft
 
-                def bindjoinFunc(jointype, current, indexToLeft, nullrows, leftpos=0):
+                def bindjoinFunc(joincond, current, indexToLeft, nullrows, leftpos, previous):
                     '''
                     jointypes: inner, left outer, semi- and anti-
                     '''
+                    jointype = joincond.join
                     def mergeRow(leftRow, rightRow):
                         #for each shared column, merge values
                         rows = []
@@ -1199,6 +1204,19 @@ class SimpleQueryEngine(object):
                             else:
                                 rows.append(cell)
                         return rows
+
+                    def evalCrossJoin(leftRow, row):
+                        if isinstance(joincond.position, jqlAST.QueryOp):
+                            rcontext = copy.copy(context)
+                            ts = SimpleTupleset([leftRow+row],
+                                    columns=previous.columns+current.columns,
+                                    op='complex join condition',
+                                    debug=rcontext.debug)
+                            rcontext.currentTupleset = ts
+                            return list(joincond.position.evaluate(self, rcontext))
+                        else:
+                            return True
+
 
                     if isinstance(leftpos, int): #simple case
                         def joinFunc(leftRow, rightTable, lastRow):
@@ -1216,8 +1234,8 @@ class SimpleQueryEngine(object):
                                     yield []
                                     match = True
                                 elif jointype=='x': #crossjoin
-                                    #print 'cj row', len(row), row
-                                    match.append(row)
+                                    if evalCrossJoin(leftRow, row):
+                                        match.append(row)
                                 else:
                                     yield mergeRow(leftRow, row)
                                     match = True
@@ -1247,8 +1265,8 @@ class SimpleQueryEngine(object):
                                         yield []
                                         match = True
                                     elif jointype=='x': #crossjoin
-                                        #print 'cj row', len(row), row
-                                        match.append(row)
+                                        if evalCrossJoin(leftRow, row):
+                                            match.append(row)
                                     else:
                                         match.append(mergeRow(leftRow, row))
 
@@ -1302,15 +1320,17 @@ class SimpleQueryEngine(object):
                     nullrows = None
 
                 if jointype == 'r': #right outer
-                    previous = IterationJoin(current, previous,
-                    bindjoinFunc('l', previous, indexToLeft, nullrows, leftpos),
+                    #XXX this is broken (but unused)
+                    previous = IterationJoin(current, previous, bindjoinFunc(
+                        'l', previous, indexToLeft, nullrows, leftpos, previous),
                                     columns,joincond.name,debug=context.debug)
                 else:
-                    previous = IterationJoin(previous, current,
-                    bindjoinFunc(jointype, current, indexToLeft, nullrows, leftpos),
+                    previous = IterationJoin(previous, current, bindjoinFunc(
+                     joincond, current, indexToLeft, nullrows, leftpos, previous),
                                     columns,joincond.name,debug=context.debug)
             else:
                 previous = current
+
         return previous
 
     def _findSimplePredicates(self, op, context):
@@ -1390,6 +1410,8 @@ class SimpleQueryEngine(object):
         #XXX if filter is dependent on labels of other objects don't copy the
         #context until evaluating each row and merge the row with the currentRow  
         fcontext = copy.copy( context )
+        if op.complexPredicates:
+            fcontext.complexPredicateHack = True
         def filterRows():
             args = [x for x in getArgs()]
             args.sort() #sort by cost
@@ -1491,7 +1513,11 @@ class SimpleQueryEngine(object):
             return context.projectValues[op.name]
 
         if isinstance(op.name, int):
-            pos = (op.name,)
+            pos = None
+            if op.name == SUBJECT and op.varref:
+                pos = context.currentTupleset.findColumnPos(op.varref)
+            if not pos:
+                pos = (op.name,)
         else:
             pos = context.currentTupleset.findColumnPos(op.name)
             #print '!!', op.name, context.currentTupleset.columns
@@ -1612,13 +1638,21 @@ class SimpleQueryEngine(object):
         return 0.0
 
     def evalEq(self, op, context):
-        #XXX
         lvalue = op.left.evaluate(self, context)
         if op.right:
             rvalue = op.right.evaluate(self, context)
         else:
             rvalue = context.currentValue
         
+        if context.complexPredicateHack:
+            #semantics: if one side is a list and the other isn't
+            #do contains instead of equals
+            llist = isinstance(lvalue, (list,tuple))
+            rlist = isinstance(rvalue, (list,tuple))
+            if not llist and rlist:
+                return lvalue in rvalue
+            elif llist and not rlist:
+                return rvalue in lvalue
         return lvalue == rvalue
 
     def costEq(self, op, context): #XXX
@@ -1679,6 +1713,7 @@ class SimpleQueryEngine(object):
         if op.metadata.isAggregate:
             return self.evalAggFuncOp(op, context)
         
+        listvalues = []
         if op.metadata.lazy:
             values = op.args
         else:
@@ -1688,10 +1723,20 @@ class SimpleQueryEngine(object):
                 v = arg.evaluate(self, context)
                 if checknulls > i and v is None:
                     return None
+                if context.complexPredicateHack and isinstance(v, (list,tuple)):
+                    listvalues.append( (i, v) )
                 values.append(v)
             #XXX if op.metadata.signature:
             #    values = [c(v) for c,v in zip(op.metadata.signature, values)]
-        result = op.execFunc(context, *values)
+        
+        if len(listvalues) == 1: #XXX replace complexpredicates hack!
+            index, listval = listvalues[0]
+            result = []
+            for v in listval:
+                values[index] = v
+                result.append( op.execFunc(context, *values))
+        else:
+            result = op.execFunc(context, *values)
         return result
 
     def costAnyFuncOp(self, op, context):
@@ -1747,7 +1792,7 @@ class SimpleQueryEngine(object):
 
     def evalIn(self, op, context):
         left = op.args[0]
-        lvalue = left.evaluate(self, context)
+        lvalue = left.evaluate(self, context)        
         if not isinstance(lvalue, (list,tuple)):
             llist = [lvalue]
         else:
