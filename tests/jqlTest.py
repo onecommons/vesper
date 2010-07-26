@@ -525,6 +525,27 @@ group by key
 model = groupbymodel
 )
 
+#XXX
+t('''[ key, min(val), max(val) group by key]''',
+model = [{ 'key': 1, 'val' : [1,2,3] },
+{ 'key': 2, 'val' : None },
+{ 'key': 3, 'val' : [None, None, None] },
+{ 'key': 4, 'val' : [1, None, 3] }
+])
+
+t('''{
+ key, 
+ 'min' : min(val),
+ 'max' : max(val)
+ 
+ group by key
+}
+''',
+[{'key': 1, 'max': 4, 'min': -4}, {'key': 10, 'max': 40, 'min': -40}]
+,model = groupbymodel
+)
+
+
 t('''{key, type, val group by key}''',
 model = [{'key': 1, 'type': [1, 1, 2, 2], 'val': [-2, -4, 2, 4]},
  {'key': 10, 'type': [1, 1, 2, 2], 'val': [-20, -40, 20, 40]}]
@@ -673,6 +694,17 @@ t('''
  [40, 8, 4]],
 model=groupbymodel)
 
+#XXX
+t("{id, children, 'count' :  count(children)}"
+,model=[
+{ 'id' : '1',
+  'children' : [1,2,3,4,5]
+},
+{ 'id' : '2',
+  'children' : [1,2,3]
+}
+])
+
 t.group = 'in'
 
 t('''{
@@ -741,7 +773,6 @@ skip('''
      ''')
 
 t.group = 'nestedconstruct'
-
 
 t('''{ *, 'blah' : [{ *  where(id = ?tag and ?tag = 'dd') }]
  where ( subject = ?tag) }
@@ -2304,6 +2335,36 @@ model = [ {
 }
 ]
 )
+
+t.group = 'temp'
+
+#XXX nested construct joins should always be outer
+#because we intuitively expect an empty property value, 
+#not that the outer object filtered out
+t('''
+{?bm
+id,
+#this works: 
+#'parent' : { id where id = ?bm.parent } 
+'parent' : { ?p id where ?p = ref(?bm.parent) } 
+#but this requires ref(): -- simpletupleset.filter doesn't match but model.filter does 
+#'parent' : { type where id = ?bm.parent } 
+where id = ref(2)
+}''', 
+model=[
+{
+'id' : 1,
+'type' : 'parent'
+},
+{
+'id' : 2,
+'parent' : 1
+},
+{
+'id' : 2,
+'parent' : 3
+}
+])
 
 t('''
 {

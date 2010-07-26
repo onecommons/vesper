@@ -455,15 +455,18 @@ def safeFloat(n):
         return 0.0
 
 def _aggMin(x, y):
-    #XXX test that min, max and avg return null if and only if there are no non-null values
-    if y is not None and x is not None:
+    if y is not None and x is not None:        
         return min(x,y)
-    return x
+    if x is not None:
+        return x        
+    return y
 
 def _aggMax(x, y):
     if y is not None and x is not None:
         return max(x,y)
-    return x
+    if x is not None:
+        return x
+    return y
 
 def _aggAvg(x, y):
     if y is None: 
