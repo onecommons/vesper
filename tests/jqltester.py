@@ -209,7 +209,7 @@ def main(t, cmdargs=None):
     parser = OptionParser(usage)
     for name, default in [('printmodel', 0), ('printast', 0), ('explain', 0),
         ('printdebug', 0), ('printrows', 0), ('quiet',0), ('listgroups',0),
-        ('printdocs',0), ('skip', 0)]:
+        ('printdocs',0), ('skip', 0), ('dontabort', 0)]:
         parser.add_option('--'+name, dest=name, default=default, 
                                                 action="store_true")
     (options, args) = parser.parse_args(cmdargs)
@@ -230,6 +230,7 @@ def main(t, cmdargs=None):
     
     count = 0
     skipped = 0
+    failed = 0
     currentgroup = None
     groupcount = 0
     lastmodelid = None
@@ -280,7 +281,7 @@ def main(t, cmdargs=None):
             printdocs(test)
             continue
         
-        if not options.quiet:
+        if not options.quiet and not options.dontabort:
             print '*** running test:', name
             try:
                 print 'query', test.query or test.ast
@@ -359,21 +360,40 @@ def main(t, cmdargs=None):
         else:
             testresults = None
         
-        if not options.quiet:        
+        if not options.quiet and not options.dontabort:        
             print "Construct Results:", (options.printdebug and '(with debug)' or '')
             pprint.pprint(testresults)
 
+        def printDontAbortMsg(errMsg):
+            print '*** running test:', name
+            print 'query', test.query
+            print "Construct Results:", (options.printdebug and '(with debug)' or '')
+            pprint.pprint(testresults)                    
+            print errMsg
+            
         if test.results is not None:
-            resultsMatch = test.results == testresults 
-            if not resultsMatch and test.unordered:                
-                assert sorted(test.results) == sorted(testresults),  (
-                            'unexpected (unordered) results for test %d' % i)
+            resultsMatch = test.results == testresults
+            if not resultsMatch and test.unordered:
+                unorderedMatch = sorted(test.results) == sorted(testresults)
+                errMsg = 'unexpected (unordered) results for test %d' % i
+                if not unorderedMatch and options.dontabort:
+                    printDontAbortMsg(errMsg)
+                    failed += 1
+                    continue
+                else:
+                    assert unorderedMatch, errMsg
                 if not options.quiet:
                     print "warning: unexpected order for (unordered) test %d" % i
             else:
-                 assert resultsMatch,  ('unexpected results for test %d' % i)
+                errMsg = 'unexpected results for test %d' % i
+                if not resultsMatch and options.dontabort:
+                    printDontAbortMsg(errMsg)
+                    failed += 1
+                    continue
+                else:
+                    assert resultsMatch, errMsg
 
     if not options.printdocs:
-        print '***** %d tests passed, %d skipped' % (count, skipped)
+        print '***** %d tests passed, %d failed, %d skipped' % (count-failed, failed, skipped)
     elif t._nextdoc:
         print '\n'.join(t._nextdoc)
