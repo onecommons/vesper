@@ -382,6 +382,8 @@ class _ParseState(object):
             if not join.name:
                 join.name = self.nextAnonJoinId()
             join.parent.construct.id.appendArg( Label(join.name) )
+            return True
+        return False
 
     def _joinLabeledJoins(self):
         '''
@@ -643,11 +645,11 @@ class _ParseState(object):
             #if the filter predicates have reference to another join, its a complex join
             #and while we're at it, collect Project predicates for maybe analysis and fixup
             for pred in filter.args:
-                joinrefs = set()
+                joinrefs = {}
                 for label in pred.depthfirst():
                     #check if the filter has reference to a different join
                     if isinstance(label, Label):
-                        joinrefs.add(label.name)
+                        joinrefs.setdefault(label.name, []).append(label)
                         if label.name == join.name:
                             #to reduce the number of equivalent ops
                             #replace this with Project(SUBJECT)
@@ -657,7 +659,7 @@ class _ParseState(object):
                     elif isinstance(label, Project):
                         if not label.varref:
                             label.varref = join.name
-                        joinrefs.add(label.varref)
+                        joinrefs.setdefault(label.varref, []).append(label)
                         
                         propertyname = None
                         if isinstance(label.name, int):
@@ -669,8 +671,21 @@ class _ParseState(object):
                             projectPreds.append( (label.varref or join.name,
                                               propertyname, label.maybe, pred) )
 
-                if len(joinrefs) > 1:                        
-                    complexJoins.append( (filter, joinrefs, pred.maybe) )
+                if len(joinrefs) == 2 and isinstance(pred, Eq):                        
+                    (leftname, leftops), (rightname, rightops) = joinrefs.items()
+                    simple = self._makeHalfSimpleJoin(pred, join.name, leftname,
+                      leftops, rightname)
+                    if not simple: #try reverse order
+                        simple = self._makeHalfSimpleJoin(pred, join.name,
+                          rightname, rightops, leftname)
+                          
+                    if simple:
+                        simpleJoins.append( simple )
+                    else:
+                        complexJoins.append( (filter,                                                       
+                                set([leftname,rightname]), pred.maybe) )
+                elif len(joinrefs) > 1:
+                    complexJoins.append((filter,set(joinrefs.keys()),pred.maybe))
                 else:                    
                     if pred.maybe and not isinstance(pred, Project):
                         raise QueryException(
@@ -772,6 +787,29 @@ class _ParseState(object):
             
         return unhandledJoins
 
+    def _makeHalfSimpleJoin(self, pred, joinname, leftname, leftops, rightname):
+        filter = pred.parent
+        #XXX currently labels to map to columns correctly with complexPredicates
+        #note: this effectively disables this feature since this will be set to true
+        if len(leftops) > 1 or filter.complexPredicates:
+            return ()
+        leftop = leftops[0]
+        #XXX this matches ?other = func(?this.foo) but not ?this = func(?other.foo)
+        #for that we need to move filter
+        if leftop.parent is pred and leftname != joinname and rightname == joinname:            
+            ignore, leftprop = getNameIfSimpleJoinRef(leftop, leftname, filter)
+            assert ignore == leftname
+            rightprop = '#'+self.nextAnonJoinId()
+            assert not filter.labelFromPosition(LIST_POS+1)
+            filter.addLabel(rightprop, LIST_POS+1)
+            assert len(leftop.siblings) == 1
+            #replace pred with rightside
+            rightop = leftop.siblings[0]
+            rightop.saveValue = rightprop
+            filter.replaceArg(pred, rightop)
+            return (leftname, leftprop, rightname, rightprop, filter, pred.maybe)
+        return ()
+
 def getTopJoin(join, top):
     candidate = parent = join
     while parent:
@@ -793,6 +831,7 @@ def getNameIfSimpleJoinRef(op, joinName, filter):
             propname = op.name
         return op.varref or joinName, propname
     return None, None
+
 
 def consolidateFilter(filter, projections):
     '''

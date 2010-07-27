@@ -80,6 +80,7 @@ class Suite(object):
 jc = JoinConditionOp
 cs = ConstructSubject
 qF = vesper.query.engine.SimpleQueryEngine.queryFunctions
+QueryOp.functions = qF
 def cp(name, *args, **kw):
     #print 'cp', name, args
     if not args:

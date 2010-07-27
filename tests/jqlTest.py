@@ -2306,18 +2306,7 @@ id where type = @post and ?firsttxn = ref('1')
 order by ?firsttxn.createdtime
 }''')
 
-#use ref(txn) to force complex join
-t('''
-{
-id where ?firsttxn = ref(txn) 
-
-order by ?firsttxn.createtime
-}''',
-[ 
-{'id' : 'post2' }, # txn.b1
-{'id' : 'post1' }  # txn.a2 
-],
-model = [ {
+t.model = modelFromJson([ {
   'id' : 'post1',
   'txn' : 'txn.a2'
 },
@@ -2333,11 +2322,66 @@ model = [ {
   'id' : 'txn.b1',
   'createtime' : 1
 }
-]
+])
+
+results = [{'id': 'post2'}, {'id': 'post1'}]
+
+#this invokes the half-simple code patch, which we don't generate an ast for yet
+t(
+Select(
+  Construct([
+    ConstructProp('id',
+      Project([0],None,None,False),'usenull','nolist',True,None), 
+    ConstructSubject('id',None)]),
+where=
+  Join(
+    JoinConditionOp(
+      Filter(
+        Eq(
+          PropString('txn'),
+          Project([1],'@1',None,False)), 
+        QueryOp.functions.getOp((None, 'ref'),
+           Project([2],'@1',None,False), __saveValue=True),           
+        subjectlabel=['#0'], objectlabel=['txn'], saveValuelabel=['#@2']), 
+      0,'i',0),
+    JoinConditionOp(
+      Join(
+        JoinConditionOp(
+          Filter(
+            Eq(
+              PropString('createtime'),
+              Project([1],'firsttxn',None,True)), 
+            subjectlabel=['firsttxn', '#0'], objectlabel=['createtime']), 
+          0,'l',0), name='firsttxn'), 
+      'firsttxn','i','#@2'), name='@1'),
+namemap={'refpattern': '@((::)?URIREF)'},
+orderby=
+  OrderBy(
+    SortExp(
+      Project(['createtime'],'firsttxn',None,True), False)),
+mergeall=False),
+results
 )
 
-t.group = 'temp'
+#use ref(txn) to force complex join
+t('''
+{
+id where ?firsttxn = ref(txn) 
 
+order by ?firsttxn.createtime
+}''',
+results)
+
+#XXX func on the other filterset
+t('''
+{
+?firsttxn
+id, createtime
+
+where ?firsttxn = ref(?post.txn) and {?post txn} 
+}''')
+
+t.group = 'temp'
 #XXX nested construct joins should always be outer
 #because we intuitively expect an empty property value, 
 #not that the outer object filtered out
@@ -2383,7 +2427,6 @@ t('''
 group by children 
 }
 ''')
-   
 
 import unittest
 class JQLTestCase(unittest.TestCase):

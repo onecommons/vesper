@@ -235,7 +235,7 @@ class QueryFuncs(object):
                     lazy=lazy, checkForNulls=checkForNulls, isAggregate=isAggregate,
                     initialValue=initialValue, finalFunc=finalFunc)
 
-    def getOp(self, name, *args):
+    def getOp(self, name, *args, **kw):
         if isinstance(name, (unicode, str)):
             name = (EMPTY_NAMESPACE, name)
         funcMetadata = self.SupportedFuncs.get(name)
@@ -243,7 +243,10 @@ class QueryFuncs(object):
             raise QueryException('query function not defined: ' + str(name))
         funcMetadata = self.SupportedFuncs[name]
         
-        return funcMetadata.opFactory(name,funcMetadata,*args)
+        op = funcMetadata.opFactory(name,funcMetadata,*args)
+        if '__saveValue' in kw:
+            op.saveValue = kw['__saveValue']
+        return op
     
     def __init__(self):
         #add basic functions
@@ -1126,7 +1129,8 @@ class SimpleQueryEngine(object):
             #put non-inner joins and filters with complex predicates last
             #XXX: we should do semantic ordering earlier so it shows up in the ast
             #and maybe mark each group so we can do this cost-based ordering per group
-            (getattr(arg.op, 'complexPredicates', False), arg.join != 'i',
+            (getattr(arg.leftPosition, 'startswith', lambda s:False)('#@'),
+            getattr(arg.op, 'complexPredicates', False), arg.join != 'i',
                                                 arg.op.cost(self, context)) )
 
         tmpop = None
@@ -1381,13 +1385,18 @@ class SimpleQueryEngine(object):
 
         columns = []
         for label, pos in op.labels:
-            columns.append( ColumnInfo(label, object) )
-
+            columns.append( ColumnInfo(label, object) )        
+        saveValue = flatten([a.saveValue for a in op.args if a.saveValue])
+        if saveValue:            
+            assert not isinstance(saveValue, list)            
+            assert not op.complexPredicates #not yet supported
+        
         def colmap(row):
             for label, pos in op.labels:
                 yield row[pos]
 
-        tupleset = context.currentTupleset
+        tupleset = context.currentTupleset        
+        
         #first apply all the simple predicates that we assume are efficient
         if simplefilter or not complexargs:
             #XXX: optimization: if cost is better filter on initialmodel
@@ -1398,7 +1407,7 @@ class SimpleQueryEngine(object):
                 colmap = not complexargs and colmap or None,
                 hint=tupleset, op='selectWithValue1', debug=context.debug)
 
-        if not complexargs:
+        if not complexargs:            
             return tupleset
 
         if op.isIndependent(): #constant expression
@@ -1423,30 +1432,29 @@ class SimpleQueryEngine(object):
                     #XXX evalFunc, etc. to use value
                     #XXX memoize results lazily
             #        arg.left.value = arg.left.evaluate(self, fcontext)
+            
+            alwaysmatch = saveValue and len(args) == 1
 
             for row in tupleset:
                 value = None
+                if saveValue: #XXX 
+                    row = list(row)
+                    row.append(value)
+                #print len(row), row
                 for cost, i, arg in args:
                     fcontext.currentRow = row
-                    #fcontext.currentValue = row[i]
                     value = arg.evaluate(self, fcontext)
-                    #if a filter function returns a tupleset
-                    #yield those rows instead of the input rows
-                    #otherwise, treat return value as a boolean and use it to
-                    #filter the input row
-                    if isinstance(value, Tupleset):
-                        assert len(args)==1
-                        for row in value:
-                            yield row
-                        return
-                    if not value:
+                    if arg.saveValue:
+                        row[-1] = value
+                    elif not value:
                         break
 
-                if not value:
+                if not value and not alwaysmatch:
                     continue
-                yield row
+                yield saveValue and tuple(row) or row
 
         opmsg = 'complexfilter:'+ str(complexargs)
+        
         return SimpleTupleset(filterRows, hint=tupleset,columns=columns,
                 colmap=colmap, op=opmsg, debug=context.debug)
 

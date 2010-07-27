@@ -74,6 +74,7 @@ class QueryOp(object):
     maybe = False
     functions = None
     fromConstruct = False
+    saveValue = False
     
     def _setparent(self, parent_):
         parents = [id(self)]
@@ -499,6 +500,13 @@ class Filter(QueryOp):
                 self.labels.append( (objectlabel, OBJECT) )
                 self.labels.append( (objectlabel+':type', OBJTYPE_POS) )
                 self.labels.append( (objectlabel+':pos', LIST_POS) )
+
+        if 'saveValuelabel' in kw:
+            saveValuelabel = kw['saveValuelabel']
+            if not isinstance(saveValuelabel, list):
+                saveValuelabel = (saveValuelabel, )
+            for name in saveValuelabel:                
+                self.labels.append( (name, LIST_POS+1) )
 
         if 'complexPredicates' in kw:
             self.complexPredicates = kw['complexPredicates']

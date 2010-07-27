@@ -168,7 +168,7 @@ class NamedGraphManager(base.Model):
         Retrieve matching statements from the primary model unless a context is 
         specified that is managed by the revision model. In that case, the
         matching statements are found by reconstructing the current state of that
-        context from the revision model (which can be compartively expensive).
+        context from the revision model (which can be comparatively expensive).
         '''
         hints = hints or {}
 
