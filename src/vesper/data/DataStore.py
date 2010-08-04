@@ -684,7 +684,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
     def readyToVote(self, txnService):
         #need to do this now so the underlying model gets ctxStmts before it commits
         if self.graph._currentTxn: #simple merging doesn't create a graph txn 
-            self.ctxStmts = self.graph._finishCtxResource()
+            self.ctxStmts = self.graph._finishCtxResource(txnService.getInfo())
         return True
     
     #no-op -- txnparticipants for underlying models will commit     

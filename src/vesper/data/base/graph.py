@@ -409,17 +409,17 @@ class NamedGraphManager(base.Model):
     def createTxnTimestamp(self):        
         return time.time()
             
-    def commit(self, ** kw):
+    def commit(self, **kw):
         #assert self._currentTxn
         if not self._currentTxn:
             log.debug("no txn in commit, not committing")
             return None #no txn in commit, model wasn't modified
 
-        ctxStmts = self._finishCtxResource()
+        ctxStmts = self._finishCtxResource(kw)
         if self.revisionModel != self.managedModel:
-            self.revisionModel.commit( ** kw)     
+            self.revisionModel.commit(**kw)
         #commit the transaction
-        self.managedModel.commit(** kw)
+        self.managedModel.commit(**kw)
         self._finalizeCommit(ctxStmts)
         return ctxStmts
 
@@ -463,7 +463,7 @@ class NamedGraphManager(base.Model):
                     unicode(txnRev), OBJECT_TYPE_LITERAL, txnContext)
             self.revisionModel.addStatement(self.lastLatest)
 
-    def _finishCtxResource(self):
+    def _finishCtxResource(self, txnInfo):
         assert self._currentTxn
         self.currentTxn.timestamp = self.createTxnTimestamp()
         
@@ -474,13 +474,17 @@ class NamedGraphManager(base.Model):
         assert txnContext
 
         ctxStmts = []
-
+        
         ctxStmts.append(Statement(txnContext, CTX_NS+'baseRevision',
             unicode(self._currentTxn.baseRev), OBJECT_TYPE_LITERAL, txnContext))
         ctxStmts.append(Statement(txnContext, CTX_NS+'hasRevision',
             unicode(self._currentTxn.currentRev), OBJECT_TYPE_LITERAL, txnContext))        
         ctxStmts.append(Statement(txnContext, CTX_NS+'createdOn',
             unicode(self._currentTxn.timestamp), OBJECT_TYPE_LITERAL, txnContext))
+        source = txnInfo.get('source')
+        if source:
+            ctxStmts.append(Statement(txnContext, CTX_NS+'createdBy',
+                source, OBJECT_TYPE_LITERAL, txnContext))
         
         def findContexts(changes):
             return set([(key.scope, value[1].scope)
