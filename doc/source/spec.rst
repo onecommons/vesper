@@ -125,10 +125,14 @@ The examples here are based on the following example. You can cut an paste or yo
 
 
 
+
 Basic Grammar
 =============
 
 Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
+
+XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
+
 
 .. productionlist::
  query  : `constructobject` 
@@ -144,47 +148,53 @@ Below is simplifed representation of the JQL grammar (the formal grammar can be 
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- objectitem      : | "ID" | "*" | ["["] ["omitnull" | "maybe"] `propertyname` ["]"]
- propertypair    : ["omitnull"] `expression` ":" (`propertyvalue` | [`propertyvalue`])
+ objectitem      : | "ID" | "*" | ["["] ["omitnull"] ["maybe"] `propertyname` ["]"]
+ propertypair    :  `expression` ":" ["["] ["omitnull"] `propertyvalue` ["]"]
  propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
  propertyname    : NAME | "<" CHAR+ ">"
- query_criteria  : ["WHERE(" `expression` ")"]
-                 : ["GROUPBY(" (`expression`[","])+ ")"]
-                 : ["ORDERBY(" (`expression` ["ASC"|"DESC"][","])+ ")"]
+ comments : "#" CHAR* <end-of-line> 
+          : | "//" CHAR* <end-of-line> 
+          : | "/*" CHAR* "*/"
+
+.. productionlist::
+ query_criteria  : ["WHERE" `expression`]
+                 : ["GROUP BY" (`expression`[","])+]
+                 : ["ORDER BY" (`expression` ["ASC"|"DESC"][","])+]
                  : ["LIMIT" number]
                  : ["OFFSET" number]
                  : ["DEPTH" number]
                  : ["MERGEALL"]
-                 : ["NAMEMAP" "=" `jsondict`]
+                 : ["NAMEMAP" "=" `namemapdict`]
+ namemapdict     : "{" [((NAME | STRING) ":" (STRING | `namemapdict`) ","?)+] "}"
+
+.. productionlist::                 
  expression : `expression` "and" `expression`
             : | `expression` "or" `expression`
             : | "maybe" `expression`
             : | "not" `expression`
             : | `expression` `operator` `expression`
-            : | `join`
+            : | `filterset`
             : | `atom`
             : | "(" `expression` ")"
  operator   : "+" | "-" | "*" | "/" | "%" | "=" | "=="
             : | "<" | "<=" | ">" | "=>" | ["not"] "in"  
- join       : "{" [`label`] `expression` "}"
- atom       : `label` | `bindvar` | `constant` 
+ filterset : "{" [`label`] `expression` "}"
+ atom       : `label` | `bindvar` | `constant` | `objectreference`
             : | `functioncall` | `propertyreference`
  label      : "?"NAME
  bindvar    : ":"NAME
+ objectreference : "@"NAME | "@<" CHAR+ ">"
  propertyreference : [`label`"."]`propertyname`["."`propertyname`]+
  functioncall : NAME([`expression`[","]]+ [NAME"="`expression`[","]]+)
  constant : STRING | NUMBER | "true" | "false" | "null"
- comments : "#" CHAR* <end-of-line> 
-          : | "//" CHAR* <end-of-line> 
-          : | "/*" CHAR* "*/"
 
 Construct Patterns
 ==================
 
 There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
-JQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
+A jsonQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
 
 
 
@@ -355,7 +365,7 @@ You can also construct results as arrays (lists) instead of objects. This query 
 :token:`constructvalue`
 -----------------------
 
-You can select individual values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
+You can select simple values (strings or numbers) by wrapping an :token:`expression` in parentheses. For example:
 
 
 .. code-block:: jsonql
@@ -389,7 +399,7 @@ Property Names and `id`
 -----------------------
 
 Name tokens not used elsewhere in the grammar are treated as a reference to object properties.
-You can specify properties whose name match reserved keywords or have invalid characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
+You can specify properties whose name match reserved keywords or have illegal characters by wrapping the property name with "<" and ">". For example, `<where>` or `<a property with spaces>`.
 
 `id` is a reserved name that always refers to the id of the object, not a property named "id".
 Such a property can written as `<id>`.
@@ -528,17 +538,14 @@ The "*" will expand to all properties defined for the object. For example, this 
 
 
 
-Multiple values and lists
--------------------------
-* list construction -- multiple values are represented as lists
-
-Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
-does inserted a property that already exists on an object might add a new value or replace the current one.
+"forcelist" syntax
+------------------
+You can use wrap the property value with brackets to force the value of a property to always be a list, even when the value just as one value or is `null`. If the value is `null`, an empty list (`[]`) will be used. For example, compare the results of the following two examples which are identical except for the second one's use of "forcelist":
 
 
 .. code-block:: jsonql
 
- { id, a_list }
+ { id, mixed }
 
 
 .. raw:: html
@@ -580,7 +587,7 @@ does inserted a property that already exists on an object might add a new value 
 
 
  model3.query(
-   '''{ id, a_list }''')
+   '''{ id, mixed }''')
 
   </textarea></div>
 
@@ -618,45 +625,6 @@ does inserted a property that already exists on an object might add a new value 
  ...     "id": "3"
  ...   }
  ... ]''')
-
- >>> model3.query(
- ... '''{ id, a_list }''')
- [
-   {
-     "a_list": [
-       "a", 
-       "b", 
-       "c", 
-       null
-     ], 
-     "id": "1"
-   }
- ]
-
-
-
-"forcelist" syntax
-------------------
-You can use wrap the property value with brackets to force the value of a property to always be a list, even when the value just as one value or is `null`. If the value is `null`, an empty list (`[]`) will be used. For example, compare the results of the following two examples which are identical except for the second one's use of "forcelist":
-
-
-.. code-block:: jsonql
-
- { id, mixed }
-
-
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='4' cols='60'>
- model3.query(
-   '''{ id, mixed }''')
-
-  </textarea></div>
-
-
-.. code-block:: python
 
  >>> model3.query(
  ... '''{ id, mixed }''')
@@ -828,7 +796,7 @@ This query still specifies that "auth" property appears in every object in the r
 
 .. code-block:: jsonql
 
- {displayname, omitnull auth}
+ {displayname, omitnull maybe auth}
 
 
 .. raw:: html
@@ -837,7 +805,7 @@ This query still specifies that "auth" property appears in every object in the r
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, omitnull auth}''')
+   '''{displayname, omitnull maybe auth}''')
 
   </textarea></div>
 
@@ -845,7 +813,7 @@ This query still specifies that "auth" property appears in every object in the r
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, omitnull auth}''')
+ ... '''{displayname, omitnull maybe auth}''')
  [
    {
      "displayname": "abbey aardvaark", 
@@ -873,16 +841,16 @@ This query still specifies that "auth" property appears in every object in the r
 
 The above examples illustrate using MAYBE and OMITNULL on appreviated properties. 
 Specifically `maybe property` is an abbreviation for  `'property' : maybe property`
-and `omitnull property` is an abbreviation for `omitnull 'property' : maybe property`.
+and `omitnull property` is an abbreviation for `'property' : omitnull property`.
 
-`omitnull` must appear before the property name and takes effect when any property value expression returns null.
-For example, here's a silly query that has a "nullproperty" property with a constant value
+`omitnull` must appear before the property name and omits the property whenever its value evaluates to null.
+For example, here's a silly query that specifies a "nullproperty" property with a constant value
 but it will never be included in the result because of the "omitnull".
 
 
 .. code-block:: jsonql
 
- {displayname, omitnull "nullproperty" : null}
+ {displayname, "nullproperty" : omitnull null}
 
 
 .. raw:: html
@@ -891,7 +859,7 @@ but it will never be included in the result because of the "omitnull".
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, omitnull "nullproperty" : null}''')
+   '''{displayname, "nullproperty" : omitnull null}''')
 
   </textarea></div>
 
@@ -899,7 +867,7 @@ but it will never be included in the result because of the "omitnull".
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, omitnull "nullproperty" : null}''')
+ ... '''{displayname, "nullproperty" : omitnull null}''')
  [
    {
      "displayname": "abbey aardvaark"
@@ -963,43 +931,213 @@ The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 Sub-queries (nested constructs)
 -------------------------------
 
-The value of a property or array item can be a :token:`constructobject` or a :token:`constructarray` instead of an :ref:`expression`.
-If the nested query references an object in the outer query (via `labels`) it will be correlated with the outer query.
-Otherwise, it will be evaluated on each result, so the result set will equivalent to a cross-join.
+The value of a property or array item can be another query instead of an :ref:`expression`. These sub-query can construct objects or arrays (:token:`constructobject` or a :token:`constructarray`) -- :token:`constructvalue` queries are not allowed as sub-queries.
+
+If the sub-query doesn't have a :ref:`filter` associated with it, the sub-query will be  evaluated in the context of the parent object. For example:
 
 
-Datatypes
-=========
+If the sub-query's filter has references to the outer query (via :ref:`labels`) the filter will be joined with the outer query and it will be evaluated using the rows from the resulting join. For example:
 
+
+Otherwise, the sub-query will be evaluated independently for each result of the outer query. For example:
+
+
+Data Types
+==========
+
+A jsonQL implementation supports at least the data types defined by JSON and may support additional data types if the underlying datastore supports them.
+
+The JSON data types are: (unicode) strings, (floating point) numbers, booleans (true and false) and null. Limits such max string length or numeric range and precision and semantics such as numeric overflow behavior are not specified by jsonQL, they will be dependent on the underlying datastore and implementation language. Most database support richer basic basic data types, for example integer, floating point and decimal, the implementation is responsible for appropriate promotion. 
+
+The values of JSON data types can be expressed in a query as literals that match the JSON syntax. Datastore-specific data type values can be expressed using datastore-specific query functions which construct or convert its arguments, for example, date functions. 
+
+They will be serialized as pjson. If the data type is compatible with JSON type it may converted (for example, from exact precision decimal type to JSON's floating point number) depending on the fidelity needed. In addition, if a :ref:`NAMEMAP` is specified in the query customize the serialization. 
+
+Implicit type conversion, by default, is conversion is lenient [example] but the underlying datastore might be string. 
+
+.. question: should there by a strict mode so implementation matches underlying store?
+
+
+
+null handling
+-------------
+
+Unlike sql, null value are treated as distinct values, i.e. "null = null" evaluates to true and "null != null" evaluates to false. Operators and functions generally follow SQL: if one of the operands or arguments is null the result is null. 
+
+footnote: Follow SQL for functions and operators: systems that don't follow these null semantics, generally don't support functions (most NO-SQL) or don't support nulls at all (SPARQL). 
+Also, unlike SQL null equality, these semantics is generally intuitive.
+
+Aggregate functions, for example, `count()` ignores null values.  
+
+null < 0 so null go first with order by. 
+
+
+.. code-block:: jsonql
+
+ [null=null, null!=null, null=0, null='', 1+null, trim(null), null > 0, null < 0]
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='26' cols='60'>
+ from vesper import app
+ model4 = app.createStore(
+ '''[
+    {
+      "id": "1", 
+      "value": null
+    }, 
+    {
+      "id": "2", 
+      "value": ""
+    }, 
+    {
+      "id": "3", 
+      "value": true
+    }, 
+    {
+      "notvalue": "a", 
+      "id": "4"
+    }
+  ]''')
+
+
+ model4.query(
+   '''[null=null, null!=null, null=0, null='', 1+null, trim(null), null > 0, null < 0]''')
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+ >>> from vesper import app
+ >>> model4 = app.createStore(
+ ... '''[
+ ...   {
+ ...     "id": "1", 
+ ...     "value": null
+ ...   }, 
+ ...   {
+ ...     "id": "2", 
+ ...     "value": ""
+ ...   }, 
+ ...   {
+ ...     "id": "3", 
+ ...     "value": true
+ ...   }, 
+ ...   {
+ ...     "notvalue": "a", 
+ ...     "id": "4"
+ ...   }
+ ... ]''')
+
+ >>> model4.query(
+ ... '''[null=null, null!=null, null=0, null='', 1+null, trim(null), null > 0, null < 0]''')
+ [
+   [
+     true, 
+     false, 
+     false, 
+     false, 
+     null, 
+     null, 
+     false, 
+     true
+   ]
+ ]
+
+
+
+pseudo-value types
+------------------
+
+matches value in the list not the list itself. The data-store may support data types that is serialized as a JSON array, the semantics will not apply. [Example]
+
+order may not be preserved.
+
+Objects without (public) unique identifiers can be treated as value types; 
+they may not be queried. Note the implementation may store these as object and even provide (for example, forUpdate).
+
+
+
+Multiple values and lists
+-------------------------
+* list construction -- multiple values are represented as lists
+
+Note that the actually semantics of inserting pjson depends on the data store it is being inserted into. For example, 
+does inserted a property that already exists on an object might add a new value or replace the current one.
+
+
+.. code-block:: jsonql
+
+ { id, a_list }
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
+ model3.query(
+   '''{ id, a_list }''')
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+ >>> model3.query(
+ ... '''{ id, a_list }''')
+ [
+   {
+     "a_list": [
+       "a", 
+       "b", 
+       "c", 
+       null
+     ], 
+     "id": "1"
+   }
+ ]
+
+
+
+object references and anonymous objects
+---------------------------------------
+
+If an object is anonymous it will be expanded, otherwise an object reference object will be output. This behavior can be overridden using the `DEPTH` directive, which will force object references to be expanded, even if objects are duplicated. 
+
+When a top-level (not embeddd) object is added to a data store without an id it is assigned an autogenerated id (cf. pjson docs). Embedded objects without ids are private and can not be referenced. [what about references amongst themselves?] Filters will not match embedded objects unless referenced through a property. [this implies no need to generate a join -- but what if the property can have a reference to both public and private -- need to double filtering?]
 
 
 Filtering (the WHERE clause)
 ==============================
 
-* filter select which objects should appear in the result set. In addition, if the construct clause references a property whose 
+The `where` clause select which objects should appear in the result set. 
+
+In addition, if the construct clause references a property whose 
 values are filtered, only those filters will be included in the result.
 
+
+In other words, results are grouped by the object id. 
+
 value = 1 and value = 2
-value = 1 or value = 2
-value > 3
-substring(value) = 3
-values includes all values
+value in (1, 2)
 
 * property references in construct
 * matching lists 
+* matching datatypes
 
 
-joins
-=====
+all or nothing queries
+----------------------
 
-object references
------------------
 
-When a filter expression is surrounded by braces (`{` and `}`) the filter is applied 
-separately from the rest of the expression, and is evaluated as an object reference
-to the object that met that criteria. These object references have the same semantics 
-as label references. The object references can optionally be labeled and are typically 
-used to create joins.
+
+Object References and Joins
+===========================
 
 labels
 ------
@@ -1015,10 +1153,10 @@ This is example, value of the contains property will be any object that
 
 .. code-block:: jsonql
 
- {
-      ?parent, 
+ { ?post 
       *,
-      'contains' : { * where (subsumedby = ?parent)}
+      'comments' : { * where parent = ?post}
+      where type = 'post'
       }
 
 
@@ -1026,12 +1164,41 @@ This is example, value of the contains property will be any object that
 
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='8' cols='60'>
- model1.query(
-   '''{
-      ?parent, 
+  <textarea rows='37' cols='60'>
+ from vesper import app
+ model5 = app.createStore(
+ '''[
+    {
+      "type": "post", 
+      "id": "post1", 
+      "contents": "a post"
+    }, 
+    {
+      "type": "comment", 
+      "id": "comment1", 
+      "parent": "@post1", 
+      "contents": "a comment"
+    }, 
+    {
+      "type": "comment", 
+      "id": "comment2", 
+      "parent": "@comment1", 
+      "contents": "a reply"
+    }, 
+    {
+      "type": "comment", 
+      "id": "comment3", 
+      "parent": "@comment4", 
+      "contents": "different parent"
+    }
+  ]''')
+
+
+ model5.query(
+   '''{ ?post 
       *,
-      'contains' : { * where (subsumedby = ?parent)}
+      'comments' : { * where parent = ?post}
+      where type = 'post'
       }''')
 
   </textarea></div>
@@ -1039,25 +1206,159 @@ This is example, value of the contains property will be any object that
 
 .. code-block:: python
 
- >>> model1.query(
+ >>> from vesper import app
+ >>> model5 = app.createStore(
+ ... '''[
+ ...   {
+ ...     "type": "post", 
+ ...     "id": "post1", 
+ ...     "contents": "a post"
+ ...   }, 
+ ...   {
+ ...     "type": "comment", 
+ ...     "id": "comment1", 
+ ...     "parent": "@post1", 
+ ...     "contents": "a comment"
+ ...   }, 
+ ...   {
+ ...     "type": "comment", 
+ ...     "id": "comment2", 
+ ...     "parent": "@comment1", 
+ ...     "contents": "a reply"
+ ...   }, 
+ ...   {
+ ...     "type": "comment", 
+ ...     "id": "comment3", 
+ ...     "parent": "@comment4", 
+ ...     "contents": "different parent"
+ ...   }
+ ... ]''')
+
+ >>> model5.query(
  ... '''
- ...     {
- ...     ?parent, 
+ ...     { ?post 
  ...     *,
- ...     'contains' : { * where (subsumedby = ?parent)}
+ ...     'comments' : { * where parent = ?post}
+ ...     where type = 'post'
  ...     }
  ... ''')
  null
 
 
-find all tag, include child tags in result
+
+filter sets
+--------------
+
+When a filter expression is surrounded by braces (`{` and `}`) the filter is applied 
+separately from the rest of the expression, and is evaluated as an object reference
+to the object that met that criteria. These object references have the same semantics 
+as label references. The object references can optionally be labeled and are typically 
+used to create joins.
+
+Note that a filter expression like `{id = ?foo}` is logically equivalent to labeling the group `?foo`.
+
+
+.. code-block:: jsonql
+
+ { * 
+  where type = 'comment' and parent = { type = 'post'} 
+  }
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='6' cols='60'>
+ model5.query(
+   '''{ * 
+  where type = 'comment' and parent = { type = 'post'} 
+  }''')
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+ >>> model5.query(
+ ... '''
+ ... { * 
+ ... where type = 'comment' and parent = { type = 'post'} 
+ ... }
+ ... ''')
+ null
+
+
+
+joins
+------
+
+
+
+
+
+`maybe` expressions (outer joins)
+---------------------------------
+
+The "MAYBE" operator indicates that the expression it modifies is an optional part of the filter set. 
+MAYBE can modify property references and join conditions; it is an error to modify any other expression.
+When "maybe" modifies a property reference it indicates that the existence of a property not required. When "maybe" modifies a join condition (an expression that joins two filter sets together) if the condition does not match any objects, any references to the missing objects' id or properties will replaced with nulls (this is know as an "outer join"). 
+
+
+For example, object don't
+
+#property reference in filter prop = maybe ?label and ?label.type = 'type'
+
+#can also appear in the construction: { maybe foo}
+
+
 
 .. code-block:: jsonql
 
  {
-      ?parent, 
+  prop1, maybe prop2
+  }
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='6' cols='60'>
+ model5.query(
+   '''{
+  prop1, maybe prop2
+  }''')
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+ >>> model5.query(
+ ... '''
+ ... {
+ ... prop1, maybe prop2
+ ... }
+ ... ''')
+ null
+
+
+
+uncorrelated references (cross joins)
+-------------------------------------
+
+
+the follow() function (recursive joins)
+---------------------------------------
+
+
+.. code-block:: jsonql
+
+ { ?post 
       *,
-      'contains' : { where(subsumedby = ?parent)}
+      'comments' : {?comment * where ?comment in rfollow(?post, parent, true)}
+      where type = 'post'
       }
 
 
@@ -1066,11 +1367,11 @@ find all tag, include child tags in result
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='8' cols='60'>
- model1.query(
-   '''{
-      ?parent, 
+ model5.query(
+   '''{ ?post 
       *,
-      'contains' : { where(subsumedby = ?parent)}
+      'comments' : {?comment * where ?comment in rfollow(?post, parent, true)}
+      where type = 'post'
       }''')
 
   </textarea></div>
@@ -1078,35 +1379,75 @@ find all tag, include child tags in result
 
 .. code-block:: python
 
- >>> model1.query(
+ >>> model5.query(
  ... '''
- ...     {
- ...     ?parent, 
+ ...     { ?post 
  ...     *,
- ...     'contains' : { where(subsumedby = ?parent)}
+ ...     'comments' : {?comment * where ?comment in rfollow(?post, parent, true)}
+ ...     where type = 'post'
  ...     }
  ... ''')
- null
-
-
-
-`maybe` and outer joins
------------------------
-
-
-object references and anonymous objects
-=======================================
-
-If an object is anonymous it will be expanded, otherwise an object reference object will be output. This behavior can be overridden using the `DEPTH` directive, which will force object references to be expanded, even if objects are duplicated. 
+ [
+   {
+     "type": "post", 
+     "id": "post1", 
+     "contents": "a post", 
+     "comments": [
+       {
+         "parent": "@post1", 
+         "type": "comment", 
+         "id": "comment1", 
+         "contents": "a comment"
+       }, 
+       {
+         "parent": "@comment1", 
+         "type": "comment", 
+         "id": "comment2", 
+         "contents": "a reply"
+       }
+     ]
+   }
+ ]
 
 
 
 Expressions
 ===========
 
+Expressions can be evaluated in two contexts: when they appear inside the where clause and when they appear inside the construction
+WHAT ABOUT: order by, group by ?
+
 If an expression contains a property reference whose value a list and the expression doesn't contain any :ref:`aggregate functions', the expression will be evaluated for each item in that list, resulting in a list. If the expression contains more than one property reference, the expression will be evaluated on each tuple obtained from a cartesian product of the list values, using an order based on the depth-first appearance of the property references.
 
-XXX examples
+Operator Precedence
+-------------------
+
+Follows SQL, from highest to lowest. 
+
+( )
+.
+unary + / unary - (right)
+* / %
++ -
+< <= > >= = !=
+in 
+not
+maybe
+and
+or
+
+Operators with equal precedence are evaluated from left-to-right, except for the unary operator, which evaluate from right-to-left.
+
+Type coercion
+-------------
+
+Built-in functions
+------------------
+
+
+Sorting the results: ORDER BY 
+=============================
+
 
 
 Groupby and aggregate Functions
@@ -1122,8 +1463,37 @@ count, min, max, sum, avg follow standard SQL semantics with regard to null hand
 
 
 
+output modifiers
+================
+
+MERGEALL
+--------
+
+DEPTH
+-----
+
+DEPTH may result in duplicate objects being constructed if there are multiple reference to the same object, including circular references [hmmm... better not choose a arbitrary to number to expand all like DEPTH 1000].
+Objects no properties are not serialized as objects, they will remain an object reference.
+
+Note: expand a particular object, use ... or use DEPTH in a nested construct.
+
+LIMIT and OFFSET
+----------------
+
+LIMIT and OFFSET are applied to the final resultset, after any GROUP BY and ORDER BY operations, but before the MERGEALL operation.
+
+
 Bind variables
 ==============
+
+
+NAMEMAP
+========
+
+The value of a NAMEMAP declaration matches pjson's namemap and is used both when parsing the query and when serializing the resultset. 
+
+The namemap applies to the construct pattern it appears in and in any nested constructs. 
+If a nested construct has a NAMEMAP described, the effective namemap is the merger of this namemap with the effective parent namemap, as specified for pjson.
 
 
 .. rubric:: Footnotes

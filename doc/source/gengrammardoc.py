@@ -10,12 +10,12 @@ import vesper.query.parse, re
 
 token_productions = {
 'LABEL' : ['"?" `name`'],
-'BINDVAR' : ['"@" `name`'],
-'QNAME' : ['`name` ":" `name`'],
-'QSTAR' : ['`name` ":*"'], 
+'BINDVAR' : ['":" `name`'],
 'PROPSTRING' :  ['"<" jsonchars+ ">"'],
 'STRING' :  ['""" jsonchars* """', '"\'" jsonchars* "\'"'],
 'NAME' : ['[A-Za-z_$][A-Za-z0-9_$]*'],
+'REF' : ['"@" `name`'],
+'REFSTRING' :  ['"@<" jsonchars+ ">"'],
 }
 
 def replace_tokens(match):

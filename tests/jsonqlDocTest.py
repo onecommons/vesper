@@ -483,7 +483,7 @@ Otherwise, the sub-query will be evaluated independently for each result of the 
 
 t%'''
 Data Types
-=========
+==========
 
 A jsonQL implementation supports at least the data types defined by JSON and may support additional data types if the underlying datastore supports them.
 
@@ -543,7 +543,7 @@ t("{id, value where value != null}",
 
 t%'''
 pseudo-value types
------------------
+------------------
 
 matches value in the list not the list itself. The data-store may support data types that is serialized as a JSON array, the semantics will not apply. [Example]
 

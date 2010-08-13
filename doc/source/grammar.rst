@@ -31,14 +31,14 @@ This grammar file is machine generated.
      listconstructlist : `listconstructitemlist` `constructoplist`
                     : |`listconstructitemlist` "," `constructoplist`
                     : |`listconstructitemlist` "," `constructoplist` ","
-     constructop    : "where" "(" `expression` ")"
-                    : |"groupby" "(" `arglist` ")"
-                    : |"limit" INT
+     constructop    : "limit" INT
                     : |"offset" INT
                     : |"depth" INT
-                    : |"orderby" "(" `sortexplist` ")"
                     : |"mergeall"
                     : |"namemap" "=" `jsondict`
+                    : |"group" "by" `arglist`
+                    : |"order" "by" `sortexplist`
+                    : |"where" `expression`
      listconstructitemlist : `listconstructitemlist` "," `listconstructitem`
                     : |`listconstructitem`
                     : |`empty`
@@ -59,15 +59,15 @@ This grammar file is machine generated.
                     : |`expression` "or" `expression`
                     : |"(" `expression` ")"
                     : |`expression` "in" "(" `exprlist` ")"
-                    : |`expression` "is" "null"
-                    : |`expression` "is" "not" "null"
                     : |"maybe" `expression`
                     : |`expression` "not" "in" `expression`
                     : |`expression` "not" "in" "(" `exprlist` ")"
                     : |"not" `expression`
                     : |"-" `expression` 
                     : |"+" `expression` 
-     jsondict       : "{" `jsondictlist` "}"
+     sortexplist    : `sortexplist` "," `sortexp`
+                    : |`sortexp`
+                    : |`empty`
      arglist        : `arglist` "," `expression`
                     : |`arglist` "," `keywordarg`
                     : |`keywordarg`
@@ -76,13 +76,14 @@ This grammar file is machine generated.
      constructitemlist : `constructitemlist` "," `constructitem`
                     : |`constructitem`
                     : |`empty`
-     sortexplist    : `sortexplist` "," `sortexp`
-                    : |`sortexp`
-                    : |`empty`
+     jsondict       : "{" `jsondictlist` "}"
      listconstructitem : `expression`
      exprlist       : `exprlist` "," `expression`
                     : |`expression`
      keywordarg     : `name` "=" `expression`  
+     sortexp        : `expression`
+                    : |`expression` "asc"
+                    : |`expression` "desc"
      atom           : `columnref`
                     : |`funccall`
                     : |`constant`
@@ -96,30 +97,34 @@ This grammar file is machine generated.
                     : |"null"
                     : |"true"
                     : |"false"
+                    : |`ref`
+                    : |`refstring`
      jsondictlist   : `jsondictlist` "," `jsondictitem`
                     : |`jsondictitem`
                     : |`empty`
      constructitem  : `expression` ":" `dictvalue`
-                    : |"omitnull" `expression` ":" `dictvalue`
+                    : |`expression` ":" "omitnull" `dictvalue`
                     : |`barecolumnref`
                     : |"omitnull" `barecolumnref`
                     : |"maybe" `barecolumnref`
+                    : |"omitnull" "maybe" `barecolumnref`
                     : |"[" `barecolumnref` "]"
                     : |"[" "omitnull" `barecolumnref` "]"
                     : |"[" "maybe" `barecolumnref` "]"
+                    : |"[" "omitnull" "maybe" `barecolumnref` "]"
                     : |"id"
      barecolumnref  : `name`
                     : |"*"
                     : |`propstring`
-     sortexp        : `expression`
-                    : |`expression` "asc"
-                    : |`expression` "desc"
      join           : "{" `expression` "}"
                     : |"{" `label` "," `expression` "}"
                     : |"{" `label` `expression` "}"
      funccall       : `funcname` "(" `arglist` ")"
      columnref      : `label` "." `columnreftrailer`
                     : |`columnreftrailer`
+                    : |`label` "." `columnreftrailer` "." "id"
+                    : |`columnreftrailer` "." "id"
+                    : |`label` "." "id"
      jsondictitem   : `string` ":" `string`
                     : |`string` ":" `jsondict`
                     : |`name` ":" `string`
@@ -134,14 +139,14 @@ This grammar file is machine generated.
                     : |`listconstruct`
      columnreftrailer : `barecolumnref`
                     : |`columnreftrailer` "." `barecolumnref`
-     qstar          : `name` ":*"
-     bindvar        : "@" `name`
+     bindvar        : ":" `name`
+     name           : [A-Za-z_$][A-Za-z0-9_$]*
+     label          : "?" `name`
+     refstring      : "@<" jsonchars+ ">"
+     ref            : "@" `name`
+     propstring     : "<" jsonchars+ ">"
      string         : """ jsonchars* """
                     : |"'" jsonchars* "'"
-     qname          : `name` ":" `name`
-     label          : "?" `name`
-     propstring     : "<" jsonchars+ ">"
-     name           : [A-Za-z_$][A-Za-z0-9_$]*
 
 
 ..  colophon: this doc was generated with "python doc/source/gengrammardoc.py > doc/source/grammar.rst"
