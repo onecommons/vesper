@@ -58,8 +58,7 @@ t.useSerializer = True
 ###################################
 
 '''
-XXX
-The processing model for JSONql is closely follows the relational algebra of SQL. Abstractly, a JSONql query is applied to collection of JSON objects that match `pjson` semantics: First, any specified :ref:`filters <filter>` are used to select objects in the store. Then each object is projected onto a row whose columns consist of properties of the object that were referenced by query. If a query has multiple filters, the resulting rows will be joined together join conditions or cartesian product if the. 
+The processing model for jsonQL is closely follows the relational algebra of SQL. First, any specified :ref:`filterset <filter>` are used to select objects in the store. Then each object is projected onto a row whose columns consist of properties of the object that were referenced by query. If a query has multiple filters, the resulting rows will be joined together join conditions or cartesian product if the 
 
 After this, the "construct" phase
 
@@ -79,56 +78,14 @@ t % '''
 jsonQL Reference 
 ~~~~~~~~~~~~~~~~
 
-jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
-
-The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
+jsonQL is a language for querying data that can be represented in JSON. Abstractly, a jsonQL query operates on collection of JSON objects that conform to :doc:`pjson` semantics. More concretely, jsonQL works with a Vesper datastore, which provides a logical mapping between objects in a backend datastore to a collection of JSON objects (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 '''
 
-t.model = mainmodel = modelFromJson([
-{ "type": "post", 
-'id' : "post1", 
-'contentType' : 'text/plain',
-'published' : '', 
-'tags' : ['tag:foo'],
-'author' : 'user:1',
-'contents' : "hello world!"
-},
+t.model = mainmodel = jqltester.getExampleModel()
 
-{ "id" : "tag:foo", 
-   'type' : 'tag',
-   "label" : "foo",
-  "subcategoryOf" : "tag:nonsense",
-},
-
-{
-'id' : 'tag:nonsense',
-'type' : 'tag',
-'label' : 'Nonsense'
-},
-
-{ 'type' : 'user', 
-'id' : 'user:1',
-'displayname': 'abbey aardvaark', 
- 'auth' : [ {
-   'service' : 'facebook',
-    'facebook_uid' : 394090223,
-    'name' : 'abbey aardvaark'
-   },   
-   {
-   'service' : 'google',
-   'name' : 'abbey aardvaark',
-   "email" : 'aaardvaark@gmail.com',
-    "language" : 'en',
-    "username" : 'aaardvaark'
-   }
-  ]
-},
-{ 'type' : 'user', 
-'id' : 'user:2',
-'displayname': 'billy billygoat',
-},
-
-])
+t % '''
+Unless otherwise specified, the example queries here are based on the example datastore found in the :doc:`tutorial`. You can cut and paste or you can run the admin tool on the sample store. 
+'''
 
 t % printmodel(t.model)
 
@@ -137,17 +94,16 @@ t % '''
 Basic Grammar
 =============
 
-Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
+Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). This reference guide will walk through each element of language and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
-XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
-
+A jsonQL query consists of a "construct pattern" that describes the JSON output, which can be any JSON type: an object, an array or a simple value like a string. The syntax for jsonQL construct patterns is:
 
 .. productionlist::
  query  : `constructobject` 
         :| `constructarray` 
         :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `propertypair` [","])+ 
+                 :    (`objectitem` | `abbreviateditem` [","])+ 
                  :     [`query_criteria`] 
                  :  "}"
  constructarray  : "[" [`label`]
@@ -156,16 +112,11 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- objectitem      : | "ID" | "*" | ["["] ["omitnull"] ["maybe"] `propertyname` ["]"]
- propertypair    :  `expression` ":" ["["] ["omitnull"] `propertyvalue` ["]"]
+ objectitem      :  `expression` ":" ["["] ["omitnull"] ["maybe"] `propertyvalue` ["]"]
  propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
+ abbreviateditem : "ID" | "*" | ["["] ["omitnull"] ["maybe"] `propertyname` ["]"]
  propertyname    : NAME | "<" CHAR+ ">"
- comments : "#" CHAR* <end-of-line> 
-          : | "//" CHAR* <end-of-line> 
-          : | "/*" CHAR* "*/"
-
-.. productionlist::
  query_criteria  : ["WHERE" `expression`]
                  : ["GROUP BY" (`expression`[","])+]
                  : ["ORDER BY" (`expression` ["ASC"|"DESC"][","])+]
@@ -175,6 +126,8 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
                  : ["MERGEALL"]
                  : ["NAMEMAP" "=" `namemapdict`]
  namemapdict     : "{" [((NAME | STRING) ":" (STRING | `namemapdict`) ","?)+] "}"
+
+The syntax for jsonQL expressions is:
 
 .. productionlist::                 
  expression : `expression` "and" `expression`
@@ -200,7 +153,7 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
 Construct Patterns
 ==================
 
-There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
+There are three top level constructions depending on whether you want to construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
 A jsonQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
 
@@ -212,7 +165,7 @@ t('''{
     }
 ''', [
         {
-            "displayname": "abbey aardvaark",
+            "displayname": "abbey aardvark",
             "type": "user"            
         }, 
         {
@@ -223,15 +176,15 @@ t('''{
 )
 
 t % '''
-Both the property name and value are expressions. In this example, the property names is simply string constants while the property value are property references. In the next example, the property name is a property reference and property value is a
-more complex expression. It uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service. [#f1]_
+Both the property name and value are expressions. In this example, the property names is simply string constants while the property value are property references. In the next example, the property name is the object id and property value is a
+more complex expression. It uses the MERGEALL option to return a single dictionary that is a merge of the results.
 '''
 
 t("""{
-  service : maybe facebook_uid or maybe email
+  id : upper(displayname)
   MERGEALL 
 }""",
- [{'facebook': 394090223, 'google': 'aaardvaark@gmail.com'}]
+ [{'user:1': "ABBEY AARDVARK", 'user:2': "BILLY BILLYGOAT"}]
 )
 
 t %'''
@@ -244,7 +197,7 @@ equivalent to the first query:
 '''
 t("{ displayname, type }", [
         {
-            "displayname": "abbey aardvaark",
+            "displayname": "abbey aardvark",
             "type": "user"            
         }, 
         {
@@ -261,7 +214,7 @@ You can also construct results as arrays (lists) instead of objects. This query 
 '''
 
 t("[displayname, type]", [    
-    ['abbey aardvaark', "user"], ['billy billygoat', "user"]
+    ['abbey aardvark', "user"], ['billy billygoat', "user"]
     ]
 )
 
@@ -274,7 +227,7 @@ You can select simple values (strings or numbers) by wrapping an :token:`express
 
 t("(displayname)",
 [
-    "abbey aardvaark", 
+    "abbey aardvark", 
     "billy billygoat"
 ])
 
@@ -289,19 +242,19 @@ You can specify properties whose name match reserved keywords or have illegal ch
 Such a property can written as `<id>`.
 '''
 
-t.model = modelFromJson([
-{
-"key" : "1",
-"namemap" : { "id" : "key"},
-"id" : "a property named id",
-"a property with spaces" : "this property name has spaces"
-}
-])
 
 t("{ 'key' : id, <id>, <a property with spaces>}",
 [{'a property with spaces': 'this property name has spaces',  
   'id': 'a property named id',
-  'key': '@1'}]
+  'key': '@1'}],
+  model = [
+  {
+  "key" : "1",
+  "namemap" : { "id" : "key"},
+  "id" : "a property named id",
+  "a property with spaces" : "this property name has spaces"
+  }
+  ] 
 )
 
 t%'''
@@ -309,31 +262,27 @@ Property wildcard ('*')
 -----------------------
 The "*" will expand to all properties defined for the object. For example, this query retrieves all objects in the store:
 '''
-t.model = mainmodel
-t("{*}", [{'id': 'tag:nonsense', 'label': 'Nonsense', 'type': 'tag'},
- {'auth': [{'facebook_uid': 394090223,
-            'name': 'abbey aardvaark',
-            'service': 'facebook'},
-           {'email': 'aaardvaark@gmail.com',
-            'language': 'en',
-            'name': 'abbey aardvaark',
-            'service': 'google',
-            'username': 'aaardvaark'}],
-  'displayname': 'abbey aardvaark',
+t("{*}", [{'author': '@user:2',
+  'contents': 'a comment',
+  'id': 'comment1',
+  'parent': '@post1',
+  'type': 'comment'},
+ {'displayname': 'abbey aardvark',
+  'email': ['abbey@aardvark.com', 'abbey_aardvark@gmail.com'],
   'id': 'user:1',
   'type': 'user'},
- {'author': 'user:1',
-  'contentType': 'text/plain',
-  'contents': 'hello world!',
-  'id': 'post1',
-  'published': '',
-  'tags': ['tag:foo'],
-  'type': 'post'},
- {'displayname': 'billy billygoat', 'id': 'user:2', 'type': 'user'},
- {'id': 'tag:foo',
-  'label': 'foo',
-  'subcategoryOf': 'tag:nonsense',
-  'type': 'tag'}]
+ {'author': '@user:1', 'contents': 'a post', 'id': 'post1', 'type': 'post'},
+ {'author': '@user:1',
+  'contents': 'a reply',
+  'id': 'comment2',
+  'parent': '@comment1',
+  'type': 'comment'},
+ {'author': '@user:1',
+  'contents': 'different parent',
+  'id': 'comment3',
+  'parent': '@comment4',
+  'type': 'comment'},
+ {'displayname': 'billy billygoat', 'id': 'user:2', 'type': 'user'}]
 )
 
 
@@ -387,48 +336,39 @@ Null values and optional properties
 results will only include objects that contain the property referenced in the construct list,
 For example, the next example just returns one object because only one has a both a displayname and auth property.
 '''
-t('{displayname, auth}',
-[{'auth': [{'facebook_uid': 394090223,
-            'name': 'abbey aardvaark',
-            'service': 'facebook'},
-           {'email': 'aaardvaark@gmail.com',
-            'language': 'en',
-            'name': 'abbey aardvaark',
-            'service': 'google',
-            'username': 'aaardvaark'}],
-  'displayname': 'abbey aardvaark'}]
+t('{displayname, email}',
+[{ 'displayname': 'abbey aardvark',
+   'email' : [ 
+    'abbey@aardvark.com',
+    'abbey_aardvark@gmail.com'
+   ]  
+  }]
 )
 
 t%'''
 If property references are modified "maybe" before them then objects without that property will be included in the result. For example:
 '''
-t('{displayname, maybe auth}',
-[{'auth': [{'facebook_uid': 394090223,
-            'name': 'abbey aardvaark',
-            'service': 'facebook'},
-           {'email': 'aaardvaark@gmail.com',
-            'language': 'en',
-            'name': 'abbey aardvaark',
-            'service': 'google',
-            'username': 'aaardvaark'}],
-  'displayname': 'abbey aardvaark'},
+t('{displayname, maybe email}',
+[{ 'displayname': 'abbey aardvark',
+   'email' : [ 
+    'abbey@aardvark.com',
+    'abbey_aardvark@gmail.com'
+   ]  
+  },  
  {'displayname': 'billy billygoat',
- 'auth': None}]
+ 'email': None}]
 )
 
 t % '''
 This query still specifies that "auth" property appears in every object in the result -- objects that doesn't have a "auth" property defined have that property value set to null. If you do not want the property included in that case, you can use the the `OMITNULL` modifier instead:
 ''' 
-t('{displayname, omitnull maybe auth}',
-[{'auth': [{'facebook_uid': 394090223,
-            'name': 'abbey aardvaark',
-            'service': 'facebook'},
-           {'email': 'aaardvaark@gmail.com',
-            'language': 'en',
-            'name': 'abbey aardvaark',
-            'service': 'google',
-            'username': 'aaardvaark'}],
-  'displayname': 'abbey aardvaark'},
+t('{displayname, omitnull maybe email}',
+[{ 'displayname': 'abbey aardvark',
+   'email' : [ 
+    'abbey@aardvark.com',
+    'abbey_aardvark@gmail.com'
+   ]  
+  },  
  {'displayname': 'billy billygoat'}]
 )
 
@@ -443,25 +383,24 @@ but it will never be included in the result because of the "omitnull".
 '''
 
 t('{displayname, "nullproperty" : omitnull null}',
-[{ 'displayname': 'abbey aardvaark'},
+[{ 'displayname': 'abbey aardvark'},
  { 'displayname': 'billy billygoat'}]
 )
 
 t%'''
 The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 '''
-
-t('{displayname, [maybe auth]}',
-[{'auth': [{'facebook_uid': 394090223,
-            'name': 'abbey aardvaark',
-            'service': 'facebook'},
-           {'email': 'aaardvaark@gmail.com',
-            'language': 'en',
-            'name': 'abbey aardvaark',
-            'service': 'google',
-            'username': 'aaardvaark'}],
-  'displayname': 'abbey aardvaark'},
- {'auth': [], 'displayname': 'billy billygoat'}]
+    
+t('{displayname, [maybe email]}',
+[{ 'displayname': 'abbey aardvark',
+   'email' : [ 
+    'abbey@aardvark.com',
+    'abbey_aardvark@gmail.com'
+   ]  
+  },  
+ {'displayname': 'billy billygoat',
+ 'email': []
+ }]
 )
 
 t%'''
@@ -555,10 +494,8 @@ they may not be queried. Note the implementation may store these as object and e
 '''
 
 
-
 #mysql's null-safe equal: <=>
 #postgres null-safe not equal: IS DISTINCT FROM
-
 
 t.group = 'lists'
 
@@ -612,32 +549,7 @@ all or nothing queries
 '''
 
 t.group = 'joins'
-t.model = joinModel = modelFromJson([
-{
-'id' : 'post1',
-'type' : 'post',
-'contents' : 'a post'
-},
-{
-'id' : 'comment1',
-'parent' : '@post1',
-'type' : 'comment',
-'contents' : 'a comment'
-},
-{
-'id' : 'comment2',
-'parent' : '@comment1',
-'type' : 'comment',
- 'contents' : 'a reply'
-},
-{
-'id' : 'comment3',
-'parent' : '@comment4',
-'type' : 'comment',
- 'contents' : 'different parent'
-}
-
-])
+t.model = mainmodel 
 
 t%'''
 Object References and Joins
@@ -845,19 +757,20 @@ t('''
     where type = 'post'
     }
 ''',
-[{
-'id': 'post1',
-'contents': 'a post',  
-'type': 'post',
-'comments': [{'contents': 'a comment',
+[{'author': '@user:1',
+  'comments': [{'author': '@user:2',
+                'contents': 'a comment',
                 'id': 'comment1',
                 'parent': '@post1',
                 'type': 'comment'},
-               {'contents': 'a reply',
+               {'author': '@user:1',
+                'contents': 'a reply',
                 'id': 'comment2',
                 'parent': '@comment1',
-                'type': 'comment'}]
-}]
+                'type': 'comment'}],
+  'contents': 'a post',
+  'id': 'post1',
+  'type': 'post'}]
 )
 
 t % '''
@@ -953,24 +866,12 @@ If a nested construct has a NAMEMAP described, the effective namemap is the merg
 #XXX Renaming properties are only used when serializing
 
 t.group = 'footnotes'
-t%'''
+'''
 .. rubric:: Footnotes
 
-.. [#f1] Note this simplified example isn't very useful since it will merge all user's logins together. Here's a similar query that  returns the login object per user:
+.. [#f1] blah blah
 '''
 
-t('''
-{ "userid" : id, 
-  "logins" : {?login 
-              service : maybe facebook_uid or maybe email
-              MERGEALL
-             }
-  where (auth = ?login)  
-}
-''', 
-[{'logins': {'facebook': 394090223, 'google': 'aaardvaark@gmail.com'},
-  'userid': '@user:1'}]
-, model = mainmodel)
 
 t%'''
 .. raw:: html

@@ -9,6 +9,5 @@ jsonQL is a query language for blah blah. Follow the links below for more inform
  :maxdepth: 1
 
  jsonql
- tutorial
  spec
  grammar

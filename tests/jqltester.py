@@ -146,7 +146,7 @@ def formatPlainText(plaintext):
 def printmodel(model):
     modelsrc, modelname = _models[id(model)]    
     assert id(model) not in _printedmodels
-    _printedmodels.append(id(model))        
+    _printedmodels.append(id(model))  
     modelFormatted, modelPlain = formatmodel(modelsrc, modelname)
     plaintextFormatted = formatPlainText(modelPlain)
     return '''
@@ -398,3 +398,49 @@ def main(t, cmdargs=None):
         print '***** %d tests passed, %d failed, %d skipped' % (count-failed, failed, skipped)
     elif t._nextdoc:
         print '\n'.join(t._nextdoc)
+
+#this model is shared by the documentation tests
+def getExampleModel():
+    return modelFromJson([
+    {
+    'id' : 'post1',
+    'type' : 'post',
+    'contents' : 'a post',
+    'author' : '@user:1',
+    },
+    {
+    'id' : 'comment1',
+    'type' : 'comment',
+    'parent' : '@post1',
+    'author' : '@user:2',
+    'contents' : 'a comment'
+    },
+    {
+    'id' : 'comment2',
+    'parent' : '@comment1',
+    'type' : 'comment',
+     'contents' : 'a reply',
+     'author' : '@user:1'
+    },
+    {
+    'id' : 'comment3',
+    'parent' : '@comment4',
+    'type' : 'comment',
+     'contents' : 'different parent',
+     'author' : '@user:1'
+    },
+    { 
+    'id' : 'user:1',
+    'type' : 'user', 
+    'displayname': 'abbey aardvark', 
+    'email' : [ 
+      'abbey@aardvark.com',
+      'abbey_aardvark@gmail.com'
+     ]
+    },
+    {  
+    'id' : 'user:2',
+    'type' : 'user',
+    'displayname': 'billy billygoat'
+    }
+    ])

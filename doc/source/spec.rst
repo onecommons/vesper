@@ -3,9 +3,10 @@
 jsonQL Reference 
 ~~~~~~~~~~~~~~~~
 
-jsonQL is languages for querying data that can represented in JSON. A jsonQL implementation provides a mapping from objects in a backend datastore to a collection of JSON objects with properties (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
+jsonQL is a language for querying data that can be represented in JSON. Abstractly, a jsonQL query operates on collection of JSON objects that conform to :doc:`pjson` semantics. More concretely, jsonQL works with a Vesper datastore, which provides a logical mapping between objects in a backend datastore to a collection of JSON objects (for example, each object might correspond to a row in table, with a property for each column). A jsonQL query operates on that mapping in a manner similar to a SQL query except that instead of returning rows it returns JSON data structures based on the pattern specified in the query.
 
-The examples here are based on the following example. You can cut an paste or you can run the admin tool on the sample store. 
+
+Unless otherwise specified, the example queries here are based on the example datastore found in the :doc:`tutorial`. You can cut and paste or you can run the admin tool on the sample store. 
 
 
 
@@ -13,49 +14,44 @@ The examples here are based on the following example. You can cut an paste or yo
 
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='53' cols='60'>
+  <textarea rows='48' cols='60'>
  from vesper import app
  model1 = app.createStore(
  '''[
     {
-      "contentType": "text/plain", 
-      "author": "user:1", 
-      "tags": [
-        "tag:foo"
-      ], 
-      "published": "", 
       "type": "post", 
       "id": "post1", 
-      "contents": "hello world!"
+      "contents": "a post", 
+      "author": "@user:1"
     }, 
     {
-      "subcategoryOf": "tag:nonsense", 
-      "type": "tag", 
-      "id": "tag:foo", 
-      "label": "foo"
+      "contents": "a comment", 
+      "type": "comment", 
+      "id": "comment1", 
+      "parent": "@post1", 
+      "author": "@user:2"
     }, 
     {
-      "type": "tag", 
-      "id": "tag:nonsense", 
-      "label": "Nonsense"
+      "author": "@user:1", 
+      "type": "comment", 
+      "id": "comment2", 
+      "parent": "@comment1", 
+      "contents": "a reply"
+    }, 
+    {
+      "author": "@user:1", 
+      "type": "comment", 
+      "id": "comment3", 
+      "parent": "@comment4", 
+      "contents": "different parent"
     }, 
     {
       "displayname": "abbey aardvaark", 
       "type": "user", 
       "id": "user:1", 
-      "auth": [
-        {
-          "name": "abbey aardvaark", 
-          "service": "facebook", 
-          "facebook_uid": 394090223
-        }, 
-        {
-          "username": "aaardvaark", 
-          "language": "en", 
-          "name": "abbey aardvaark", 
-          "service": "google", 
-          "email": "aaardvaark@gmail.com"
-        }
+      "email": [
+        "abbey@aardvaark.com", 
+        "abbey_aardvaak@gmail.com"
       ]
     }, 
     {
@@ -76,44 +72,39 @@ The examples here are based on the following example. You can cut an paste or yo
  >>> model1 = app.createStore(
  ... '''[
  ...   {
- ...     "contentType": "text/plain", 
- ...     "author": "user:1", 
- ...     "tags": [
- ...       "tag:foo"
- ...     ], 
- ...     "published": "", 
  ...     "type": "post", 
  ...     "id": "post1", 
- ...     "contents": "hello world!"
+ ...     "contents": "a post", 
+ ...     "author": "@user:1"
  ...   }, 
  ...   {
- ...     "subcategoryOf": "tag:nonsense", 
- ...     "type": "tag", 
- ...     "id": "tag:foo", 
- ...     "label": "foo"
+ ...     "contents": "a comment", 
+ ...     "type": "comment", 
+ ...     "id": "comment1", 
+ ...     "parent": "@post1", 
+ ...     "author": "@user:2"
  ...   }, 
  ...   {
- ...     "type": "tag", 
- ...     "id": "tag:nonsense", 
- ...     "label": "Nonsense"
+ ...     "author": "@user:1", 
+ ...     "type": "comment", 
+ ...     "id": "comment2", 
+ ...     "parent": "@comment1", 
+ ...     "contents": "a reply"
+ ...   }, 
+ ...   {
+ ...     "author": "@user:1", 
+ ...     "type": "comment", 
+ ...     "id": "comment3", 
+ ...     "parent": "@comment4", 
+ ...     "contents": "different parent"
  ...   }, 
  ...   {
  ...     "displayname": "abbey aardvaark", 
  ...     "type": "user", 
  ...     "id": "user:1", 
- ...     "auth": [
- ...       {
- ...         "name": "abbey aardvaark", 
- ...         "service": "facebook", 
- ...         "facebook_uid": 394090223
- ...       }, 
- ...       {
- ...         "username": "aaardvaark", 
- ...         "language": "en", 
- ...         "name": "abbey aardvaark", 
- ...         "service": "google", 
- ...         "email": "aaardvaark@gmail.com"
- ...       }
+ ...     "email": [
+ ...       "abbey@aardvaark.com", 
+ ...       "abbey_aardvaak@gmail.com"
  ...     ]
  ...   }, 
  ...   {
@@ -129,17 +120,16 @@ The examples here are based on the following example. You can cut an paste or yo
 Basic Grammar
 =============
 
-Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). We'll go through each element and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
+Below is simplifed representation of the JQL grammar (the formal grammar can be found :doc:`here <grammar>`). This reference guide will walk through each element of language and provide sample queries illustrating each feature of the language. The queries and sample results are based on the sample json used by the [tutorial] (which, btw, might be a better place to start learning about JQL). 
 
-XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a dictionary, a list or a simple value like a string. 
-
+A jsonQL query consists of a "construct pattern" that describes the JSON output, which can be any JSON type: an object, an array or a simple value like a string. The syntax for jsonQL construct patterns is:
 
 .. productionlist::
  query  : `constructobject` 
         :| `constructarray` 
         :| `constructvalue`
  constructobject : "{" [`label`]
-                 :    (`objectitem` | `propertypair` [","])+ 
+                 :    (`objectitem` | `abbreviateditem` [","])+ 
                  :     [`query_criteria`] 
                  :  "}"
  constructarray  : "[" [`label`]
@@ -148,16 +138,11 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
  constructvalue  : "(" 
                  :    `expression` [`query_criteria`] 
                  : ")"
- objectitem      : | "ID" | "*" | ["["] ["omitnull"] ["maybe"] `propertyname` ["]"]
- propertypair    :  `expression` ":" ["["] ["omitnull"] `propertyvalue` ["]"]
+ objectitem      :  `expression` ":" ["["] ["omitnull"] ["maybe"] `propertyvalue` ["]"]
  propertyvalue   : `expression` | "*" | `nestedconstruct`
  nestedconstruct : `constructarray` | `constructobject`
+ abbreviateditem : "ID" | "*" | ["["] ["omitnull"] ["maybe"] `propertyname` ["]"]
  propertyname    : NAME | "<" CHAR+ ">"
- comments : "#" CHAR* <end-of-line> 
-          : | "//" CHAR* <end-of-line> 
-          : | "/*" CHAR* "*/"
-
-.. productionlist::
  query_criteria  : ["WHERE" `expression`]
                  : ["GROUP BY" (`expression`[","])+]
                  : ["ORDER BY" (`expression` ["ASC"|"DESC"][","])+]
@@ -167,6 +152,8 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
                  : ["MERGEALL"]
                  : ["NAMEMAP" "=" `namemapdict`]
  namemapdict     : "{" [((NAME | STRING) ":" (STRING | `namemapdict`) ","?)+] "}"
+
+The syntax for jsonQL expressions is:
 
 .. productionlist::                 
  expression : `expression` "and" `expression`
@@ -192,7 +179,7 @@ XXX: A JSONQL consists of a pattern that describes the JSON output. It can be a 
 Construct Patterns
 ==================
 
-There are three top level constructions depending on whether you want construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
+There are three top level constructions depending on whether you want to construct results as JSON objects (dictionaries), arrays (lists) or simple values (such as a string or number).
 
 A jsonQL query consists of a pattern describes a JSON object (dictionary), a list (array) or simple value -- executing query will construct a list of objects that match the pattern. This example returns a list of all the objects that have properties named "displayname" and "type":
 
@@ -241,14 +228,14 @@ A jsonQL query consists of a pattern describes a JSON object (dictionary), a lis
 
 
 
-Both the property name and value are expressions. In this example, the property names is simply string constants while the property value are property references. In the next example, the property name is a property reference and property value is a
-more complex expression. It uses the MERGEALL option to return a single dictionary of login services where the name of the service is the property and the value depends on the type of service. [#f1]_
+Both the property name and value are expressions. In this example, the property names is simply string constants while the property value are property references. In the next example, the property name is the object id and property value is a
+more complex expression. It uses the MERGEALL option to return a single dictionary that is a merge of the results.
 
 
 .. code-block:: jsonql
 
  {
-    service : maybe facebook_uid or maybe email
+    id : upper(displayname)
     MERGEALL 
   }
 
@@ -260,7 +247,7 @@ more complex expression. It uses the MERGEALL option to return a single dictiona
   <textarea rows='7' cols='60'>
  model1.query(
    '''{
-    service : maybe facebook_uid or maybe email
+    id : upper(displayname)
     MERGEALL 
   }''')
 
@@ -271,13 +258,13 @@ more complex expression. It uses the MERGEALL option to return a single dictiona
 
  >>> model1.query(
  ... '''{
- ...   service : maybe facebook_uid or maybe email
+ ...   id : upper(displayname)
  ...   MERGEALL 
  ... }''')
  [
    {
-     "google": "aaardvaark@gmail.com", 
-     "facebook": 394090223
+     "user:1": "ABBEY AARDVAARK", 
+     "user:2": "BILLY BILLYGOAT"
    }
  ]
 
@@ -489,50 +476,45 @@ The "*" will expand to all properties defined for the object. For example, this 
  ... '''{*}''')
  [
    {
-     "type": "tag", 
-     "id": "tag:nonsense", 
-     "label": "Nonsense"
+     "parent": "@post1", 
+     "type": "comment", 
+     "id": "comment1", 
+     "contents": "a comment", 
+     "author": "@user:2"
    }, 
    {
      "type": "user", 
      "displayname": "abbey aardvaark", 
-     "id": "user:1", 
-     "auth": [
-       {
-         "name": "abbey aardvaark", 
-         "service": "facebook", 
-         "facebook_uid": 394090223
-       }, 
-       {
-         "username": "aaardvaark", 
-         "service": "google", 
-         "email": "aaardvaark@gmail.com", 
-         "language": "en", 
-         "name": "abbey aardvaark"
-       }
-     ]
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaak@gmail.com"
+     ], 
+     "id": "user:1"
    }, 
    {
-     "contentType": "text/plain", 
-     "tags": [
-       "tag:foo"
-     ], 
-     "author": "user:1", 
-     "published": "", 
      "type": "post", 
      "id": "post1", 
-     "contents": "hello world!"
+     "contents": "a post", 
+     "author": "@user:1"
+   }, 
+   {
+     "parent": "@comment1", 
+     "type": "comment", 
+     "id": "comment2", 
+     "contents": "a reply", 
+     "author": "@user:1"
+   }, 
+   {
+     "parent": "@comment4", 
+     "type": "comment", 
+     "id": "comment3", 
+     "contents": "different parent", 
+     "author": "@user:1"
    }, 
    {
      "type": "user", 
      "displayname": "billy billygoat", 
      "id": "user:2"
-   }, 
-   {
-     "type": "tag", 
-     "subcategoryOf": "tag:nonsense", 
-     "id": "tag:foo", 
-     "label": "foo"
    }
  ]
 
@@ -702,7 +684,7 @@ For example, the next example just returns one object because only one has a bot
 
 .. code-block:: jsonql
 
- {displayname, auth}
+ {displayname, email}
 
 
 .. raw:: html
@@ -711,7 +693,7 @@ For example, the next example just returns one object because only one has a bot
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, auth}''')
+   '''{displayname, email}''')
 
   </textarea></div>
 
@@ -719,23 +701,13 @@ For example, the next example just returns one object because only one has a bot
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, auth}''')
+ ... '''{displayname, email}''')
  [
    {
      "displayname": "abbey aardvaark", 
-     "auth": [
-       {
-         "name": "abbey aardvaark", 
-         "service": "facebook", 
-         "facebook_uid": 394090223
-       }, 
-       {
-         "username": "aaardvaark", 
-         "service": "google", 
-         "email": "aaardvaark@gmail.com", 
-         "language": "en", 
-         "name": "abbey aardvaark"
-       }
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaak@gmail.com"
      ]
    }
  ]
@@ -747,7 +719,7 @@ If property references are modified "maybe" before them then objects without tha
 
 .. code-block:: jsonql
 
- {displayname, maybe auth}
+ {displayname, maybe email}
 
 
 .. raw:: html
@@ -756,7 +728,7 @@ If property references are modified "maybe" before them then objects without tha
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, maybe auth}''')
+   '''{displayname, maybe email}''')
 
   </textarea></div>
 
@@ -764,28 +736,18 @@ If property references are modified "maybe" before them then objects without tha
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, maybe auth}''')
+ ... '''{displayname, maybe email}''')
  [
    {
      "displayname": "abbey aardvaark", 
-     "auth": [
-       {
-         "name": "abbey aardvaark", 
-         "service": "facebook", 
-         "facebook_uid": 394090223
-       }, 
-       {
-         "username": "aaardvaark", 
-         "service": "google", 
-         "email": "aaardvaark@gmail.com", 
-         "language": "en", 
-         "name": "abbey aardvaark"
-       }
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaak@gmail.com"
      ]
    }, 
    {
      "displayname": "billy billygoat", 
-     "auth": null
+     "email": null
    }
  ]
 
@@ -796,7 +758,7 @@ This query still specifies that "auth" property appears in every object in the r
 
 .. code-block:: jsonql
 
- {displayname, omitnull maybe auth}
+ {displayname, omitnull maybe email}
 
 
 .. raw:: html
@@ -805,7 +767,7 @@ This query still specifies that "auth" property appears in every object in the r
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, omitnull maybe auth}''')
+   '''{displayname, omitnull maybe email}''')
 
   </textarea></div>
 
@@ -813,23 +775,13 @@ This query still specifies that "auth" property appears in every object in the r
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, omitnull maybe auth}''')
+ ... '''{displayname, omitnull maybe email}''')
  [
    {
      "displayname": "abbey aardvaark", 
-     "auth": [
-       {
-         "name": "abbey aardvaark", 
-         "service": "facebook", 
-         "facebook_uid": 394090223
-       }, 
-       {
-         "username": "aaardvaark", 
-         "service": "google", 
-         "email": "aaardvaark@gmail.com", 
-         "language": "en", 
-         "name": "abbey aardvaark"
-       }
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaak@gmail.com"
      ]
    }, 
    {
@@ -884,7 +836,7 @@ The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 
 .. code-block:: jsonql
 
- {displayname, [maybe auth]}
+ {displayname, [maybe email]}
 
 
 .. raw:: html
@@ -893,7 +845,7 @@ The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='4' cols='60'>
  model1.query(
-   '''{displayname, [maybe auth]}''')
+   '''{displayname, [maybe email]}''')
 
   </textarea></div>
 
@@ -901,28 +853,18 @@ The "forcelist" syntax can be combined with `MAYBE` or `OMITNULL`. For example:
 .. code-block:: python
 
  >>> model1.query(
- ... '''{displayname, [maybe auth]}''')
+ ... '''{displayname, [maybe email]}''')
  [
    {
      "displayname": "abbey aardvaark", 
-     "auth": [
-       {
-         "name": "abbey aardvaark", 
-         "service": "facebook", 
-         "facebook_uid": 394090223
-       }, 
-       {
-         "username": "aaardvaark", 
-         "service": "google", 
-         "email": "aaardvaark@gmail.com", 
-         "language": "en", 
-         "name": "abbey aardvaark"
-       }
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaa@gmail.com"
      ]
    }, 
    {
      "displayname": "billy billygoat", 
-     "auth": []
+     "email": []
    }
  ]
 
@@ -1164,37 +1106,8 @@ This is example, value of the contains property will be any object that
 
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='37' cols='60'>
- from vesper import app
- model5 = app.createStore(
- '''[
-    {
-      "type": "post", 
-      "id": "post1", 
-      "contents": "a post"
-    }, 
-    {
-      "type": "comment", 
-      "id": "comment1", 
-      "parent": "@post1", 
-      "contents": "a comment"
-    }, 
-    {
-      "type": "comment", 
-      "id": "comment2", 
-      "parent": "@comment1", 
-      "contents": "a reply"
-    }, 
-    {
-      "type": "comment", 
-      "id": "comment3", 
-      "parent": "@comment4", 
-      "contents": "different parent"
-    }
-  ]''')
-
-
- model5.query(
+  <textarea rows='8' cols='60'>
+ model1.query(
    '''{ ?post 
       *,
       'comments' : { * where parent = ?post}
@@ -1206,35 +1119,7 @@ This is example, value of the contains property will be any object that
 
 .. code-block:: python
 
- >>> from vesper import app
- >>> model5 = app.createStore(
- ... '''[
- ...   {
- ...     "type": "post", 
- ...     "id": "post1", 
- ...     "contents": "a post"
- ...   }, 
- ...   {
- ...     "type": "comment", 
- ...     "id": "comment1", 
- ...     "parent": "@post1", 
- ...     "contents": "a comment"
- ...   }, 
- ...   {
- ...     "type": "comment", 
- ...     "id": "comment2", 
- ...     "parent": "@comment1", 
- ...     "contents": "a reply"
- ...   }, 
- ...   {
- ...     "type": "comment", 
- ...     "id": "comment3", 
- ...     "parent": "@comment4", 
- ...     "contents": "different parent"
- ...   }
- ... ]''')
-
- >>> model5.query(
+ >>> model1.query(
  ... '''
  ...     { ?post 
  ...     *,
@@ -1270,7 +1155,7 @@ Note that a filter expression like `{id = ?foo}` is logically equivalent to labe
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='6' cols='60'>
- model5.query(
+ model1.query(
    '''{ * 
   where type = 'comment' and parent = { type = 'post'} 
   }''')
@@ -1280,7 +1165,7 @@ Note that a filter expression like `{id = ?foo}` is logically equivalent to labe
 
 .. code-block:: python
 
- >>> model5.query(
+ >>> model1.query(
  ... '''
  ... { * 
  ... where type = 'comment' and parent = { type = 'post'} 
@@ -1325,7 +1210,7 @@ For example, object don't
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='6' cols='60'>
- model5.query(
+ model1.query(
    '''{
   prop1, maybe prop2
   }''')
@@ -1335,7 +1220,7 @@ For example, object don't
 
 .. code-block:: python
 
- >>> model5.query(
+ >>> model1.query(
  ... '''
  ... {
  ... prop1, maybe prop2
@@ -1367,7 +1252,7 @@ the follow() function (recursive joins)
   <div class='example-plaintext' style='display:none'>
   <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
   <textarea rows='8' cols='60'>
- model5.query(
+ model1.query(
    '''{ ?post 
       *,
       'comments' : {?comment * where ?comment in rfollow(?post, parent, true)}
@@ -1379,7 +1264,7 @@ the follow() function (recursive joins)
 
 .. code-block:: python
 
- >>> model5.query(
+ >>> model1.query(
  ... '''
  ...     { ?post 
  ...     *,
@@ -1389,26 +1274,28 @@ the follow() function (recursive joins)
  ... ''')
  [
    {
-     "type": "post", 
      "id": "post1", 
+     "type": "post", 
      "contents": "a post", 
      "comments": [
        {
          "parent": "@post1", 
          "type": "comment", 
          "id": "comment1", 
-         "contents": "a comment"
+         "contents": "a comment", 
+         "author": "@user:2"
        }, 
        {
          "parent": "@comment1", 
          "type": "comment", 
          "id": "comment2", 
-         "contents": "a reply"
+         "contents": "a reply", 
+         "author": "@user:1"
        }
-     ]
+     ], 
+     "author": "@user:1"
    }
  ]
-
 
 
 Expressions
@@ -1494,62 +1381,6 @@ The value of a NAMEMAP declaration matches pjson's namemap and is used both when
 
 The namemap applies to the construct pattern it appears in and in any nested constructs. 
 If a nested construct has a NAMEMAP described, the effective namemap is the merger of this namemap with the effective parent namemap, as specified for pjson.
-
-
-.. rubric:: Footnotes
-
-.. [#f1] Note this simplified example isn't very useful since it will merge all user's logins together. Here's a similar query that  returns the login object per user:
-
-
-.. code-block:: jsonql
-
- { "userid" : id, 
-    "logins" : {?login 
-                service : maybe facebook_uid or maybe email
-                MERGEALL
-               }
-    where (auth = ?login)  
-  }
-
-
-.. raw:: html
-
-  <div class='example-plaintext' style='display:none'>
-  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
-  <textarea rows='10' cols='60'>
- model1.query(
-   '''{ "userid" : id, 
-    "logins" : {?login 
-                service : maybe facebook_uid or maybe email
-                MERGEALL
-               }
-    where (auth = ?login)  
-  }''')
-
-  </textarea></div>
-
-
-.. code-block:: python
-
- >>> model1.query(
- ... '''
- ... { "userid" : id, 
- ...   "logins" : {?login 
- ...               service : maybe facebook_uid or maybe email
- ...               MERGEALL
- ...              }
- ...   where (auth = ?login)  
- ... }
- ... ''')
- [
-   {
-     "logins": {
-       "google": "aaardvaark@gmail.com", 
-       "facebook": 394090223
-     }, 
-     "userid": "@user:1"
-   }
- ]
 
 
 .. raw:: html

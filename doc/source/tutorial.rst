@@ -1,5 +1,4 @@
-.. :copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
-.. :license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
+
 
 
 jsonQL Tutorial
@@ -12,44 +11,120 @@ This tutorial will walk you through a series of interactive examples of JQL simp
 
 First we'll create a simple JSON store with some sample JSON. For readability, we'll use native Python dictionaries and lists instead of strings of JSON.   
 
- >>> import raccoon
- >>> datastore = raccoon.createStore([
- ... {
- ...   "id" : "user:1",
- ...   "username" : "snoopy",
- ...   "favorites" : [ { 'name' : '',  }, 
- ...   "postaladdress" : [ {
- ...          "street" : "123 1st ave",
- ...          "city" : "",
- ...          "postalcode" : 10001       
- ...    },
- ...    {
- ...              "street" : "123 2nd ave",
- ...              "postalcode" : 10001 
- ...    }
- ...   ],
- ... },
- ... {
- ...   "id" : "user:2",
- ...   "username" : "snoopy",
- ... },
- ... {
- ...   "id" : "project:1", 
- ...    "name" : "project 1",       
- ...    "contributors" : ["user:1", "user:2"]
- ... },
- ... {
- ...   "id" : "project:2", 
- ...    "name" : "project 2",
- ...    "contributors" : ["user:1"]
- ... } 
- ... ])
+
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='48' cols='60'>
+ from vesper import app
+ model1 = app.createStore(
+ '''[
+    {
+      "type": "post", 
+      "id": "post1", 
+      "contents": "a post", 
+      "author": "@user:1"
+    }, 
+    {
+      "contents": "a comment", 
+      "type": "comment", 
+      "id": "comment1", 
+      "parent": "@post1", 
+      "author": "@user:2"
+    }, 
+    {
+      "author": "@user:1", 
+      "type": "comment", 
+      "id": "comment2", 
+      "parent": "@comment1", 
+      "contents": "a reply"
+    }, 
+    {
+      "author": "@user:1", 
+      "type": "comment", 
+      "id": "comment3", 
+      "parent": "@comment4", 
+      "contents": "different parent"
+    }, 
+    {
+      "displayname": "abbey aardvaark", 
+      "type": "user", 
+      "id": "user:1", 
+      "email": [
+        "abbey@aardvaark.com", 
+        "abbey_aardvaak@gmail.com"
+      ]
+    }, 
+    {
+      "displayname": "billy billygoat", 
+      "type": "user", 
+      "id": "user:2"
+    }
+  ]''')
+
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+
+ >>> from vesper import app
+ >>> model1 = app.createStore(
+ ... '''[
+ ...   {
+ ...     "type": "post", 
+ ...     "id": "post1", 
+ ...     "contents": "a post", 
+ ...     "author": "@user:1"
+ ...   }, 
+ ...   {
+ ...     "contents": "a comment", 
+ ...     "type": "comment", 
+ ...     "id": "comment1", 
+ ...     "parent": "@post1", 
+ ...     "author": "@user:2"
+ ...   }, 
+ ...   {
+ ...     "author": "@user:1", 
+ ...     "type": "comment", 
+ ...     "id": "comment2", 
+ ...     "parent": "@comment1", 
+ ...     "contents": "a reply"
+ ...   }, 
+ ...   {
+ ...     "author": "@user:1", 
+ ...     "type": "comment", 
+ ...     "id": "comment3", 
+ ...     "parent": "@comment4", 
+ ...     "contents": "different parent"
+ ...   }, 
+ ...   {
+ ...     "displayname": "abbey aardvaark", 
+ ...     "type": "user", 
+ ...     "id": "user:1", 
+ ...     "email": [
+ ...       "abbey@aardvaark.com", 
+ ...       "abbey_aardvaak@gmail.com"
+ ...     ]
+ ...   }, 
+ ...   {
+ ...     "displayname": "billy billygoat", 
+ ...     "type": "user", 
+ ...     "id": "user:2"
+ ...   }
+ ... ]''')
+
+
 
 
 Four top-level objects, two users and two projects.  
 Many-to-many to One user we have two postal addresses and another we have any at all. 
 
-The :doc:`vesper.pjson` module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default :func:`raccoon.createStore` will use a simple in-memory store.
+The :doc:`pjson` module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default :func:`raccoon.createStore` will use a simple in-memory store.
 
 To illustrate let's create SQL schema that will data mapping. One to many 
 
@@ -57,52 +132,53 @@ To illustrate let's create SQL schema that will data mapping. One to many
 
    <table width='100%' align='center'><tr valign='top'><td>
 
-========== ============== 
-table *user*              
-------------------------- 
-id         username       
-========== ============== 
-1      foo woo            
-2      bar sloooo         
-========== ============== 
+=== ================ 
+table *users*              
+--------------------
+id  displayname       
+=== ================ 
+1   abbey aardvaark
+2   billy billlygoat    
+=== ================ 
 
 .. raw:: html
 
-   </td><td>
+   </td><td width=20></td><td>
 
-========== ==============
-table *project*
--------------------------
-id         name 
-========== ==============
-project:1  project 1
-project:2  project 2
-========== ==============
+======= =========================
+table *user_emails*
+---------------------------------
+user_id email
+======= =========================
+1       abbey@aardvaark.com
+1       abbey_aardvaak@gmail.com
+======= =========================
 
 .. raw:: html
 
    </td></tr><tr valign='top'><td>
 
-========== ==============
-table *contributors*
--------------------------
-user_id    project_id
-========== ==============
-user:1     project:1 
-user:2     project:1
-user:2     project:1
-========== ==============
+=== ====== ========= ============
+table *posts*
+---------------------------------
+id  author contents  title
+=== ====== ========= ============
+1   1      "a post"  "first post"
+=== ====== ========= ============
 
 .. raw:: html
 
-   </td><td>
-   
-======= =======  ==========
-table *user_address*
----------------------------
-user_id street   postalcode
-======= =======  ==========
-======= =======  ==========
+   </td><td width=20></td><td>
+
+=== ====== ==================  ====  ======
+table *comments*
+-------------------------------------------
+id  author contents            post  parent
+=== ====== ==================  ====  ======
+1   1      "a comment"         1     null
+1   2      "a reply"           null  1
+3   1      "different parent"  null  4
+=== ====== ==================  ====  ======
 
 .. raw:: html
 
@@ -115,74 +191,133 @@ select all objects in database
 
 Let's start with query that retrieves all records from the store: 
 
- >>> from pprint import pprint
- >>> pprint(datastore.query('''
- ... { * }
- ... ''',))
- [{},{}]
 
 
-..
-    select id as user_id, username, null as street, null postalcode,  
-      from (select * from users) U
-    union
-    select U.user_id id, null as username, street, postalcode
-    from (select * from user_address)       
-    union
+.. code-block:: jsonql
+
+ {*}
+
+
+.. raw:: html
+
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
+ model1.query(
+   '''{*}''')
+
+  </textarea></div>
+
+
+.. code-block:: python
+
+ >>> model1.query(
+ ... '''{*}''')
+ [
+   {
+     "parent": "@post1", 
+     "type": "comment", 
+     "id": "comment1", 
+     "contents": "a comment", 
+     "author": "@user:2"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "abbey aardvaark", 
+     "email": [
+       "abbey@aardvaark.com", 
+       "abbey_aardvaak@gmail.com"
+     ], 
+     "id": "user:1"
+   }, 
+   {
+     "type": "post", 
+     "id": "post1", 
+     "contents": "a post", 
+     "author": "@user:1"
+   }, 
+   {
+     "parent": "@comment1", 
+     "type": "comment", 
+     "id": "comment2", 
+     "contents": "a reply", 
+     "author": "@user:1"
+   }, 
+   {
+     "parent": "@comment4", 
+     "type": "comment", 
+     "id": "comment3", 
+     "contents": "different parent", 
+     "author": "@user:1"
+   }, 
+   {
+     "type": "user", 
+     "displayname": "billy billygoat", 
+     "id": "user:2"
+   }
+ ]
+
+
 
 This is roughly equivalent to the "SELECT * FROM table" in SQL except of course this just retrieves rows from one table, not the whole database. This points to one conceptual difference before JQL and SQL:  JQL has no notion of tables: queries apply to all objects in the database.
 
 select particular of properties from the database
 -------------------------------------------------
 
- >>> pprint(datastore.query('''
- ... { foo, bar }
- ... ''')) 
 
-This is equivalent to the SQL statement 
+.. code-block:: jsonql
 
-  SELECT foo, bar FROM project
+ { foo, bar }
 
-Note that the objects that don't have foo and bar properties are not selected by the query. We can select against 
 
-"SELECT foo FROM table
- UNION
- SELECT foo FROM table".
+.. raw:: html
 
-This is because the above query is shorthand for this query:
+  <div class='example-plaintext' style='display:none'>
+  <div><span class='close-example-plaintext'>X</span>Copy this code into your Python shell.</div>  
+  <textarea rows='4' cols='60'>
+ model1.query(
+   '''{ foo, bar }''')
 
-.. rubric:: explicitly named properties
+  </textarea></div>
 
-What?
 
- >>> pprint(datastore.query('''
- ... { "foo" : foo,
- ...   "fob" : foo,
- ...  "bar" : foo + "blah", 
- ... }
- ... ''')) 
+.. code-block:: python
 
-Including the `foo` and `bar` properties names in the where clause only selects where the property exists. 
-We could give the propery different names just as can "SELECT foo AS fob FROM table" in SQL.
+ >>> model1.query(
+ ... '''{ foo, bar }''')
+ []
 
-* lists and objects
-* id and anonymous objects
-* filter/where clause
-* joins, objects and variables
-* bind variables
-* functions 
-* group by 
-* recursion
-* LIMIT, OFFSET and DEPTH
-* where foo not in {bar = 2}
-   * foo not in (select id from X where bar = 2)
-   * join( filter(foo), joincond(join(filter(eq(bar,2)) ), join='a') )
 
-..
-    #save for advanced example, with a user case that make sense
-    dynamically name properties
-    
-     >>> pprint(datastore.query('''
-     ... { foo : "foo"
-     ... }
-     ... ''')) 
+.. raw:: html
+
+    <style>
+    .example-plaintext { position:absolute; z-index: 2; background-color: lightgray;}
+    .close-example-plaintext { float:right; 
+      padding-right: 3px;     
+      font-size: .83em;
+      line-height: 0.7em;
+      vertical-align: baseline;
+    }
+    .close-example-plaintext:hover { color: #CA7900; cursor: pointer; }
+    .toolbar { background-color: lightgray; float:right; 
+        border:1px solid;
+        padding: 1px;
+        text-decoration:underline;
+    }
+    .toolbar:hover { color: #CA7900; cursor: pointer; }
+    </style>
+    <script>
+    $().ready(function(){
+      $('.example-plaintext ~ .highlight-python pre').prepend("<span class='toolbar'>Copy Code</span");
+      $('.toolbar').click(function() {
+        $(this).parents('.highlight-python').prev('.example-plaintext:last')
+          .slideDown('fast').find('textarea').focus();
+      });
+      $('.close-example-plaintext').click(function() { 
+            $(this).parents('.example-plaintext').slideUp('fast').find('textarea').blur(); 
+      });
+    });
+    </script>   
+
+..  colophon: this doc was generated by "python tests/jsonqlTutorialTest.py --printdoc > doc/source/tutorial.rst"
+
