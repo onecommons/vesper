@@ -9,6 +9,7 @@ First let's create a store with some JSON. For readability, we'll use native Pyt
 
  >>> from vesper import app
  >>> datastore = app.createStore({
+ ...    "id"  : 1,
  ...    "foo" : "bar"
  ... })
 
@@ -19,14 +20,14 @@ Now we can start querying the database. Let's start with query that retrieves al
  >>> datastore.query('''
  ... { * }
  ... ''')
- {'errors': [], 'results': [{'foo': 'bar'}]}
+ [{'foo': 'bar', 'id': '1'}]
  
 Find all JSON objects. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
 
  >>> datastore.query('''
  ... { foo }
  ... ''')
- {'errors': [], 'results': [{'foo': 'bar'}]}
+ [{'foo': 'bar'}]
 
 This is equivalent to the SQL statement "SELECT foo FROM table".
 Note that the objects that don't have foo and bar properties are not selected by the query. 
@@ -36,7 +37,7 @@ This is because the above query is shorthand for this query:
  ... { "foo" : foo,
  ... }
  ... ''')
- {'errors': [], 'results': [{'foo': 'bar'}]}
+ [{'foo': 'bar'}]
 
 Including the `foo` properties names in the where clause only selects where the property exists. 
 

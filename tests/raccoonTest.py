@@ -194,7 +194,7 @@ class RaccoonTestCase(unittest.TestCase):
         root2 = app2._server
         self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
                 
-        self.assertEquals(root2.dataStore.query("{*}").results, 
+        self.assertEquals(root2.dataStore.query("{*}"), 
             [{'comment': 'page content.', 'id':  'a_resource', 'label': 'foo'}])
 
     def testRemoves(self):
@@ -216,18 +216,18 @@ class RaccoonTestCase(unittest.TestCase):
             [{"id": "hello", 
                "tags": ["@tag1"]
             }])            
-        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['@tag1']}])
+        self.assertEquals(store.query('{*}'), [{'id': 'hello', 'tags': ['@tag1']}])
         
         #null value will remove the property and any associated values
         store.remove({"id":"hello","tags":None})
         self.assertEquals(pjson.tojson(store.model.getStatements())['data'],
             [{"id": "hello" }])
-        self.assertEquals(store.query('{*}').results, [{'id': 'hello'}])
+        self.assertEquals(store.query('{*}'), [{'id': 'hello'}])
         
         #strings are treated as resource ids and the entire object is removed
         store.remove(["hello"])
         self.assertEquals(pjson.tojson(store.model.getStatements())['data'], [])
-        self.assertEquals(store.query('{*}').results, [])        
+        self.assertEquals(store.query('{*}'), [])        
 
     def testUpdate(self):
         store = vesper.app.createStore({
@@ -246,10 +246,14 @@ class RaccoonTestCase(unittest.TestCase):
             [{"id": "hello", 
                "tags": ["@tag1"]
             }])            
-        self.assertEquals(store.query('{*}').results, [{'id': 'hello', 'tags': ['@tag1']}])
+        self.assertEquals(store.query('{*}'), [{'id': 'hello', 'tags': ['@tag1']}])
 
     def testMerge(self):
-        store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',
+          model_uri = 'test:', 
+          #XXX merging needs to check for bnode equivalency
+          #it doesn't right now so set 'counter' so bnode names are deterministic
+          storage_template_options=dict(generateBnode='counter'))
         self.assertEquals(store1.model.currentVersion, '0')
                 
         store1.add([{ 'id' : '1', 'prop' : 0,
@@ -264,7 +268,7 @@ class RaccoonTestCase(unittest.TestCase):
         ])
         self.assertEquals(store1.model.currentVersion, '0A00002')
         import sys
-        self.assertEquals(store1.query("{*}", debug=0).results, 
+        self.assertEquals(store1.query("{*}", debug=0), 
             [{'base': [{'foo': 3}, {'foo': 4}],  'prop' : 1, 'id': '1'}])
         
         try:
@@ -284,7 +288,7 @@ class RaccoonTestCase(unittest.TestCase):
         
         self.assertEquals(store1.model.currentVersion, '0A00002,0B00001')
         self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')        
-        self.assertEquals(store1.query("{*}").results, 
+        self.assertEquals(store1.query("{*}"), 
             [{'base': [{'foo': 3}, {'foo': 4}], 'prop' : 1, 'id': '1'},
             {'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}
             ])
@@ -316,7 +320,7 @@ class RaccoonTestCase(unittest.TestCase):
         #merge a different branch changeset whose base revision is the current tip 
         #in this case, the changeset will be added but no merge changeset is created
         self.assertTrue( store1.merge(makeChangeset('0C', '0A00002,0C00001', '0A00002', 'unrelated_resource')) )
-        self.assertEquals(store1.query("{* where (id='unrelated_resource')}").results, 
+        self.assertEquals(store1.query("{* where (id='unrelated_resource')}"), 
             [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
                 
     def testMergeConflict(self):        
@@ -334,7 +338,8 @@ class RaccoonTestCase(unittest.TestCase):
     def testMergeInTransaction(self):
         #same as testMerge but in a transaction (mostly to test datastore
         #methods inside a transaction)
-        store1 = vesper.app.createStore(save_history='split', branch_id='A',model_uri = 'test:')
+        store1 = vesper.app.createStore(save_history='split', branch_id='A',
+         model_uri = 'test:', storage_template_options=dict(generateBnode='counter'))
         root1 = store1.requestProcessor
         self.assertEquals(store1.model.currentVersion, '0')        
         root1.txnSvc.begin()
@@ -362,7 +367,7 @@ class RaccoonTestCase(unittest.TestCase):
         self.assertEquals(store1.model.currentVersion, '0A00002,0B00001')
         self.assertEquals(store1.model.getCurrentContextUri(), 'context:txn:test:;0A00002,0B00001')
 
-        self.assertEquals(store1.query("{*}").results, 
+        self.assertEquals(store1.query("{*}"), 
             [{'base': [{'foo': 3}, {'foo': 4}], 'id': '1'},
              {'comment': 'page content.', 'id': 'a_resource', 'label': 'foo'}
         ])
@@ -505,17 +510,17 @@ class RaccoonTestCase(unittest.TestCase):
             add = {"id":"1",                    
                   "tags" : [ '@t' ]
                   }            
-            store = vesper.app.createStore(storage_path=tmppath, storageURL='', 
+            store = vesper.app.createStore(storage_path=tmppath, storage_url='', 
                 model_factory=vesper.data.store.basic.FileStore,model_uri = 'test:', save_history=True)
             store.add(add)
             
             #now reload the file into a new store without save_history turned on,
             #so that the history representation is visible to the app
             #print file(tmppath).read()            
-            store2 = vesper.app.createStore(storage_path=tmppath, storageURL='', 
+            store2 = vesper.app.createStore(storage_path=tmppath, storage_url='', 
                 model_factory=vesper.data.store.basic.FileStore,model_uri = 'test:', save_history=False)
             #XXX jql is not including scope in results
-            self.assertEquals(store2.query("{* where (id='1')}").results, [{'id': '1', 'tags': ['@t', '@t']}])            
+            self.assertEquals(store2.query("{* where (id='1')}"), [{'id': '1', 'tags': ['@t', '@t']}])            
         finally:
             os.unlink(tmppath)
         

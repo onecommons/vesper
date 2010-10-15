@@ -28,7 +28,7 @@ def api_handler(kw, retval):
     out = {'action':action}
     try:
         if action == 'query':
-            r = data_store.query(params['data'])
+            r = data_store.query(params['data'], captureErrors=True)
             # print r
             out.update(r)
         elif action == 'update':
@@ -36,7 +36,7 @@ def api_handler(kw, retval):
             
             query = "{*, where(%s)}" % params['where']
             # print "querying:", query
-            target = data_store.query(query)['results']
+            target = data_store.query(query)
             
             assert len(target) == 1, "Update 'where' clause did not match any objects; try an add"
             target = target[0]

@@ -16,6 +16,8 @@ def emptygenerator(self):
 #    yield '<undefined>'
 mako.runtime.Undefined.__iter__ = emptygenerator
 mako.runtime.Undefined.__str__ = lambda self: ''#'<undefined>'
+mako.runtime.Undefined.__add__ = lambda self,other: ''+other
+mako.runtime.Undefined.__radd__ = lambda self,other: ''+other
 
 import vesper.utils
 vesper.utils.defaultattrdict.UNDEFINED = mako.runtime.UNDEFINED
@@ -57,9 +59,9 @@ def datarequest(kw, retval):
         elif action == 'query':
             #returns { errors, results }
             if isinstance(data, (str, unicode)):
-                result = dataStore.query(data) 
+                result = dataStore.query(data, captureErrors=True) 
             else:
-                result = dataStore.query(**data)
+                result = dataStore.query(captureErrors=True, **data)
             if result.errors:
                 response['error'] = dict(code=0, message='query failed', 
                                                     data = result.errors)

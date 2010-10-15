@@ -15,8 +15,7 @@ def updateAction(kw, retval):
 @Action
 def queryAction(kw, retval):
     query = "{comment where(label='%s')}" % kw['_name'] #XXX qnames are broken         
-    r = kw['__server__'].dataStore.query(query)
-    result = r['results']
+    result = kw['__server__'].dataStore.query(query)
     #print result
         
     template = '<html><body>%s</body></html>'

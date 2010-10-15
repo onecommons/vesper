@@ -3,8 +3,7 @@
 @Action
 def testaction(kw, retval):
     query = "{comment where(label='%s')}" % kw._name #XXX qnames are broken
-    r = kw.__server__.dataStore.query(query)
-    result = r['results']
+    result = kw.__server__.dataStore.query(query)
         
     template = '<html><body>%s</body></html>'
     if result:

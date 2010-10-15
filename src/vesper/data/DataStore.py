@@ -12,7 +12,7 @@ import logging
 from vesper.data import base, transactions
 from vesper.data.base import graph as graphmod # avoid aliasing some local vars
 from vesper.data.store.basic import MemStore, FileStore, IncrementalNTriplesFileStoreBase
-from vesper.utils import debugp, flatten
+from vesper.utils import debugp, flatten, defaultattrdict
 from vesper.data.base.utils import OrderedModel
 from vesper.data.base.schema import defaultSchemaClass
 
@@ -500,7 +500,7 @@ class BasicStore(DataStore):
         removals = []
         #update:
         #XXX handle scope: if a non-empty scope is specified, only compare
-        updateStmts, ujsonrep = self._toStatements(update)
+        updateStmts, ujsonrep = self._toStatements(update) 
         root = OrderedModel(updateStmts)
         skipResource = None
         for (resource, prop, values) in root.groupbyProp():            
@@ -570,8 +570,14 @@ class BasicStore(DataStore):
     def query(self, query=None, bindvars=None, explain=None, debug=False, 
                 forUpdate=False, captureErrors=False, contextShapes=None):
         import vesper.query
-        return vesper.query.getResults(query, self.model, bindvars, explain,
+        if not contextShapes:
+            contextShapes = {dict:defaultattrdict}
+        results = vesper.query.getResults(query, self.model, bindvars, explain,
                               debug, forUpdate, captureErrors, contextShapes)
+        if not captureErrors and not explain and not debug:
+            return results.results
+        else:
+            return results
 
     def merge(self,changeset): 
         if not self.join(self.requestProcessor.txnSvc, False):
