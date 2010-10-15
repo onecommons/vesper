@@ -5,8 +5,6 @@ from vesper.utils import attrdict
 from vesper.app import createApp, getCurrentApp
 from vesper.backports import json
 
-Route('{path:.+}.html')(servetemplate)
-
 import logging
 logging.basicConfig()
 
@@ -15,6 +13,8 @@ app = createApp(__name__, 'vesper.web.baseapp'
               ,template_path=['templates']
               ,model_options=dict(serializeOptions=dict(indent=2))
 )
+#add routes after createApp if you want them to run after base app's routes
+Route('{path:.+}.html')(servetemplate)
 
 # entry point from setuptools console_scripts, called with no args
 def console_main():
