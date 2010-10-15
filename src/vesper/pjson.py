@@ -799,12 +799,23 @@ class ParseContext(object):
                         return match.expand(r.parseTemplate), datatype
         return s, OBJECT_TYPE_LITERAL
 
+def generateUUIDSequence(start=0, prefix='test:'):
+    '''
+    Generates a deterministic sequence of UUIDs. Useful for testing.
+    '''    
+    def generateUUID():
+        seq = start
+        while True:
+            seq+=1
+            yield uuid.uuid3(uuid.NAMESPACE_URL, '%s%04d'%(prefix, seq))
+    generator = generateUUID()
+    return lambda: str(generator.next())
+
 class Parser(object):
     '''
     Parses pJSON compliant JSON and converts it to RDF statements.
-    '''
-    bnodecounter = 0
-    bnodeprefix = '_:'
+    '''    
+    bnodeprefix = '_:'    
     
     def __init__(self,addOrderInfo=True, 
             generateBnode=None, 
@@ -812,7 +823,8 @@ class Parser(object):
             setBNodeOnObj=False,
             nameMap=None,
             useDefaultRefPattern=True,
-            toplevelBnodes=True):
+            toplevelBnodes=True,
+            generateUUID=None):
         generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
@@ -820,6 +832,8 @@ class Parser(object):
         self.addOrderInfo = addOrderInfo
         self.setBNodeOnObj = setBNodeOnObj
         self.toplevelBnodes = toplevelBnodes
+        self._bnodeCounter = 0
+        self.generateUUID = generateUUID or (lambda: str(uuid.uuid4()))
     
         nameMap = nameMap or {}
         if useDefaultRefPattern and 'refpattern' not in nameMap:
@@ -840,7 +854,7 @@ class Parser(object):
             objId = newParseContext.getProp(obj, 'id')
             if objId is None:
                 if not parentid and not self.toplevelBnodes:
-                    objId = 'uuid:' + str(uuid.uuid4())
+                    objId = 'uuid:' + self.generateUUID()
                 else:
                     #mark bnodes for nested objects differently                
                     prefix = parentid and 'j:e:' or 'j:t:'
@@ -1005,8 +1019,8 @@ class Parser(object):
         if self._genBNode=='uuid':
             return base.generateBnode(prefix=prefix)
         if self._genBNode=='counter':
-            self.bnodecounter+=1
-            return self.bnodeprefix + prefix + str(self.bnodecounter)
+            self._bnodeCounter+=1
+            return self.bnodeprefix + prefix + str(self._bnodeCounter)
         else:
             return self._genBNode(prefix)
     
