@@ -609,7 +609,15 @@ For example:
 >>> del d[10]
 >>> len(d)
 3
+>>> 'newattribute' in d
+False
+>>> hasattr(d, 'newattribute')
+False
 >>> d.newattribute = 'here'
+>>> 'newattribute' in d
+True
+>>> hasattr(d, 'newattribute')
+True
 >>> d.newattribute
 'here'
 >>> d['newattribute']
@@ -618,6 +626,11 @@ For example:
 Traceback (most recent call last):
     ...
 AttributeError: missingattribute not found
+>>> del d['newattribute']
+>>> 'newattribute' in d
+False
+>>> hasattr(d, 'newattribute')
+False
     '''
 
     def __getattr__(self, name):
@@ -638,6 +651,10 @@ through the standard `dict` interface).
 If attribute is not available the None is returned. This default value can be changed by 
 setting defaultattrdict.UNDEFINED. Note that this can only be set at the class 
 level, not per instance.
+
+Note that because the built-in function `hasattr()` calls `getattr()` it will always return True
+even if the attribute isn't defined. Use `in` operator or the `has_key` method 
+to test for key existence.
 
 For example: 
 >>> d = defaultattrdict(foo=1, update=2, copy=3)
@@ -665,11 +682,124 @@ For example:
 >>> d.unassigned
 0
 >>> defaultattrdict.UNDEFINED = None
+>>> 'newattribute' in d
+False
+>>> hasattr(d, 'newattribute')
+True
+>>> d.newattribute = 'here'
+>>> 'newattribute' in d
+True
+>>> d.newattribute
+'here'
+>>> d['newattribute']
+'here'
+>>> del d['newattribute']
+>>> 'newattribute' in d
+False
+>>> hasattr(d, 'newattribute')
+True
     '''
     UNDEFINED = None
     
     def __getitem__(self, name):
         return dict.get(self, name, defaultattrdict.UNDEFINED)
+
+def _defaultproxyattrdict_getitem(realdict, name):
+    val = realdict.get(name, defaultattrdict.UNDEFINED) 
+    def mapproxy(obj, item, val):
+        if type(val) is dict: #dict but not a subclass of dict
+            val = defaultproxyattrdict(val)
+            obj[item] = val
+        elif isinstance(val, list):
+            for i, item in enumerate(val):
+                mapproxy(val, i, item)
+        return val
+    return mapproxy(realdict, name, val)
+    
+class defaultproxyattrdict(defaultattrdict):
+    '''
+Like defaultattrdict but hold a reference to the given dictionary instead of make a copy of it. 
+An updates updates the given dictionary. Also lazily (as the keys are accessed) creates 
+defaultproxyattrdicts for any dictionaries that appears as values in the dictionary. 
+If the value is a list, when that list is accessed, it will have any dict 
+replaced with defaultproxyattrdicts.
+
+>>> d = defaultproxyattrdict(dict(foo={'a':1}, update=2, copy=3))
+>>> d.foo
+{'a': 1}
+>>> d.foo.a
+1
+>>> d
+{'copy': 3, 'update': 2, 'foo': {'a': 1}}
+>>> type(d.foo.not_there)
+<type 'NoneType'>
+>>> d.copy()
+{'copy': 3, 'update': 2, 'foo': {'a': 1}}
+>>> d.update({'update':4})
+>>> d['update']
+4
+>>> d[10] = '10'
+>>> d[10]
+'10'
+>>> len(d)
+4
+>>> del d[10]
+>>> len(d)
+3
+>>> type(d.not_there)
+<type 'NoneType'>
+>>> 'not_there' in d
+False
+>>> d.not_there = 'here'
+>>> d.not_there
+'here'
+>>> d['not_there']
+'here'
+>>> 'not_there' in d
+True
+>>> d2 = defaultproxyattrdict(dict(alist=[{1:2}]))
+>>> type(d2.alist[0])
+<class 'vesper.utils._utils.defaultproxyattrdict'>
+>>> del d['not_there']
+>>> 'not_there' in d
+False
+>>> d.has_key('not_there')
+False
+    '''
+
+    def __init__(self, d):
+        dict.__setattr__(self, '_dict', d)
+
+    def __getattribute__(self, name):
+        if name in ['_dict', '__init__', '__setattr__', '__getitem__']:
+            return dict.__getattribute__(self, name)
+        
+        _dict = dict.__getattribute__(self, '_dict')
+        try:
+            return getattr(_dict, name)
+        except AttributeError:
+            return _defaultproxyattrdict_getitem(_dict, name)
+
+    def __len__(self):
+        return len(self._dict)
+
+    def __repr__(self):
+        return repr(self._dict)
+        
+    def __setattr__(self, name, value):
+        self._dict[name] = value
+
+    def __getitem__(self, name):
+        return _defaultproxyattrdict_getitem(self._dict, name)
+
+    def __setitem__(self, name, value):
+        self._dict[name] = value
+
+    def __delitem__(self, name):
+        del self._dict[name]
+
+    def __contains__(self, item):
+        return item in self._dict
 
 class LameAttrDict(dict):
     '''

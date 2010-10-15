@@ -2457,9 +2457,11 @@ class JQLTestCase(unittest.TestCase):
 
         try:
             save =jql.QueryContext.defaultShapes
-            jql.QueryContext.defaultShapes = { dict:hashabledict, list:hashablelist}
+            #jql.QueryContext.defaultShapes = { dict:hashabledict, list:hashablelist}
+            shapes = { dict:hashabledict, list:hashablelist}
             #will raise TypeError: unhashable if a list or dict is in the results:
-            set(jql.getResults("{*}", t.model).results)
+            s = set(jql.getResults("{*}", t.model, contextShapes=shapes).results)
+            self.failUnless(s and all(isinstance(o, hashabledict) for o in s))
         except:
             self.fail()
         finally:
