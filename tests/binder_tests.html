@@ -11,7 +11,7 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
     <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.js"></script>
     <script type="text/javascript" src="js/json2.js"></script>
     <script type="text/javascript" src="js/data.js"></script>
-<!--    
+<!--  uncomment to run as a file: URL
     <script type="text/javascript" src="../src/vesper/web/baseapp/static/js/json2.js"></script>
     <script type="text/javascript" src="../src/vesper/web/baseapp/static/js/data.js"></script>
 -->
@@ -24,6 +24,10 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
     var ArrayAssert = YAHOO.util.ArrayAssert;
     var logger = new YAHOO.tool.TestLogger(); // Log results to browser window
     var suite = new YAHOO.tool.TestSuite("Binder Test Suite"); 
+
+    function assertJsonEqual(o1, o2) {
+      Assert.areEqual(JSON.stringify(o1), JSON.stringify(o2));
+    }
 
     suite.add( new YAHOO.tool.TestCase({
         name: "Binder.Util Tests",
@@ -241,6 +245,13 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
             ArrayAssert.doesNotContainItems( [ 'sports', 'finance', 'shopping' ], obj.interests, "Incorrect interests" );
         }, 
 
+        testSerializeFormsWithNoNames : function() {
+          var obj = {};
+          var binder = new Binder.FormBinder( document.getElementById( "testForm1" ), obj );
+          binder.deserialize();
+          assertJsonEqual(obj, {});
+        },
+        
         testSerializeFields: function() {
             var obj = {
                 username: 'jdoe',
@@ -325,7 +336,10 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
   </script> 
 
   <form id="testForm1">
-    <input id="f1" type="text"/>
+    <input id="f1" type="text" value='no name text' />
+    <select>  
+    <option>no name option</option>
+    </select>    
   </form>
 
   <form id="testForm2">
@@ -347,7 +361,8 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
         <input id="fShopping" type="checkbox" name="interests[]" value="shopping"/>Shopping<br/>
         <input id="fFood" type="checkbox" name="interests[]" value="food"/>Food<br/>
         <input id="fFinance" type="checkbox" name="interests[]" value="finance"/>Finance<br/>
-
+  </form>
+        
 <div class='save' id='microdata1'>
         <dl itemscope
             itemtype="http://purl.org/vocab/frbr/core#Work"

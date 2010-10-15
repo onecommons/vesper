@@ -543,7 +543,15 @@ Binder.TypeRegistry = {
     parse: function( value ) {
       return value && value != "" ? JSON.parse(value) : undefined;
     }
-  }    
+  },
+  'null': {
+    format: function( value ) {
+      return '';
+    },
+    parse: function( value ) {
+      return value ? value : null; 
+    }
+  }   
 };
 
 Binder.FormBinder = function( form, accessor ) {
@@ -614,8 +622,10 @@ Binder.FormBinder.prototype = {
     return accessor.target;
   },
   serializeField: function( element, obj ) {
+    if (!element.name) //added if (!element.name) check
+        return; //skip unnamed fields
     var accessor = this._getAccessor( obj );
-    var value = undefined
+    var value = undefined;
     if( element.type == "radio" || element.type == "checkbox" )  {
       if( element.value != "" && element.value != "on" ) {
         value = this._parse( element.name, element.value, element );        
@@ -638,11 +648,9 @@ Binder.FormBinder.prototype = {
           accessor.set( element.name, v );
         }
       }
-    } else {
-      if (element.name) { //added if (element.name) check
+    } else {      
         value = this._parse( element.name, element.value, element );
-        accessor.set( element.name, value );
-      }
+        accessor.set( element.name, value );      
     }
   },
   deserialize: function( obj ) {
