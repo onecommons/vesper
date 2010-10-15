@@ -1,0 +1,191 @@
+## -*- coding: utf-8 -*-
+<%namespace name='slots' file="slots.html" />
+<%!
+import re
+from vesper.backports import json
+
+def selected(test): 
+  if test: return 'selected'
+  else: return ''
+
+def resolve(obj, prop):
+  for name in prop.split('.'):
+    index = None
+    if name[-1] == ']':
+      match = re.match('(.*)\[(.*)\]', name)
+      if match:
+        name = match.group(1)
+        index = match.group(2)
+    obj = obj.get(name, UNDEFINED)
+    if not obj:
+      return obj
+    if index:
+      obj = obj[int(index)]    
+  return obj
+
+def q(s):
+  '''
+  Escape the string so that it can be used in double-quoted attribute values
+  '''  
+  return s.replace('&', '&amp;').replace('"','&quot;')
+  
+def kwtoattr(kw):
+  return ' '.join([
+    (name.startswith('_') and name[1:] or name) ##strip _ so we can have python keywords as attributes (e.g. _class)
+    +'="'+ q(value) +'"' for name, value in kw.items()])    
+
+def getobj(context, kw):
+  '''
+  If no 'o' parameter is present use the object associated with the parent form.
+  '''
+  if 'o' in kw:
+    return kw.pop('o')     
+  else:
+    return context['__'].currobj
+
+def setFormBindClass(val, kw=None):
+  if isinstance(val, (str, unicode)):
+    return '' #don't bother with string
+  elif isinstance(val, bool):
+    btype = 'boolean'
+  elif isinstance(val, (int, float)):
+    btype = 'number'
+  elif isinstance(val, type(None)):
+    btype = 'null'
+  else:
+    btype = 'json'
+
+  bindclass = "type[%s]" % btype
+  if btype and kw is not None:
+    _class = kw.get('_class','')
+    if _class:
+      if not re.search('type\[(.*)\]', _class):
+        #dont set if already defined
+        kw['_class'] =  _class + ' ' + bindclass
+    else:  
+      kw['_class'] =  bindclass
+    
+  return bindclass
+
+def serializeValue(val):  
+  if isinstance(val, bool):
+    return val and 'true' or 'false'
+  elif isinstance(val, (str, unicode, int, float)):
+    return val
+  elif isinstance(val, type(None)):
+    return ''
+  else:
+    return json.dumps(val)
+%>
+
+<%def name='form(o, **kw)'> 
+  <%slots:component name='dbform'>
+    <%slots:scripts> \
+      <script type='text/javascript'>  
+      $('.dbform').submit(function() {
+        $(this).dbUpdate();
+        return false;
+      });
+      </script> \
+    </%slots:scripts>
+  </%slots:component>
+  <%
+  kw['_class'] = kw.get('_class','') + ' ' + 'dbform'
+  %>  
+  <form ${kwtoattr(kw)} >
+  % if 'id' in o:
+    <input type='hidden' name='id' value='${o["id"]|q}' />
+  % endif
+  % if 'type' in o:
+    <input type='hidden' name='type' value='${o["type"]|q}' />
+  % endif
+  <%
+  oldcurrobj = __.currobj
+  __.currobj = o
+  %>
+  ${caller.body()}
+  <%
+  __.currobj = oldcurrobj
+  %>
+  </form>
+</%def>
+
+<%def name='input(prop, **kw)'>
+   <%
+   obj = getobj(context, kw)
+   itype = kw.get('type', 'text')
+   value = resolve(obj,prop)
+   toggleInput = itype in ['radio', 'checkbox']
+   %>
+   ##XXX this isn't very useful, replace it:
+   %if toggleInput and isinstance(value, list):
+      %for v in value:        
+        <%
+        ikw = kw.copy()
+        bindclass = setFormBindClass(v, ikw)
+        %>      
+        <input type='${itype}' ${kwtoattr(ikw)} checked name='${prop}[]' value='${serializeValue(v)|q}' />
+      % endfor
+   %else:
+     <%
+     bindclass = setFormBindClass(value, kw)
+     %>      
+     <input type='${itype}' ${kwtoattr(kw)} name='${prop}' ${toggleInput and value and 'checked' or ''}  \
+                                                  value='${serializeValue(value)|q}'>${caller.body()}</input>
+   %endif
+</%def>
+
+<%def name='hidden(prop, **kw)'>
+  <%
+  obj = getobj(context, kw)
+  value = resolve(obj, prop)
+  bindclass = setFormBindClass(value, kw)
+  %>   
+  <input type='hidden' name='${prop}' ${kwtoattr(kw)} value='${serializeValue(value)|q}' />
+</%def>
+
+<%def name='select(prop, options, **kw)'>
+  <%
+  obj = getobj(context, kw)
+  selection = resolve(obj,prop)
+  islist = isinstance(selection, list)
+  if islist:
+    prop += '[]'
+  %>
+  <select ${kwtoattr(kw)} name='${prop}' ${islist and 'multiple' or ''}> \
+  % for option in options:
+    <% 
+    __.option = option
+    label = option
+    if isinstance(option, dict):
+      if option.get('id'):
+        option = '@' + option['id'] #XXX
+      elif option.get('value'):
+        label = option.get('label', option['value'])
+        option = option['value']
+      if islist:
+        match = option in selection
+      else:
+        match = option == selection
+    else:
+      match = option == selection
+    bindclass = setFormBindClass(option)
+    %> \
+    <option ${selected(match)} class='${bindclass}' value="${serializeValue(option)|q}">${capture(caller.body) or label}</option>
+  % endfor
+  <%
+  __.option = UNDEFINED
+  %>
+ </select>
+</%def>
+
+<%def name='textarea(prop, **kw)'>
+  <%
+  obj = getobj(context, kw)
+  value = resolve(obj, prop)
+  bindclass = setFormBindClass(value, kw)
+  %>   
+  <textarea name='${prop}' ${kwtoattr(kw)}>${serializeValue(value)|h}</textarea>
+</%def>
+
+

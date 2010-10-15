@@ -1,0 +1,108 @@
+<%def name="component(name)">
+<%
+oldcurrcomponent = __.currcomponent
+__.currcomponent = name
+%>
+${caller.body()}
+<%
+__.currcomponent = oldcurrcomponent
+%>
+</%def>
+
+<%def name='callslot(slot, body=None, priority=False)'><%
+name = __.currcomponent
+##if we're creating a component now, keep track of that so we don't have to 
+##worry about duplicating the component if its loaded again
+if not name or (name,slot) not in __.setdefault('components', set()):
+  content = capture(body or caller.body)
+  slots = __.setdefault('slots', {})
+  if priority:
+    slots.setdefault(slot, []).insert(0, content)
+  else:
+    slots.setdefault(slot, []).append(content)
+  if name:
+    __.components.add( (name,slot) )
+%></%def>
+
+<%def name='head(priority=False)'>${callslot('head', caller.body, priority)}</%def>
+
+<%def name='css(priority=False)'>${callslot('css', caller.body, priority)}</%def>
+
+<%def name='scripts(priority=False)'>${callslot('scripts', caller.body, priority)}</%def>
+
+<%def name='output(slot)'>
+<% if not __.slots: return %>
+%for content in __.slots.get(slot,[]):
+ ${content}
+%endfor
+</%def>
+
+<%def name='html()'>
+<%
+##need to do this now so all calls to callslots are run first
+callerbody = capture(caller.body)
+%>
+
+<html>
+<head>
+${output('head')}
+
+<style type="text/css">
+${output('css')}
+</style>
+</head>
+<body>
+${callerbody}
+
+${output('scripts')}
+</body></html>
+</%def>
+
+<%doc>
+
+<%!
+slotnames = set(['head', 'css', 'scripts'])
+
+class call(object):
+    def __init__(self,obj):
+        self.obj = obj
+        
+    def __getattr__(self, name):
+        func = getattr(self.obj, name, None)
+        if func:
+            return func()
+        else:
+            return ''            
+%>
+
+<%
+components = __.setdefault('components', [])
+if name not in components:   
+  for slotname in slotnames:
+    ssfunc = getattr(caller, slotname, None)
+    if ssfunc:
+      __.setdefault(slotname, []).append(capture(ssfunc))
+  if name:
+     components.append(name)
+%>
+</%def>
+
+<%def name="addslot(name)">
+<% slotnames.add(name) %>
+</%def>
+
+<%def name='head()'%><%
+if name not in __.components:
+  __.setdefault('head', []).append(capture(caller.body))
+%></def>
+
+
+def slotdef(name, context):
+  context.get('__', UNDEFINED).setdefault(name, []).append(context.get('capture', UNDEFINED)
+                        (context.get('caller', UNDEFINED).body))
+  return ''
+
+def create_slotdef(name):
+  module.__dict__['render_'+name] = lambda context: slotdef(name, context) 
+
+</%doc>

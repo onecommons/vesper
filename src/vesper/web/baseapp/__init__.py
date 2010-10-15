@@ -61,7 +61,8 @@ def datarequest(kw, retval):
             if isinstance(data, (str, unicode)):
                 result = dataStore.query(data, captureErrors=True) 
             else:
-                result = dataStore.query(captureErrors=True, **data)
+                data['captureErrors'] = True
+                result = dataStore.query(**data)
             if result.errors:
                 response['error'] = dict(code=0, message='query failed', 
                                                     data = result.errors)

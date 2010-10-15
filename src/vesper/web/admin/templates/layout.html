@@ -11,8 +11,7 @@ class call(object):
         if func:
             return func()
         else:
-            return ''        
-    
+            return ''            
 %>
 <%def name="layout()">
 <html>
@@ -20,12 +19,15 @@ class call(object):
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 ${call(caller).head}
 
-<link rel="stylesheet" type="text/css" href="static/reset-fonts-grids.css">
-<link rel="stylesheet" type="text/css" href="static/base.css">
+<link rel="stylesheet" type="text/css" href="static/reset-fonts-grids.css" />
+<link rel="stylesheet" type="text/css" href="static/base.css" />
 
 <link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/themes/ui-lightness/jquery-ui.css" type="text/css" media="all" />
 <link rel="stylesheet" type="text/css" href="static/generic.css" />
 
+%for stylesheets in __.stylesheets:
+ ${stylesheets}
+%endfor
 <style type="text/css">
 
 .precontent {
@@ -57,6 +59,10 @@ font-weight:bold;
 font-size: 1.5em;
 color:#8D4A2C;
 }
+
+%for css in __.css:
+ ${css}
+%endfor
 
 ${call(caller).style}
 </style>
@@ -96,6 +102,10 @@ ${call(caller).style}
 <script type="text/javascript" src="static/jquery.hresize.js"></script>
 <script type="text/javascript" src="static/js/data.js"></script>
 <script type="text/javascript" src="static/js/json2.js"></script>
+
+%for scripts in __.scripts:
+ ${scripts}
+%endfor
 
     ${call(caller).script}        
 </body>

@@ -79,14 +79,15 @@ def servetemplate(kw, retval):
     try: 
         template = kw.__server__.template_loader.get_template(path)
     except TopLevelLookupException:
-        #could find template
+        #couldn't find template
         return retval
     if template:
         return template.render(params=kw._params, 
                         urlvars=kw.get('urlvars',{}), 
                         request=kw, 
                         config=kw.__server__.config,
-                        server=kw.__server__, 
+                        server=kw.__server__,
+                        __=defaultattrdict(), 
                         db=kw.__server__.dataStore)
     else:
         return retval
