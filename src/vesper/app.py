@@ -569,14 +569,12 @@ class AppConfig(utils.attrdict):
 
         return root
 
-def createStore(json='', storageURL = 'mem://', idGenerator='counter', **kw):
-    #XXX very confusing that storageURL spelling doesn't match storage_url 
-    root = createApp(
-        storage_url = storageURL,
-        storage_template = json,
-        storage_template_options = dict(generateBnode=idGenerator),
-        **kw    
-    ).run(False)
+def createStore(json='', **kw):
+    for name, default in [('storage_url', 'mem://'), ('storage_template', json),
+                      ('storage_template_options', dict(toplevelBnodes=False))]:
+        if name not in kw:
+            kw[name] = default    
+    root = createApp(**kw).run(False)
     return root.dataStore
 
 _current_config = AppConfig()
