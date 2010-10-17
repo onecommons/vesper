@@ -2456,14 +2456,15 @@ class JQLTestCase(unittest.TestCase):
                 return 'HashableList('+super(hashablelist, self).__repr__()+')'
 
         try:
-            save =jql.QueryContext.defaultShapes
-            #jql.QueryContext.defaultShapes = { dict:hashabledict, list:hashablelist}
-            shapes = { dict:hashabledict, list:hashablelist}
-            #will raise TypeError: unhashable if a list or dict is in the results:
-            s = set(jql.getResults("{*}", t.model, contextShapes=shapes).results)
-            self.failUnless(s and all(isinstance(o, hashabledict) for o in s))
-        except:
-            self.fail()
+            try:
+                save =jql.QueryContext.defaultShapes
+                #jql.QueryContext.defaultShapes = { dict:hashabledict, list:hashablelist}
+                shapes = { dict:hashabledict, list:hashablelist}
+                #will raise TypeError: unhashable if a list or dict is in the results:
+                s = set(jql.getResults("{*}", t.model, contextShapes=shapes).results)
+                self.failUnless(s and all(isinstance(o, hashabledict) for o in s))
+            except:
+                self.fail()
         finally:
             jql.QueryContext.defaultShapes = save
     
