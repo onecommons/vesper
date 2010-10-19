@@ -367,7 +367,8 @@ def _serializeValue(context, v, isId):
     elif not isinstance(v, (str,unicode)) and scope is None:
         return v
     else:
-        return context.serializer._value(v, base.OBJECT_TYPE_LITERAL, scope)
+        out = context.serializer._value(v, base.OBJECT_TYPE_LITERAL, scope)
+        return out
 
 def _setConstructProp(shape, pattern, prop, v, name, listCtor, context):
     isId = context.serializer and context.serializer.parseContext.idName == name
@@ -897,7 +898,7 @@ class SimpleQueryEngine(object):
                                     hint=v,
                                     op='nested construct value', debug=context.debug)
                                 
-                                #print '!!v eval', prop, ccontext.currentRow, rowcolumns
+                                #print '!!v eval', ccontext.currentRow, rowcolumns
                                 v = prop.value.evaluate(self, ccontext)
                                 v = flatten(v, flattenTypes=Tupleset)
                             elif isAllProp:
@@ -934,9 +935,17 @@ class SimpleQueryEngine(object):
                                     continue
                             else:
                                 name = prop.name or prop.value.name
-                                               
+                            
+                            if isinstance(prop.value, jqlAST.Select):
+                                #the nested select has already serialized this
+                                #so don't serialize
+                                saveSerializer = context.serializer
+                                context.serializer = None
                             pattern = _setConstructProp(shape, pattern, prop, v,
-                                                        name, listCtor, context)
+                                                    name, listCtor, context)
+                            if isinstance(prop.value, jqlAST.Select):
+                                context.serializer = saveSerializer
+                            
                             if prop.value.name and isinstance(prop.value, jqlAST.Project):
                                 propsAlreadyOutput.add(prop.value.name)
                 

@@ -430,6 +430,17 @@ namemap = {
  useSerializer=True
 )
 
+t('''
+{ id, 'cell': [prop1, prop2] where id='id1' }
+''', 
+[{'cell': ['value 1', '@ref1'], 'id': 'id1'}],
+useSerializer=True,
+model={"pjson": "0.9", "data": [
+{"id": "id1", "prop1": "value 1", "prop2": "@ref1"}],
+"namemap": {"refpattern": "@((::)?URIREF)"}}
+)
+
+
 t.group = 'groupby'
 
 #XXX return empty result
@@ -2120,6 +2131,11 @@ where=Join(
   'tag-ids': ['tag1', 'tag2'],
   'tag-labels': ['tag 1', 'tag 2']}]
 )
+
+
+#XXX this is doing a cross join but that's unintuitive (especially since a single item array like [foo] won't)
+#should only do cross join when where clause is present in nested select (both arrays and objects)
+#t('''{ id, 'cell': [prop1, prop2]  }''')
 
 t.group= 'semijoins' #(and antijoins)
 
