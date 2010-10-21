@@ -130,6 +130,17 @@ class FileStore(MemStore):
            incrementHook=None, serializeOptions=None, parseOptions=None, **kw):
         self.initialContext = context
         self.defaultStatements = defaultStatements
+        if kw.get('preserveOrder'):
+            preserveOrder = []
+            if parseOptions is None: parseOptions = {}
+            parseOptions['saveOrder'] = preserveOrder
+            if serializeOptions is None: 
+                serializeOptions = dict(pjson=dict(saveOrder=preserveOrder))
+            elif 'pjson' not in serializeOptions:
+                serializeOptions['pjson'] = dict(saveOrder=preserveOrder)
+            else:
+                serializeOptions['pjson']['saveOrder'] = preserveOrder
+        
         ntpath, stmts, format = loadFileStore(source, defaultStatements,
                                         context, incrementHook, parseOptions)
         if self.canWriteFormat(format):

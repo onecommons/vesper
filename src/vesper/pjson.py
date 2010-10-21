@@ -243,7 +243,7 @@ def loads(data):
 class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False,
-            onlyEmbedBnodes=False, parseContext=None):
+            onlyEmbedBnodes=False, parseContext=None, saveOrder=None):
         '''
         { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
         or if `asList == True`: 
@@ -261,6 +261,7 @@ class Serializer(object):
         self.explicitRefObjects = explicitRefObjects
         self.asList = asList
         self.onlyEmbedBnodes = onlyEmbedBnodes
+        self.saveOrder = saveOrder
         
         self.nameMap = nameMap and nameMap.copy() or {}        
         if explicitRefObjects:
@@ -567,13 +568,23 @@ class Serializer(object):
                     else:                        
                         parent[key] = ref
 
+        if self.saveOrder:
+            topObjects = []
+            for _id in self.saveOrder:
+                obj = roots.pop(_id, None)
+                if obj is not None:
+                    topObjects.append(obj)
+            topObjects.extend(roots.values())
+        else:
+            topObjects = roots.values()
+            
         if self.asList:
             header = dict(pjson=VERSION)
             if self.nameMap:
                 header['namemap'] = self.nameMap            
-            return [header] + roots.values()
+            return [header] + topObjects
         
-        retval = { 'data': roots.values() }
+        retval = { 'data': topObjects }
         if self.includeObjectMap:
             #XXX results' keys are datastore's ids, not the serialized refs
             #object map should have serialized refs so that this can be used
@@ -824,7 +835,8 @@ class Parser(object):
             nameMap=None,
             useDefaultRefPattern=True,
             toplevelBnodes=True,
-            generateUUID=None):
+            generateUUID=None,
+            saveOrder=None):
         generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
@@ -834,6 +846,7 @@ class Parser(object):
         self.toplevelBnodes = toplevelBnodes
         self._bnodeCounter = 0
         self.generateUUID = generateUUID or (lambda: str(uuid.uuid4()))
+        self.saveOrder = saveOrder
     
         nameMap = nameMap or {}
         if useDefaultRefPattern and 'refpattern' not in nameMap:
@@ -921,8 +934,10 @@ class Parser(object):
                     m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
             return seq
         
+        saveOrder = self.saveOrder
         while todo:
             obj, (id, parseContext), parentid = todo.pop(0)
+            if saveOrder is not None: saveOrder.append(id)
                         
             #XXX support top level lists: 'list:' 
             assert isinstance(obj, dict), "only top-level dicts support right now"            
