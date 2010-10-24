@@ -598,6 +598,8 @@ For example:
 1
 >>> d.copy()
 {'copy': 3, 'update': 2, 'foo': 1}
+>>> type(d.copy())
+<class 'vesper.utils._utils.attrdict'>
 >>> d.update({'update':4})
 >>> d['update']
 4
@@ -631,6 +633,10 @@ AttributeError: missingattribute not found
 False
 >>> hasattr(d, 'newattribute')
 False
+>>> attrdict(foo=1) == attrdict(foo=1)
+True
+>>> attrdict(foo=1) != attrdict(bar=1)
+True
     '''
 
     def __getattr__(self, name):
@@ -642,6 +648,9 @@ False
     def __setattr__(self, name, value):
         self[name] = value
 
+    def copy(self):
+        return attrdict(self)
+        
 class defaultattrdict(attrdict):
     '''
 `defaultattrdict` is a `dict` subclass that lets you access keys as using attribute notation.
@@ -662,6 +671,8 @@ For example:
 1
 >>> d.copy()
 {'copy': 3, 'update': 2, 'foo': 1}
+>>> type(d.copy())
+<class 'vesper.utils._utils.defaultattrdict'>
 >>> d.update({'update':4})
 >>> d['update']
 4
@@ -698,11 +709,18 @@ True
 False
 >>> hasattr(d, 'newattribute')
 True
+>>> defaultattrdict(foo=1) == defaultattrdict(foo=1)
+True
+>>> defaultattrdict(foo=1) != defaultattrdict(bar=1)
+True
     '''
     UNDEFINED = None
     
     def __getitem__(self, name):
         return dict.get(self, name, defaultattrdict.UNDEFINED)
+
+    def copy(self):
+        return defaultattrdict(self)
 
 def _defaultproxyattrdict_getitem(realdict, name):
     val = realdict.get(name, defaultattrdict.UNDEFINED) 
@@ -727,6 +745,8 @@ replaced with defaultproxyattrdicts.
 >>> d = defaultproxyattrdict(dict(foo={'a':1}, update=2, copy=3))
 >>> d.foo
 {'a': 1}
+>>> type(d.foo)
+<class 'vesper.utils._utils.defaultproxyattrdict'>
 >>> d.foo.a
 1
 >>> d
@@ -735,6 +755,8 @@ replaced with defaultproxyattrdicts.
 <type 'NoneType'>
 >>> d.copy()
 {'copy': 3, 'update': 2, 'foo': {'a': 1}}
+>>> type(d.copy())
+<class 'vesper.utils._utils.defaultproxyattrdict'>
 >>> d.update({'update':4})
 >>> d['update']
 4
@@ -765,13 +787,17 @@ True
 False
 >>> d.has_key('not_there')
 False
+>>> defaultproxyattrdict(dict(foo=1)) == defaultproxyattrdict(dict(foo=1))
+True
+>>> defaultproxyattrdict(dict(foo=1)) != defaultproxyattrdict(dict(bar=1))
+True
     '''
 
     def __init__(self, d):
         dict.__setattr__(self, '_dict', d)
 
     def __getattribute__(self, name):
-        if name in ['_dict', '__init__', '__setattr__', '__getitem__']:
+        if name == '_dict' or name in defaultproxyattrdict.__dict__:
             return dict.__getattribute__(self, name)
         
         _dict = dict.__getattribute__(self, '_dict')
@@ -783,8 +809,25 @@ False
     def __len__(self):
         return len(self._dict)
 
+    def __eq__(self, other):
+        if isinstance(other, defaultproxyattrdict):
+            return self._dict == other._dict
+        elif isinstance(other, dict):
+            return self._dict == other
+        else:
+            return False
+
+    def __ne__(self, other):
+        if isinstance(other, defaultproxyattrdict):
+            return self._dict != other._dict
+        elif isinstance(other, dict):
+            return self._dict != other
+        else:
+            return True
+
     def __repr__(self):
         return repr(self._dict)
+        #return 'defaultproxyattrdict('+repr(self._dict)+')'
         
     def __setattr__(self, name, value):
         self._dict[name] = value
@@ -800,6 +843,9 @@ False
 
     def __contains__(self, item):
         return item in self._dict
+
+    def copy(self):
+        return defaultproxyattrdict(self._dict)
 
 class LameAttrDict(dict):
     '''
