@@ -5,26 +5,18 @@ import sys
 from vesper import utils
 from vesper.data import DataStore, transactions
 
+import logging
+log = logging.getLogger("TransactionProcessor")
+
 class TransactionProcessor(utils.ObjectWithThreadLocals):
     
-    def __init__(self, model_uri=None, appVars=None):
-        """
-        appVars - dictionary of config settings, overriding the config
-        """
-        self.initThreadLocals(requestContext=None, inErrorHandler=0, previousResolvers=None)
-        
-        self.model_uri = model_uri
-        
-        self.requestContext = [{}] #stack of dicts
-        
+    def __init__(self):
+        self.initThreadLocals(requestContext=[{}], #stack of dicts
+                                inErrorHandler=0)
         self.lock = None
         self.log = log
         self.actions = {}
-        
-        if appVars:
-            kw.update(appVars)
-        self.loadDataStore(kw)
-        
+
     def loadDataStore(self, kw):
         self.txnSvc = transactions.RaccoonTransactionService(self)
         

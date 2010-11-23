@@ -4,7 +4,7 @@
     General purpose utilities
 """
 import os.path
-import os, sys, threading
+import os, sys, threading, copy
 from stat import *
 from time import *
 from types import *
@@ -135,7 +135,7 @@ class ObjectWithThreadLocals(object):
                 return getattr(self._locals, propname)
             except AttributeError:
                 value = getattr(self, defaultValueAttrName)
-                setattr(self._locals, propname, value)
+                setattr(self._locals, propname, copy.copy(value))
                 return value
 
         def set(self, value):
