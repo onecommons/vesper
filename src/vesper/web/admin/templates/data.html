@@ -9,6 +9,8 @@ def selected(test):
   else: return ''
 
 def resolve(obj, prop):
+  if not obj:
+    return obj
   for name in prop.split('.'):
     index = None
     if name[-1] == ']':
@@ -44,7 +46,7 @@ def getobj(context, kw):
     return context['__'].currobj
 
 def setFormBindClass(val, kw=None):
-  if isinstance(val, (str, unicode)):
+  if isinstance(val, (str, unicode, type(UNDEFINED))):
     return '' #don't bother with string
   elif isinstance(val, bool):
     btype = 'boolean'
@@ -70,7 +72,7 @@ def setFormBindClass(val, kw=None):
 def serializeValue(val):  
   if isinstance(val, bool):
     return val and 'true' or 'false'
-  elif isinstance(val, (str, unicode, int, float)):
+  elif isinstance(val, (str, unicode, int, float, type(UNDEFINED))):
     return val
   elif isinstance(val, type(None)):
     return ''
@@ -122,13 +124,13 @@ def serializeValue(val):
       %for v in value:        
         <%
         ikw = kw.copy()
-        bindclass = setFormBindClass(v, ikw)
+        setFormBindClass(v, ikw)
         %>      
         <input type='${itype}' ${kwtoattr(ikw)} checked name='${prop}[]' value='${serializeValue(v)|q}' />
       % endfor
    %else:
      <%
-     bindclass = setFormBindClass(value, kw)
+     setFormBindClass(value, kw)
      %>      
      <input type='${itype}' ${kwtoattr(kw)} name='${prop}' ${toggleInput and value and 'checked' or ''}  \
                                                   value='${serializeValue(value)|q}'>${caller.body()}</input>
@@ -139,7 +141,7 @@ def serializeValue(val):
   <%
   obj = getobj(context, kw)
   value = resolve(obj, prop)
-  bindclass = setFormBindClass(value, kw)
+  setFormBindClass(value, kw)
   %>   
   <input type='hidden' name='${prop}' ${kwtoattr(kw)} value='${serializeValue(value)|q}' />
 </%def>
@@ -183,7 +185,7 @@ def serializeValue(val):
   <%
   obj = getobj(context, kw)
   value = resolve(obj, prop)
-  bindclass = setFormBindClass(value, kw)
+  setFormBindClass(value, kw)
   %>   
   <textarea name='${prop}' ${kwtoattr(kw)}>${serializeValue(value)|h}</textarea>
 </%def>
