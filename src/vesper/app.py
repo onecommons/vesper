@@ -211,17 +211,9 @@ class RequestProcessor(TransactionProcessor):
             ]
 
     def __init__(self, appVars):
+        super(RequestProcessor, self).__init__()
         self.baseDir = os.getcwd() #XXX make configurable
-        self.loadConfig(appVars)
-                 
-        # XXX copy and paste from
-        self.initThreadLocals(requestContext=None, inErrorHandler=0, 
-                                                previousResolvers=None)
-        self.requestContext = [{}] #stack of dicts
-        self.lock = None
-        self.log = log
-        #######################
-                
+        self.loadConfig(appVars)                                 
         if self.template_path:
             from mako.lookup import TemplateLookup
             templateArgs = dict(directories=self.template_path, 
@@ -542,9 +534,8 @@ class AppConfig(utils.attrdict):
         from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(appVars=self.copy())
         dict.__setattr__(self, '_server', root)
-        global _current_config
-        if self is _current_config:
-            _current_config = None
+        #configuration complete, clear global configuration state:
+        _initConfigState()
         return self._server
         
     def run(self, startserver=True, out=sys.stdout):
@@ -577,8 +568,11 @@ def createStore(json='', **kw):
     root = createApp(**kw).run(False)
     return root.dataStore
 
-_current_config = AppConfig()
-_current_configpath = [None]
+def _initConfigState():
+    global _current_config, _current_configpath
+    _current_config = AppConfig()
+    _current_configpath = [None]        
+_initConfigState()
 
 def _normpath(basedir, path):
     """
@@ -633,7 +627,11 @@ def _importApp(baseapp):
         #set this global so we can resolve relative paths against the location
         #of the config file they appear in
         _current_configpath.append( os.path.abspath(path) )
-        __import__(baseapp, baseglobals)
+        basemod = sys.modules.get(baseapp)
+        if basemod:
+            reload(basemod)
+        else:
+            __import__(baseapp, baseglobals)
     _current_configpath.pop()
 
 def getCurrentApp():
@@ -654,7 +652,6 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
     :param config: Any other keyword arguments will override config values set by the base app
     '''
     global _current_config
-    
     if derivedapp:
         (derived_path, isdir) = _get_module_path(derivedapp)
         if not isdir:
