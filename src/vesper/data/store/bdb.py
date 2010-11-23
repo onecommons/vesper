@@ -98,6 +98,7 @@ class BdbStore(Model):
     #add list info to each object 
     
     debug=0
+    updateAdvisory = True
      
     def __init__(self, source, defaultStatements=None, **kw):
         if source is not None:
