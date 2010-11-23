@@ -77,6 +77,7 @@ class HTTPRequestProcessor(RequestProcessor):
             #rc['_environ']=kw['_environ']
             #rc['_responseHeaders'] = kw['_responseHeaders']
             #rc['_session']=kw['_session']
+            assert self.requestContext
             self.requestContext.append(rc)
 
             self.validate_external_request(kw)
@@ -121,10 +122,33 @@ class HTTPRequestProcessor(RequestProcessor):
 
                 return result
         finally:
+            #import traceback;
+            #traceback.print_exc()
+            assert self.requestContext
             self.requestContext.pop()
 
         return self.default_not_found(kw)
 
+    def requestFromEnviron(self, environ):
+        import Cookie, wsgiref.util
+        _name = environ['PATH_INFO'].strip('/')
+        if not _name:
+            _name = self.default_page_name
+
+        _responseCookies = Cookie.SimpleCookie()
+        _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
+        kw = utils.attrdict(_environ=utils.attrdict(environ),
+            _uri = wsgiref.util.request_uri(environ),
+            _baseUri = wsgiref.util.application_uri(environ),
+            _responseCookies = _responseCookies,
+            _requestCookies = Cookie.SimpleCookie(environ.get('HTTP_COOKIE', '')),
+            _responseHeaders= _responseHeaders,
+            _name=_name
+        )
+        paramsdict = get_http_params(environ)
+        kw.update(paramsdict)
+        return kw
+        
     def wsgi_app(self, environ, start_response):
         """
         A WSGI app that dispatches incoming HTTP requests to the 'http-request' action.
@@ -144,25 +168,12 @@ class HTTPRequestProcessor(RequestProcessor):
         :var _requestcookies: (a Cookie.SimpleCookie)
         :var _environ: (a utils.attrdict) the WSGI `environ`
         """
-        import Cookie, wsgiref.util
-        _name = environ['PATH_INFO'].strip('/')
-        if not _name:
-            _name = self.default_page_name
 
-        _responseCookies = Cookie.SimpleCookie()
-        _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
-        kw = utils.attrdict(_environ=utils.attrdict(environ),
-            _uri = wsgiref.util.request_uri(environ),
-            _baseUri = wsgiref.util.application_uri(environ),
-            _responseCookies = _responseCookies,
-            _requestCookies = Cookie.SimpleCookie(environ.get('HTTP_COOKIE', '')),
-            _responseHeaders= _responseHeaders,
-            _name=_name
-        )
-        paramsdict = get_http_params(environ)
-        kw.update(paramsdict)
+        kw = self.requestFromEnviron(environ)
         response = self.handleHTTPRequest(kw)
-
+        _responseHeaders = kw['_responseHeaders']
+        _responseCookies = kw['_responseCookies']
+        
         status = _responseHeaders.pop('_status')
         headerlist = _responseHeaders.items()
         if len(_responseCookies):
