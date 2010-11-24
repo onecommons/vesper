@@ -1,9 +1,11 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import sys
+import tempfile, os.path
 
 from vesper import utils
 from vesper.data import DataStore, transactions
+from vesper.utils import glock
 
 import logging
 log = logging.getLogger("TransactionProcessor")
@@ -13,38 +15,56 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     def __init__(self):
         self.initThreadLocals(requestContext=[{}], #stack of dicts
                                 inErrorHandler=0)
-        self.lock = None
+        self.lockfile = None
         self.log = log
-        self.actions = {}
 
-    def loadDataStore(self, kw):
+    def loadDataStore(self, configDict):
+        self.model_uri = configDict.get('model_uri')
+        if not self.model_uri:
+            import socket
+            self.model_uri= 'http://' + socket.getfqdn() + '/'        
+        self.model_resource_uri = configDict.get('model_resource_uri', self.model_uri)
+        self.lockfilepath = configDict.get('file_lock_path')
+            
+        useFileLock = configDict.get('use_file_lock')
+        if useFileLock:
+            if isinstance(useFileLock, type):
+                self.LockFile = useFileLock
+            else:
+                self.LockFile = glock.LockFile
+        else:
+            self.LockFile = glock.NullLockFile #the default
+        
         self.txnSvc = transactions.RaccoonTransactionService(self)
         
-        dataStoreFactory = kw.get('datastore_factory', kw.get('domStoreFactory', DataStore.BasicStore))
-        self.dataStore = dataStoreFactory(self, **kw)
+        dataStoreFactory = configDict.get('datastore_factory', 
+                configDict.get('domStoreFactory', DataStore.BasicStore))
+        self.dataStore = dataStoreFactory(self, **configDict)
         self.dataStore.addTrigger = self.txnSvc.addHook
         self.dataStore.removeTrigger = self.txnSvc.removeHook
 
-        if self.actions.get('before-new'):
+        if configDict.get('actions',{}).get('before-new'):
             #newResourceHook is optional since it's expensive
             self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
-        
-        self.model_resource_uri = kw.get('model_resource_uri',
-                                         self.model_uri)
+
+    def getLockFile(self):                                 
+        if not self.lockfile:
+            if not self.lockfilepath:
+                lockName = 'r' + str(hash(self.model_resource_uri)) + '.lock'
+                lockfilepath = os.path.join(tempfile.gettempdir(), lockName)
+            else:
+                lockfilepath = self.lockfilepath
+            self.lockfile = self.LockFile(lockfilepath)
+        return self.lockfile
         
     def getLock(self):
         '''
         Acquires and returns the lock associated with this RequestProcessor.
         Call release() on the returned lock object to release it.
-        '''
-        assert self.lock
-        return utils.glock.LockGetter(self.lock)
+        '''        
+        return utils.glock.LockGetter(self.getLockFile() )
     
     def loadModel(self):
-        if not self.lock:
-            lockName = 'r' + str(hash(self.model_resource_uri)) + '.lock'
-            self.lock = self.LockFile(lockName)
-
         lock = self.getLock()
         try:
             self.dataStore.load()

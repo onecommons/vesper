@@ -9,7 +9,7 @@
 import os, os.path, sys, traceback, re
 
 from vesper import utils
-from vesper.utils import glock, MRUCache
+from vesper.utils import MRUCache
 from vesper.utils.Uri import UriToOsPath
 from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
@@ -243,11 +243,6 @@ class RequestProcessor(TransactionProcessor):
         self.runActions('run-cmds', kw)
 
     def loadConfig(self, appVars):
-        self.model_uri = appVars.get('model_uri')
-        if not self.model_uri:
-            import socket
-            self.model_uri= 'http://' + socket.getfqdn() + '/'
-
         self.config = utils.defaultattrdict(appVars)
 
         if appVars.get('beforeConfigHook'):
@@ -259,25 +254,14 @@ class RequestProcessor(TransactionProcessor):
             return assignAttrs(self, appVars, varlist, default)
 
         initConstants( [ 'actions'], {})
-        initConstants( ['default_mime_type'], '')
-        initConstants( ['model_uri'], self.model_uri)
-        initConstants( ['app_name'], 'root')
+        initConstants( ['default_mime_type'], '')        
+        self.loadDataStore(appVars)
         #app_name is a unique name for this request processor instance
+        initConstants( ['app_name'], 'root')
         if not self.app_name:
             self.app_name = re.sub(r'\W','_', self.model_uri)
         self.log = logging.getLogger("app." + self.app_name)
-
-        useFileLock = appVars.get('use_file_lock')
-        if useFileLock:
-            if isinstance(useFileLock, type):
-                self.LockFile = useFileLock
-            else:
-                self.LockFile = glock.LockFile
-        else:
-            self.LockFile = glock.NullLockFile #the default
-        
-        self.loadDataStore(appVars)
-                
+                        
         self.defaultRequestTrigger = appVars.get('default_trigger','http-request')
         initConstants( ['global_request_vars', 'static_path', 'template_path'], [])
         self.mako_module_dir = appVars.get('mako_module_dir', 'mako_modules')
@@ -290,11 +274,7 @@ class RequestProcessor(TransactionProcessor):
         initConstants( ['action_cache_size'], 0)
         self.validate_external_request = appVars.get('validate_external_request',
                                         lambda *args: True)
-        self.get_principal_func = appVars.get('get_principal_func', lambda kw: '')
-
-        self.model_resource_uri = appVars.get('model_resource_uri',
-                                         self.model_uri)
-        
+        self.get_principal_func = appVars.get('get_principal_func', lambda kw: '')        
         self.argsForConfig = appVars.get('argsForConfig', [])
         #XXX self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
         

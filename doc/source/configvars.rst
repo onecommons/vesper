@@ -100,6 +100,14 @@ datastore configuration variables
     
     ``use_file_lock=True #enable``
 
+.. confval:: file_lock_path
+  
+    The path name for the lock file. If `file_lock_path` is not set, a path name is generated 
+    using the os's temp directory and a file name based on a hash of the `model_resource_uri` 
+    (this is to ensure that any process opening the same datastore will share the same lock file).
+    
+    ``file_lock_path='./appinstance1.lock'``
+    
 .. confval:: save_history 
 
     Default: ``save_history = False``
