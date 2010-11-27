@@ -868,16 +868,17 @@ class OrderedModel(object):
     Sort statements and normalize RDF lists and containers
     '''
 
-    def __init__(self, stmts):
+    def __init__(self, stmts, isEmbedded = lambda ignore: False):
         children = []
         subjectDict = {}
         lists = {}
         listNodes = {}
-
+        embedded = []
+        
         for stmt in stmts:
             if (stmt.predicate in (RDF_MS_BASE+'first', RDF_MS_BASE+'rest')
                 or (stmt.object == RDF_MS_BASE+'List' and stmt.predicate ==
-                RDF_MS_BASE+'type')): #its a list
+                    RDF_MS_BASE+'type')): #its a list
 
                 if stmt.subject not in lists:
                     lists[stmt.subject] = 1
@@ -890,20 +891,70 @@ class OrderedModel(object):
                     subjectDict[stmt.subject].append(stmt)
                 else:
                     subjectDict[stmt.subject] = [stmt]
-                    if children and children[-1] > stmt.subject:                        
+                    if isEmbedded(stmt.subject):                        
+                        #ensure object is after subject 
+                        #this assumes one parent and no cycles
+                        assert stmt.subject != stmt.object
+                        if isEmbedded(stmt.object, stmt.objectType):
+                            try:
+                                index = embedded.index(stmt.object)                            
+                                embedded.insert(index, stmt.subject)
+                            except ValueError:
+                                embedded.append(stmt.subject)
+                        else:
+                            embedded.append(stmt.subject)
+                    elif children and children[-1] > stmt.subject:
                         bisect.insort(children, stmt.subject)
                     else:
                         children.append(stmt.subject)
-
+        
         for uri, head in lists.items():            
             if head: 
                 #don't include non-head list-nodes as resources
                 #but add the statements from the tail nodes
-                bisect.insort(children, uri)                
+                if isEmbedded(uri):
+                    index = -1
+                    for stmt in listNodes[uri]:
+                        if isEmbedded(stmt.object, stmt.objectType):
+                            try:
+                                i = embedded.index(stmt.object)
+                                if index == -1 or i < index:
+                                    index = i
+                            except ValueError:
+                                pass
+                    if index > -1:
+                        embedded.insert(index, uri)
+                    else:
+                        embedded.append(uri)
+                else:
+                    bisect.insort(children, uri)                
                 subjectDict.setdefault(uri, []).extend( listNodes[uri] )
-
+        
+        children.extend( embedded )
         self.resources, self.subjectDict, self.listNodes = children, subjectDict, listNodes
 
+    def renameResource(self, old, new, listuri = None):
+        assert old in self.subjectDict
+        assert new not in self.subjectDict
+        i = self.resources.index(old)
+        self.resources[i] = new
+        stmts = self.subjectDict.pop(old)
+        self.subjectDict[new] = [Statement(new, *s[1:]) for s in stmts]
+        if listuri:
+            liststmts = self.subjectDict.get(listuri,())
+            for i, stmt in enumerate(liststmts):
+                if stmt[2] == old and stmt[3] == OBJECT_TYPE_RESOURCE:
+                   liststmts[i] = Statement(stmt[0],stmt[1], new, stmt[3], stmt[4])
+    
+    def removeStatement(self, stmt):
+        stmts = self.subjectDict[ stmt[0] ]        
+        stmts.remove(stmt)
+        
+    def getAll(self):
+        for stmts in self.subjectDict.values():
+            for s in stmts:
+                yield s
+        
     def groupbyProp(self):
         for res in self.resources:
             stmts = self.getProperties(res)
@@ -1204,82 +1255,89 @@ class Graph(object):
     """
 
     def __init__(self, stmts, quad=True):
-      self.statements = set()
-      self.cache = {}
-      for stmt in stmts:
-        if stmt[3] == OBJECT_TYPE_RESOURCE:
-            obj = stmt[2]
-        else:
-            obj = '"'+ stmt[2]+'"'+stmt[3]
-        if quad:
-            scope = str(stmt[4])
-        else:
-            scope = None
-        t = (str(stmt[0]), str(stmt[1]), str(obj), scope)
-        self.statements.add(t)
+        self.statements = set()
+        self.cache = {}
+        for stmt in stmts:
+            if stmt[3] == OBJECT_TYPE_RESOURCE:
+                obj = stmt[2]
+            else:
+                obj = '"'+ stmt[2]+'"'+stmt[3]
+            if quad:
+                scope = str(stmt[4])
+            else:
+                scope = None
+            t = (str(stmt[0]), str(stmt[1]), str(obj), scope)
+            self.statements.add(t)
 
     def _hashtuple(self):
-      result = []
-      for (subj, pred, objt, scope) in self.statements:
-         if isBnode(subj):
-            tripleHash = md5(str(self.vhashmemo(subj)))
-         else: tripleHash = md5(subj)
+        result = []
+        for (subj, pred, objt, scope) in self.statements:
+            if isBnode(subj):
+                tripleHash = md5(str(self.vhashmemo(subj)))
+            else: 
+                tripleHash = md5(subj)
+            for term in (pred, objt, scope):
+                if term is None:
+                    continue
+                if isBnode(term):
+                    tripleHash.update(str(self.vhashmemo(term)))
+                else: 
+                    tripleHash.update(term)
 
-         for term in (pred, objt, scope):
-            if term is None:
-                continue
-            if isBnode(term):
-               tripleHash.update(str(self.vhashmemo(term)))
-            else: tripleHash.update(term)
-
-         result.append(tripleHash.digest())
-      result.sort()
-      return result
+            result.append(tripleHash.digest())
+        result.sort()
+        return result
       
     def __hash__(self):
-      result = self._hashtuple()
-      return hash(tuple(result))
+        result = self._hashtuple()
+        return hash(tuple(result))
 
     def vhashmemo(self, term, done=False):
-      if self.cache.has_key((term, done)):
-         return self.cache[(term, done)]
+        if (term, done) in self.cache:
+            return self.cache[(term, done)]
 
-      result = self.vhash(term, done=done)
-      self.cache[(term, done)] = result
-      return result
+        result = self.vhash(term, done=done)
+        self.cache[(term, done)] = result
+        return result
 
     def vhash(self, term, done=False):
-      result = []
-      for stmt in self.statements:
-         if term in stmt:
-            for pos in xrange(4):
-               if stmt[pos] is None:
-                   continue
-               if not isBnode(stmt[pos]):
-                  result.append(stmt[pos])
-               elif done or (stmt[pos] == term):
-                  result.append(pos)
-               else: result.append(self.vhash(stmt[pos], done=True))
-      result.sort()
-      return tuple(result)
+        #return a tuple of all the non-bnode resources 
+        #the given bnode shares, recursively following any other bnodes
+        result = []
+        for stmt in self.statements:
+            if term in stmt:
+                for pos in xrange(4):
+                    if stmt[pos] is None:
+                        continue
+                    if not isBnode(stmt[pos]):
+                        result.append(stmt[pos])
+                    elif done or (stmt[pos] == term):
+                        result.append(pos)
+                    else: 
+                        result.append(self.vhash(stmt[pos], done=True))
+        result.sort()
+        return tuple(result)
 
+    def vhashdigest(self, term):
+        return md5( str(self.vhashmemo(term)) ).digest()
+    
     def normalizeBNodes(self):
         for t in self.statements:
             sub = t[0]
             if isBnode(sub):
-                sub = self.vhashmemo(sub)
+                sub = self.vhashdigest(sub)
             pred = t[1]
             if isBnode(pred):
-                pred = self.vhashmemo(pred)
+                pred = self.vhashdigest(pred)
             obj = t[2]
             if isBnode(obj):
-                obj = self.vhashmemo(obj)
+                obj = self.vhashdigest(obj)
             scope = t[3]
             if scope is None:
                 yield (sub, pred, obj)
             else:
                 if isBnode(scope):
-                    scope = self.vhashmemo(scope)
+                    scope = self.vhashdigest(scope)
                 yield (sub, pred, obj, scope)
 
 def graph_compare(p, q, asQuads=True):

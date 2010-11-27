@@ -124,7 +124,7 @@ class RaccoonTestCase(unittest.TestCase):
         #lets us recover and there should only be warning messages but no critical ones
         self.failUnless('CRITICAL' not in [r.levelname for r in self.logHandler.records])
         self.failUnless('WARNING' in [r.levelname for r in self.logHandler.records])
-        
+
         #use a model that doesn't support 2phase commit (i.e. doesn't support updateAdvisory) 
         self.failUnless(not TransactionMemStore.updateAdvisory)
         self._testErrorHandling(appVars=dict(model_factory=TransactionMemStore))
@@ -248,6 +248,114 @@ class RaccoonTestCase(unittest.TestCase):
             }])            
         self.assertEquals(store.query('{*}'), [{'id': 'hello', 'tags': ['@tag1']}])
 
+    def _testUpdateEmbedded(self, op):
+        updates = utils.attrdict()        
+        @vesper.app.Action
+        def recordUpdates(kw, retval):
+            updates.update(kw)
+        
+        store = vesper.app.createStore({
+        "id": "hello", 
+        "embedded": {
+          'foo' : 'not first-class',
+          'prop2' : 'a'
+        }
+         }, storage_template_options=dict(generateBnode='counter'),
+         actions = { 'after-commit' : [recordUpdates]}         
+        )
+        self.assertEquals(store.model.getStatements(),
+            [('_:j:e:object:hello:1', 'foo', 'not first-class', 'L', ''),
+             ('_:j:e:object:hello:1', 'prop2', 'a', 'L', ''), 
+            ('hello', 'embedded', '_:j:e:object:hello:1', 'R', '')])
+         
+        getattr(store, op)({"id":"hello",
+        "embedded": {
+          'id' : '_:j:e:object:hello:2', #here just to make sure a different bnode name is used
+          'foo' : 'modified',
+           'prop2' : 'a'
+        }
+        })
+        
+        #XXX this statement shouldn't be duplicated
+        self.assertEquals(updates._removedStatements, [
+            ('_:j:e:object:hello:1', 'foo', 'not first-class', 'L', ''), 
+            ('_:j:e:object:hello:1', 'foo', 'not first-class', 'L', '')])            
+        self.assertEquals(updates._addedStatements, 
+                  [('_:j:e:object:hello:1', 'foo', 'modified', 'L', '')])
+        self.assertEquals(store.model.getStatements(),
+            [('_:j:e:object:hello:1', 'foo', 'modified', 'L', ''), 
+             ('_:j:e:object:hello:1', 'prop2', 'a', 'L', ''), 
+            ('hello', 'embedded', '_:j:e:object:hello:1', 'R', '')]
+        )
+
+    def testUpdateEmbedded(self):
+        self._testUpdateEmbedded('update')
+
+    def testReplaceEmbedded(self):
+        #calling replace instead of update results in the same set of changes
+        #in our example but goes through a different code path
+        self._testUpdateEmbedded('replace')
+                
+    def testUpdateEmbeddedList(self):
+        updates = utils.attrdict()        
+        @vesper.app.Action
+        def recordUpdates(kw, retval):
+            updates.update(kw)
+
+        store = vesper.app.createStore({
+        "id": "hello", 
+        "embedded": [{'foo' : 'a', 'prop2':'a'}, {'foo' : 'b'}]
+         }, storage_template_options=dict(generateBnode='counter'),
+         actions = { 'after-commit' : [recordUpdates]}         
+        )
+
+        store.update({"id":"hello",
+          "embedded": [{'id' : '_:j:e:object:hello:3', 'foo' : 'c', 'prop2':'a'}, {'id' : '_:j:e:object:hello:4', 'foo' : 'd'}]        
+        })
+
+        #XXX these statements shouldn't be duplicated
+        removed = [('_:j:e:object:hello:1', 'foo', 'a', 'L', ''), 
+        ('_:j:e:object:hello:2', 'foo', 'b', 'L', ''), 
+        ('_:j:e:object:hello:1', 'foo', 'a', 'L', ''), 
+        ('_:j:e:object:hello:2', 'foo', 'b', 'L', '')] 
+ 
+        #XXX shouldn't include the redundant proplist statements
+        added = [('_:j:e:object:hello:1', 'foo', 'c', 'L', ''), ('_:j:e:object:hello:2', 'foo', 'd', 'L', ''), 
+('_:j:proplist:hello;embedded', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', ''), 
+('_:j:proplist:hello;embedded', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'pjson:schema#propseqtype', 'R', ''), 
+('_:j:proplist:hello;embedded', 'pjson:schema#propseqprop', 'embedded', 'R', ''), 
+('_:j:proplist:hello;embedded', 'pjson:schema#propseqsubject', 'hello', 'R', '')]
+        
+        self.assertEquals(updates._removedStatements, removed)        
+        self.assertEquals(updates._addedStatements, added)
+
+    def testReplaceEmbeddedList(self):
+        updates = utils.attrdict()        
+        @vesper.app.Action
+        def recordUpdates(kw, retval):
+            updates.update(kw)
+
+        store = vesper.app.createStore({
+        "id": "hello", 
+        "embedded": [{'foo' : 'a'}, {'foo' : 'b'}]
+         }, storage_template_options=dict(generateBnode='counter'),
+         actions = { 'after-commit' : [recordUpdates]}         
+        )
+
+        store.replace({"id":"hello",
+          "embedded": [{'id' : '_:j:e:object:hello:3', 'foo' : 'c'}, {'id' : '_:j:e:object:hello:4', 'foo' : 'd'}]        
+        })
+
+        removed = set(updates._removedStatements) - set(updates._addedStatements)
+        expectedRemoved = set([('_:j:e:object:hello:2', 'foo', 'b', 'L', ''),
+                                ('_:j:e:object:hello:1', 'foo', 'a', 'L', '')])
+        self.assertEquals(removed, expectedRemoved)        
+        
+        added = set(updates._addedStatements) - set(updates._removedStatements)        
+        expectedAdded = set([('_:j:e:object:hello:2', 'foo', 'd', 'L', ''), 
+                            ('_:j:e:object:hello:1', 'foo', 'c', 'L', '')])
+        self.assertEquals(added, expectedAdded)
+
     def testMerge(self):
         store1 = vesper.app.createStore(save_history='split', branch_id='A',
           model_uri = 'test:', 
@@ -261,7 +369,7 @@ class RaccoonTestCase(unittest.TestCase):
         }
         ])
         self.assertEquals(store1.model.currentVersion, '0A00001')
-                
+        
         store1.update([{ 'id' : '1', 'prop' : 1,
           'base': [{'foo': 3}, {'foo': 4}]
         }

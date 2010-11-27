@@ -21,11 +21,13 @@ def assert_stmts_match(expected_stmts, result_stmts):
 
     if not base.graph_compare(expected_stmts, result_stmts):
         print 'graph_compare failed'
+        ge = base.Graph(expected_stmts)
+        gr = base.Graph(result_stmts)
         print pprintdiff(ge._hashtuple(), gr._hashtuple())
-        #print 'expected _:2', RxPath.Graph(expected_stmts).vhash('_:2')
-        #print 'expected _:1', RxPath.Graph(expected_stmts).vhash('_:1')
-        #print 'result _:1', RxPath.Graph(result_stmts).vhash('_:1')
-        #print 'result _:2', RxPath.Graph(result_stmts).vhash('_:2')
+        #print 'expected _:2', base.Graph(expected_stmts).vhash('_:2')
+        #print 'expected _:1', base.Graph(expected_stmts).vhash('_:1')
+        #print 'result _:1', base.Graph(result_stmts).vhash('_:1')
+        #print 'result _:2', base.Graph(result_stmts).vhash('_:2')
         assert False
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, 

@@ -1042,7 +1042,6 @@ class Parser(object):
     def isEmbeddedBnode(self, id):
         if not isinstance(id, (str,unicode)):
             return False
-        prefixlen = len(self.bnodeprefix + 'j:')
         if id.startswith(self.bnodeprefix + 'j:e') or id.startswith(self.bnodeprefix + 'j:proplist:'):
             return True
         return False
