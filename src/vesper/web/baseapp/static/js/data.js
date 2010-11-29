@@ -186,7 +186,7 @@ txn.commit();
                     if (!data.bindvars) {
                         data.bindvars = {}
                     }
-                    data.bindvars['this'] =  '@'+thisid;
+                    data.bindvars['this'] =  thisid;
                 }                
             }
             txn.execute(action, data, callback, this[0]);

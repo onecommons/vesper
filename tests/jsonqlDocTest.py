@@ -184,7 +184,7 @@ t("""{
   id : upper(displayname)
   MERGEALL 
 }""",
- [{'user:1': "ABBEY AARDVARK", 'user:2': "BILLY BILLYGOAT"}]
+ [{'@user:1': "ABBEY AARDVARK", '@user:2': "BILLY BILLYGOAT"}]
 )
 
 t %'''
@@ -264,25 +264,25 @@ The "*" will expand to all properties defined for the object. For example, this 
 '''
 t("{*}", [{'author': '@user:2',
   'contents': 'a comment',
-  'id': 'comment1',
+  'id': '@comment1',
   'parent': '@post1',
   'type': 'comment'},
  {'displayname': 'abbey aardvark',
   'email': ['abbey@aardvark.com', 'abbey_aardvark@gmail.com'],
-  'id': 'user:1',
+  'id': '@user:1',
   'type': 'user'},
- {'author': '@user:1', 'contents': 'a post', 'id': 'post1', 'type': 'post'},
+ {'id': '@post1', 'author': '@user:1', 'contents': 'a post', 'type': 'post'},
  {'author': '@user:1',
   'contents': 'a reply',
-  'id': 'comment2',
+  'id': '@comment2',
   'parent': '@comment1',
   'type': 'comment'},
  {'author': '@user:1',
   'contents': 'different parent',
-  'id': 'comment3',
+  'id': '@comment3',
   'parent': '@comment4',
   'type': 'comment'},
- {'displayname': 'billy billygoat', 'id': 'user:2', 'type': 'user'}]
+ {'displayname': 'billy billygoat', 'id': '@user:2', 'type': 'user'}]
 )
 
 
@@ -312,9 +312,9 @@ You can use wrap the property value with brackets to force the value of a proper
 '''
 
 t("{ id, mixed }",
-[{'id': '1', 'mixed': ['a', 'b']},
- {'id': '3', 'mixed': None},
- {'id': '2', 'mixed': 'c'}]
+[{'id': '@1', 'mixed': ['a', 'b']},
+ {'id': '@3', 'mixed': None},
+ {'id': '@2', 'mixed': 'c'}]
 ,model = listModel
 )
 
@@ -323,9 +323,9 @@ t % '''
 '''
 
 t("{ id, [mixed] }",
-[{'id': '1', 'mixed': ['a', 'b']},
- {'id': '3', 'mixed': []},
- {'id': '2', 'mixed': ['c']}]
+[{'id': '@1', 'mixed': ['a', 'b']},
+ {'id': '@3', 'mixed': []},
+ {'id': '@2', 'mixed': ['c']}]
 ,model = listModel
 )
 
@@ -475,10 +475,10 @@ nullModel = t.model = modelFromJson([
 t("[null=null, null!=null, null=0, null='', 1+null, trim(null), null > 0, null < 0]",
 [[True, False, False, False, None, None, False, True]])
 
-t("{id, value where value = null}", [{'id':'1', "value" : None}])
+t("{id, value where value = null}", [{'id':'@1', "value" : None}])
 
 t("{id, value where value != null}",
-[{'id': '3', 'value': True}, {'id': '2', 'value': ''}])
+[{'id': '@3', 'value': True}, {'id': '@2', 'value': ''}])
 
 t%'''
 pseudo-value types
@@ -509,7 +509,7 @@ does inserted a property that already exists on an object might add a new value 
 '''
 
 t("{ id, a_list }",
-[{'a_list': ['a', 'b', 'c', None], 'id': '1'}]
+[{'a_list': ['a', 'b', 'c', None], 'id': '@1'}]
 ,model = listModel
 )
 
@@ -666,7 +666,7 @@ A filter expression that references an MAYBE-modified property will evaluated wi
 '''
 
 t("{id, maybe value where value = null}", 
-[{'id':'1', "value" : None}, {'id':'4', "value" : None}]
+[{'id':'@1', "value" : None}, {'id':'@4', "value" : None}]
 ,model=nullModel)
 
 '''
@@ -674,13 +674,13 @@ Conversely, a filter expression that does not match null value on a MAYBE-modifi
 '''
 
 t("{id, maybe value where value != null}",
-[{'id': '3', 'value': True}, {'id': '2', 'value': ''}]
+[{'id': '@3', 'value': True}, {'id': '@2', 'value': ''}]
 ,model=nullModel)
 
 'or:'
 
 t("{id, maybe value where value = ''}",
-[{ "id" : "2",
+[{ "id" : "@2",
   "value" : ""
 }]
 ,model=nullModel)
@@ -760,16 +760,16 @@ t('''
 [{'author': '@user:1',
   'comments': [{'author': '@user:2',
                 'contents': 'a comment',
-                'id': 'comment1',
+                'id': '@comment1',
                 'parent': '@post1',
                 'type': 'comment'},
                {'author': '@user:1',
                 'contents': 'a reply',
-                'id': 'comment2',
+                'id': '@comment2',
                 'parent': '@comment1',
                 'type': 'comment'}],
   'contents': 'a post',
-  'id': 'post1',
+  'id': '@post1',
   'type': 'post'}]
 )
 

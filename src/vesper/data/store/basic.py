@@ -231,7 +231,7 @@ class IncrementalNTriplesFileStoreBase(FileStore):
                     else:
                         yield stmt[0]
                         
-            comment = kw.get('source','')
+            comment = kw.get('source','') or ''
             if isinstance(comment, (list, tuple)):                
                 comment = comment and comment[0] or ''
             if getattr(comment, 'getAttributeNS', None):

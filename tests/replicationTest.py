@@ -117,7 +117,7 @@ class BasicReplicationTest(unittest.TestCase):
     def testSingleMessage(self):
         "testing single-message replication"
         # post an add to rhizomeA
-        sample = {"id":"1234", "foo":"bar"}
+        sample = {"id":"@1234", "foo":"bar"}
         r = invokeAPI("add", sample, port=self.rhizomeA_port)
         
         time.sleep(1) # XXX
@@ -133,7 +133,7 @@ class BasicReplicationTest(unittest.TestCase):
             ('update', {"foo":"baz"}, 'id="123"'),
             ('add', {"id":"789", "foo":"bar", "color":"green"}, None),
         ]
-        expected = [{u'foo': u'baz', u'id': u'123'}, {u'color': u'green', u'foo': u'bar', u'id': u'789'}, {u'id': u'456', u'value': u'four hundred fifty six'}]
+        expected = [{u'foo': u'baz', u'id': u'@123'}, {u'color': u'green', u'foo': u'bar', u'id': u'@789'}, {u'id': u'@456', u'value': u'four hundred fifty six'}]
         
         # post an add to rhizomeA
         for (action, data, where) in samples:

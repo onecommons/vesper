@@ -41,7 +41,7 @@ t('''
 )
 
 #id keys only
-t("{id}", [ {'id': '3'}, {'id': '2'}, {'id': '_:2'}, {'id': '_:1'},]
+t("{id}", [ {'id': '@3'}, {'id': '@2'}, {'id': '@_:2'}, {'id': '@_:1'},]
 , useSerializer=True)
 
 t("{id : foo MERGEALL}", [{'2': 'bar', '3': 'bar'}])
@@ -54,8 +54,8 @@ t('''
 ''',
 [{'2': {'foo': 'bar', 'id': '2'},
   '3': {'foo': 'bar', 'id': '3'},
-  '_:1': {'child': {'foo': 'bar', 'id': '3'}, 'id': '_:1', 'parent': '1'},
-  '_:2': {'child': {'foo': 'bar', 'id': '2'}, 'id': '_:2', 'parent': '1'}}]
+  '_:1': {'child': {'foo': 'bar', 'id': '3'}, 'id': '_:1', 'parent': {'id': '1'} },
+  '_:2': {'child': {'foo': 'bar', 'id': '2'}, 'id': '_:2', 'parent': {'id': '1'} }}]
 )
 
 t("{}", [{}]) 
@@ -83,12 +83,12 @@ t('''
 t('''{ * where foo > @bar }''', [])
 
 t('''{ * where ( id = :id) }''', 
-[{'foo':'@bar', 'id':'2'}], 
+[{'foo':'@bar', 'id':'@2'}], 
         bindvars={'id':'@2'}, useSerializer=True)
 
 #XXX bindvar needs to support ref and datatype patterns
 t('''{ * where  child = :child }''', 
-[{'child': '@2', 'id': '_:2', 'parent': '@1'}], 
+[{'child': '@2', 'id': '@_:2', 'parent': '@1'}], 
         bindvars={'child':'@2'}, useSerializer=True)
 
 t("{ id, 'parent' : child }",
@@ -194,13 +194,13 @@ t('''{ 'foo' : ?bar.baz.id }''')
 t('''
 { 'id' : ID, 'blah' : foo }
 ''',
-[{'blah': '@bar', 'id': '3'}, {'blah': '@bar', 'id': '2'}]
+[{'blah': '@bar', 'id': '@3'}, {'blah': '@bar', 'id': '@2'}]
 , useSerializer=True)
 
 t('''
 { id, 'blah' : foo }
 ''',
-[{'blah': '@bar', 'id': '3'}, {'blah': '@bar', 'id': '2'}]
+[{'blah': '@bar', 'id': '@3'}, {'blah': '@bar', 'id': '@2'}]
 , useSerializer=True)
 
 t(u'("\u2019\\x0a")', [u'\u2019\n']) #\u2019 is RIGHT SINGLE QUOTATION MARK
@@ -423,7 +423,7 @@ namemap = {
     }
 }
 }''',
-[{'id': 'subsumedby',
+[{'id': '@subsumedby',
   'rdfs:domain': '@Tag',
   'rdfs:range': '@Tag',
   'rdfs:subPropertyOf': '@rdfs:subClassOf'}],
@@ -433,7 +433,7 @@ namemap = {
 t('''
 { id, 'cell': [prop1, prop2] where id='id1' }
 ''', 
-[{'cell': ['value 1', '@ref1'], 'id': 'id1'}],
+[{'cell': ['value 1', '@ref1'], 'id': '@id1'}],
 useSerializer=True,
 model={"pjson": "0.9", "data": [
 {"id": "id1", "prop1": "value 1", "prop2": "@ref1"}],
@@ -930,7 +930,7 @@ t('''
   and {?posts ?tag = tags and tags = ?tag1} 
   and ?tag not in (:tagid1) )}
 ''',
-[{'id': 'toread', 'label': 'to read', 'othertags': ['@commons', '@toread']}], 
+[{'id': '@toread', 'label': 'to read', 'othertags': ['@commons', '@toread']}], 
 bindvars = { 'tagid1' : '@commons'}, useSerializer=True) 
 
 #find all the entries that implicitly or explicitly are tagged 'projects'
@@ -1148,6 +1148,28 @@ t('''{*
 DEPTH 10
 }''')
 
+#test serialization when an id is referencing a missing object
+t.model = modelFromJson([
+ {
+  'id' : 'top', 
+  'prop1' : 'id1',
+  'prop2' : 'danglingref'
+ },
+ {
+ 'id': 'id1',
+ 'foo' : 1
+ }
+])
+
+t('''{*
+where id = @top
+DEPTH 2
+}''',
+[{'id': 'top',
+  'prop1': {'id': 'id1', 'foo': 1},
+  'prop2': {'id': 'danglingref'}}
+])
+
 t.model = modelFromJson([
      { 'id' : '1',
        'values' :  {
@@ -1309,8 +1331,8 @@ t('''{ id, values where values = @1 and values = 1 and values}''',
 )
 
 t('''{ id, values where values == @1 }''',
-[{'id': '4', 'values': ['@1']},
- {'id': '7', 'values': '@1'}], useSerializer=True
+[{'id': '@4', 'values': ['@1']},
+ {'id': '@7', 'values': '@1'}], useSerializer=True
 )
 
 t('''{ id, values where values != @1 }''',
@@ -1324,17 +1346,17 @@ t('''{ id, values where values != @1 }''',
 )
 
 t('''{ id, values where values == '1' }''',
-[{'id': '8', 'values': '1'}], 
+[{'id': '@8', 'values': '1'}], 
 useSerializer=True)
 
 t('''{ id, values where values != '1' }''',
-[{'id': '1', 'values': None},
- {'id': '3', 'values': ['', 0, None, False]},
- {'id': '2', 'values': 0},
- {'id': '5', 'values': ''},
- {'id': '4', 'values': [1, '@1', 1.1]},
- {'id': '7', 'values': '@1'},
- {'id': '6', 'values': 1},
+[{'id': '@1', 'values': None},
+ {'id': '@3', 'values': ['', 0, None, False]},
+ {'id': '@2', 'values': 0},
+ {'id': '@5', 'values': ''},
+ {'id': '@4', 'values': [1, '@1', 1.1]},
+ {'id': '@7', 'values': '@1'},
+ {'id': '@6', 'values': 1},
 ], useSerializer=True
 )
 

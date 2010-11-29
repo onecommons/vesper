@@ -20,7 +20,7 @@ Now we can start querying the database. Let's start with query that retrieves al
  >>> datastore.query('''
  ... { * }
  ... ''')
- [{'foo': 'bar', 'id': '1'}]
+ [{'foo': 'bar', 'id': '@1'}]
  
 Find all JSON objects. This is equivalent to the "SELECT * FROM table" SQL except that JQL has no notions of tables. If we wanted to select specified. 
 
@@ -77,7 +77,7 @@ def runQuery(query, model):
     return evalAST(ast, model)
 
 def getResults(query, model, bindvars=None, explain=None, debug=False,
-    forUpdate=False, captureErrors=False, contextShapes=None):
+    forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
     '''
     Returns a dict with the following keys:
         
@@ -105,6 +105,10 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     contextShapes
        A dictionary that specifies alternative constructors used when creating
        `dicts` and `lists` in the query results.
+    useSerializer
+       If value is a boolean, indicates whether pjson serialization is used or 
+       not (default: True). If value is a dict it is passed as keyword arguments
+       to the `pjson.Serializer` constructor.
     '''
     #XXX? add option to include `resources` in the result,
     # a list describing the resources (used for track changes)
@@ -124,7 +128,7 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     
     if ast != None:        
         try:
-            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate, contextShapes))
+            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate, contextShapes, useSerializer))
             #XXX: if forUpdate add a pjson header including namemap
             #this we have a enough info to reconstruct refs and datatypes without guessing
             #if forUpdate: 
@@ -154,9 +158,9 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
 def buildAST(query, namemap=None):
     "parse a query, returning (ast, [error messages])"
     from vesper.query import parse, engine
-    from vesper.pjson import defaultParseRefPattern
+    from vesper.pjson import defaultRefPattern
     if namemap is None:
-        namemap = { 'refpattern' : defaultParseRefPattern }
+        namemap = { 'refpattern' : defaultRefPattern }
 
     return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, False, namemap)
 
@@ -171,7 +175,11 @@ def _parsePjson(parseContext, v):
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, 
                     forUpdate=False, contextShapes=None, useSerializer=True):
     from vesper.query import engine
-    if useSerializer:
+    if isinstance(useSerializer, dict):
+        if hasattr(ast,'namemap'):
+            useSerializer['namemap'] = ast.namemap
+        serializer = pjson.Serializer(**useSerializer)
+    elif useSerializer:
         serializer = pjson.Serializer(getattr(ast,'namemap',None))
     else:
         serializer = None

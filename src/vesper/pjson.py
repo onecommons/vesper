@@ -64,8 +64,7 @@ _refpatternregex = re.compile(r'''(.*?)
 #by default we only find refs that match this pattern
 #we picked an unusual pattern because to require ref pattern
 #to be specified then to have false positives
-defaultSerializeRefPattern = '@((::)?URIREF)'
-defaultParseRefPattern = '@((::)?URIREF)'
+defaultRefPattern = '@((::)?URIREF)'
 
 #XXX add _patternCache = {}
 #match pattern and replacement template when parsing
@@ -243,7 +242,8 @@ def loads(data):
 class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False,
-            onlyEmbedBnodes=False, parseContext=None, saveOrder=None):
+            onlyEmbedBnodes=False, parseContext=None, saveOrder=None,
+            serializeIdAsRefs=True):
         '''
         { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
         or if `asList == True`: 
@@ -262,6 +262,7 @@ class Serializer(object):
         self.asList = asList
         self.onlyEmbedBnodes = onlyEmbedBnodes
         self.saveOrder = saveOrder
+        self.serializeIdAsRefs = serializeIdAsRefs
         
         self.nameMap = nameMap and nameMap.copy() or {}        
         if explicitRefObjects:
@@ -269,7 +270,7 @@ class Serializer(object):
                 del self.nameMap['refpattern']
         else:
             if not parseContext and 'refpattern' not in self.nameMap:            
-                self.nameMap['refpattern'] = defaultSerializeRefPattern
+                self.nameMap['refpattern'] = defaultRefPattern
         self.parseContext = ParseContext(self.nameMap, parseContext)
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = None, None, None
         idrefpattern = self.parseContext.refpatternValue
@@ -334,8 +335,19 @@ class Serializer(object):
             prop = "::" + prop
         return prop        
 
-    def serializeId(self, id):
+    def _serializeId(self, id):
         return _serializeAbbreviations(id, self.parseContext.idReplacements)
+
+    def serializeId(self, id):
+        id = self._serializeId(id)
+        if self.serializeIdAsRefs and self.inputRefPattern:
+            match = self.inputRefPattern.match(id)
+            if match:
+                return match.expand(self.refTemplate)
+        elif self.outputRefPattern and self.outputRefPattern.match(id):
+            #distinguish id that match ref patterns, e.g. @id
+            return '::' + id
+        return id
         
     def serializeRef(self, uri, context):
         match = False
@@ -344,7 +356,7 @@ class Serializer(object):
             #if it doesn't, create a explicit ref object
             if isinstance(uri, (str,unicode)) and self.inputRefPattern:
                 #apply the match to the serialized version of the id 
-                match = self.inputRefPattern.match(self.serializeId(uri))
+                match = self.inputRefPattern.match(self._serializeId(uri))
 
         if self.explicitRefObjects or not match or context is not None:
             assert isinstance(uri, (str, unicode))        
@@ -753,8 +765,15 @@ class ParseContext(object):
             raise RuntimeError("propery %r must a be a string" % name)
         return _parseAbbreviations(name, self.propReplacements)
 
-    def parseId(self, name):
+    def _parseId(self, name):        
         return _parseAbbreviations(name, self.idReplacements)
+
+    def parseId(self, name):
+        ident = self.lookslikeIdRef(name)
+        if ident:
+            return ident
+        else:
+            return self._parseId(name)
         
     def _setIdRefPattern(self, idrefpattern):
         if idrefpattern:
@@ -796,7 +815,7 @@ class ParseContext(object):
             #so use the ref template to generate the resource id
             res = m.expand(self.refTemplate)
             #the id might be an abbreviation to try to parse that
-            res = self.parseId(res)
+            res = self._parseId(res)
             return res
         return False
 
@@ -850,7 +869,7 @@ class Parser(object):
     
         nameMap = nameMap or {}
         if useDefaultRefPattern and 'refpattern' not in nameMap:
-            nameMap['refpattern'] = defaultParseRefPattern
+            nameMap['refpattern'] = defaultRefPattern
         self.defaultParseContext = ParseContext(nameMap)
         self.defaultParseContext.context = scope
     
@@ -1059,11 +1078,11 @@ class Parser(object):
             refName = parseContext.getName('$ref')
             context = item.get('context', parseContext.context)
             if refName in item:
-                ref = parseContext.parseId( item[refName] )
-                #if isBnode(ref): #XXX ensure bnode is serialized consistently
-                #   value = ref[bnode_len]
-                #   return self.bnodeprefix+value, OBJECT_TYPE_RESOURCE, context
-                return ref, OBJECT_TYPE_RESOURCE, context
+                #if refname is the same as the id name only 
+                #treat as reference if item has no other properties
+                if refName != parseContext.getName('id') or size == 1 + hasContext:
+                    ref = parseContext.parseId( item[refName] )
+                    return ref, OBJECT_TYPE_RESOURCE, context
             dataTypeName = parseContext.getName('datatype')
             if dataTypeName not in item or size < 2 or size > 2+hasContext:
                 #not an explicit value object, just return it
@@ -1090,7 +1109,6 @@ class Parser(object):
         else:
             value, valueType = getDataType(item, parseContext)
             return value, valueType, context
-
 
     def generateListResources(self, m, lists):
         '''
@@ -1125,7 +1143,12 @@ def tostatements(contents, **options):
 if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1:
-        f = open(sys.argv[1])
-        for s in tostatements(f.read()):
+        try:
+            f = open(sys.argv[1])
+            contents = f.read()
+        except:
+            contents = sys.argv[1]
+        print contents
+        for s in tostatements(contents):
             print s
 

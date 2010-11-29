@@ -675,12 +675,12 @@ class BasicStore(DataStore):
         return addStmts, removals
 
     def query(self, query=None, bindvars=None, explain=None, debug=False, 
-                forUpdate=False, captureErrors=False, contextShapes=None):
+        forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
         import vesper.query
         if not contextShapes:
             contextShapes = {dict:defaultattrdict}
         results = vesper.query.getResults(query, self.model, bindvars, explain,
-                              debug, forUpdate, captureErrors, contextShapes)
+                    debug, forUpdate, captureErrors, contextShapes, useSerializer)
         if not captureErrors and not explain and not debug:
             return results.results
         else:

@@ -34,6 +34,8 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
     includesharedrefs=False, intermediateJson=None, serializerOptions=None):
     global test_counter; test_counter += 1
     serializerOptions = serializerOptions or {}
+    if 'serializeIdAsRefs' not in serializerOptions:
+        serializerOptions['serializeIdAsRefs'] = False
     if isinstance(src, (str,unicode)):
         test_json = json.loads(src)
         if not test_json.get('pjson'):
@@ -91,9 +93,9 @@ def test():
     
     expected =[{'http://purl.org/dc/elements/1.1/description': 'A book about SPARQL',
             'http://purl.org/dc/elements/1.1/title': 'SPARQL - the book',
-            'id': 'http://example.org/book#1'},
+            'id': '@http://example.org/book#1'},
             {'http://purl.org/dc/elements/1.1/title': 'Advanced SPARQL',
-            'id': 'http://example.org/book#2'}]
+            'id': '@http://example.org/book#2'}]
     
     assert_stmts_and_back_match(stmts, expected)
         
@@ -102,11 +104,11 @@ def test():
     )
 
     expected = [{"http://purl.org/dc/elements/1.1/title": "Advanced SPARQL",
-    "id": "http://example.org/book#2",
+    "id": "@http://example.org/book#2",
     "test:sequelto": {
         "http://purl.org/dc/elements/1.1/description": "A book about SPARQL",
         "http://purl.org/dc/elements/1.1/title": "SPARQL - the book",
-        "id": "http://example.org/book#1"
+        "id": "@http://example.org/book#1"
         }
     }]
     assert_stmts_and_back_match(stmts, expected)
@@ -334,6 +336,22 @@ def test():
      Statement('1', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'foo', 'R', '')]
     assert_json_and_back_match(src, expectedstmts=stmts, serializerOptions= dict(nameMap=namemap))
 
+    #test id parsing
+    result_stmts = tostatements('{"id":"@::foo", "a":"b"}')
+    assert_stmts_match(result_stmts, [('foo', 'a', 'b', 'L', '')])
+
+    result_stmts = tostatements('{"id":"::@foo", "a":"b"}')
+    assert_stmts_match(result_stmts, [('@foo', 'a', 'b', 'L', '')])
+
+    result_stmts = tostatements('{"id":"@foo", "a":"b"}')
+    assert_stmts_match(result_stmts, [('foo', 'a', 'b', 'L', '')])
+    
+    src = [{
+     'id' : '::@1',
+     'self_ref' : { '$ref' : '::@1' }
+    }]
+    expectedStmts =  [Statement('@1', 'self_ref', '@1', 'R', '')]
+    assert_json_and_back_match(src, expectedstmts=expectedStmts)    
     #############################################
     ################ scope/context tests
     #############################################
@@ -502,8 +520,8 @@ def test():
     assert tojson(stmts, onlyEmbedBnodes=True) == {'pjson': '0.9',
     'namemap': {'refpattern': '@((::)?URIREF)'},
     'data':  [
-    {'subsumedby': '@tag:more%20tagging', 'type': '@tag', 'id': 'tag:another%20tag', 'label': 'another tag'},
-    {'type': '@tag', 'id': 'scrapple', 'label': 'scrapple'}, {'type': '@tag', 'id': 'tag:more%20tagging', 'label': 'more tagging'}] 
+    {'subsumedby': '@tag:more%20tagging', 'type': '@tag', 'id': '@tag:another%20tag', 'label': 'another tag'},
+    {'type': '@tag', 'id': '@scrapple', 'label': 'scrapple'}, {'type': '@tag', 'id': '@tag:more%20tagging', 'label': 'more tagging'}] 
     }
     
     #similar to the previous test but add two unlisted statements with a non-empty propseq list 
@@ -515,7 +533,7 @@ def test():
     stmts = tostatements(json)
     stmts.append( Statement('1', 'prop', 'foo', 'R', '')  )
     stmts.append( Statement('1', 'prop', 'bar', 'R', '')  )
-    assert tojson(stmts, asList=True) == [{'pjson': '0.9', 'namemap': {'refpattern': '@((::)?URIREF)'}}, {'id': '1', 'prop': [1, 2, 3, 4, '@bar', '@foo']}]
+    assert tojson(stmts, asList=True) == [{'pjson': '0.9', 'namemap': {'refpattern': '@((::)?URIREF)'}}, {'id': '@1', 'prop': [1, 2, 3, 4, '@bar', '@foo']}]
     
     src = [
      {

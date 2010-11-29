@@ -105,25 +105,25 @@ Let's start with query that retrieves all records from the store:
 
 t("{*}", [{'author': '@user:2',
   'contents': 'a comment',
-  'id': 'comment1',
+  'id': '@comment1',
   'parent': '@post1',
   'type': 'comment'},
  {'displayname': 'abbey aardvark',
   'email': ['abbey@aardvark.com', 'abbey_aardvark@gmail.com'],
-  'id': 'user:1',
+  'id': '@user:1',
   'type': 'user'},
- {'author': '@user:1', 'contents': 'a post', 'id': 'post1', 'type': 'post'},
+ { 'id': '@post1', 'author': '@user:1', 'contents': 'a post',  'type': 'post'},
  {'author': '@user:1',
   'contents': 'a reply',
-  'id': 'comment2',
+  'id': '@comment2',
   'parent': '@comment1',
   'type': 'comment'},
  {'author': '@user:1',
   'contents': 'different parent',
-  'id': 'comment3',
+  'id': '@comment3',
   'parent': '@comment4',
   'type': 'comment'},
- {'displayname': 'billy billygoat', 'id': 'user:2', 'type': 'user'}]
+ {'displayname': 'billy billygoat', 'id': '@user:2', 'type': 'user'}]
 )
 
 t % '''

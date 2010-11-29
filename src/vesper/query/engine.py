@@ -853,7 +853,7 @@ class SimpleQueryEngine(object):
                             outputId = idvalue.uri
                         else:
                             outputId = idvalue
-                        if context.serializer:
+                        if context.serializer:                            
                             outputId = context.serializer.serializeId(outputId)
                         if shape is op.dictShape:
                             pattern[prop.name] = outputId
@@ -933,6 +933,15 @@ class SimpleQueryEngine(object):
                                                 self, context), to=listCtor)
                                 if not name: #don't include property in result
                                     continue
+                                serizalizedName = _serializeValue(context, name, 
+                                    isinstance(prop.nameFunc, jqlAST.Project) 
+                                            and prop.nameFunc.name == SUBJECT)
+                                #ugly, but just punt on serializing name if 
+                                #result is not a string
+                                if isinstance(serizalizedName, (str,unicode)):
+                                    name = serizalizedName
+                                else:
+                                    name = str(name) #key must be string                                    
                             else:
                                 name = prop.name or prop.value.name
                             
@@ -1504,6 +1513,7 @@ class SimpleQueryEngine(object):
                     'only expecting one construct for %s, get %s' % (v, result))
                 #context.constructCache[v] = result
                 obj = result[0]
+                return obj
                 if not isinstance(obj, dict):
                     v = obj
                 else:
