@@ -124,12 +124,14 @@ class TransactionMemStore(TransactionModel, MemStore): pass
 class FileStore(MemStore):
     '''
     Reads the file into memory and write out 
-    '''
+    '''    
 
     def __init__(self, source='', defaultStatements=(), context='',
-           incrementHook=None, serializeOptions=None, parseOptions=None, **kw):
+           incrementHook=None, serializeOptions=None, parseOptions=None, 
+           checkForExternalChanges=True, **kw):
         self.initialContext = context
         self.defaultStatements = defaultStatements
+        self.checkForExternalChanges = checkForExternalChanges
         if kw.get('preserveOrder'):
             preserveOrder = []
             if parseOptions is None: parseOptions = {}
@@ -141,23 +143,37 @@ class FileStore(MemStore):
             else:
                 serializeOptions['pjson']['saveOrder'] = preserveOrder
         
-        ntpath, stmts, format = loadFileStore(source, defaultStatements,
+        ntpath, stmts, format, fsize, mtime = loadFileStore(source, defaultStatements,
                                         context, incrementHook, parseOptions)
         if self.canWriteFormat(format):
             self.path = source
             self.format = format
+            self.mtime = mtime
+            self.fileSize = fsize
         else:
             #source is in a format we can read by not write
             #so output ntriples if we need to write
             self.path = ntpath
             self.format = 'ntriples'
+            self.mtime = 0
+            self.fileSize = 0
         self.serializeOptions = serializeOptions
         MemStore.__init__(self, stmts)    
 
     def canWriteFormat(self, format):
         return canWriteFormat(format)
 
+    def wasModifiedSinceLastWrite(self):
+        try:
+           stat = os.stat(self.path)
+        except (OSError, IOError):
+           return False
+        return self.mtime < stat.st_mtime or self.fileSize != stat.st_size
+
     def commit(self, **kw):
+        if self.checkForExternalChanges and self.wasModifiedSinceLastWrite():
+            raise RuntimeError('error saving to "%s", file was '
+                        'modified by another process' % self.path)
         from vesper.data.transactions import TxnFileFactory
         try:
             #use TxnFileFactory so serializations errors don't corrupt file
@@ -166,7 +182,7 @@ class FileStore(MemStore):
             stmts = self.getStatements()
             serializeRDF_Stream(stmts, outputfile, self.format, 
                                             options=self.serializeOptions)
-            outputfile.close()
+            outputfile.close()            
         except:
             tff.abortTransaction(None)
             tff.finishTransaction(None, False)
@@ -174,11 +190,16 @@ class FileStore(MemStore):
         else:                        
             tff.commitTransaction(None)
             tff.finishTransaction(None, True)
+            self.mtime = os.stat(self.path).st_mtime
 
-    def rollback(self):
-        #reload file
+    def rollback(self):        
         #XXX only reloading if dirty would be nice
-        ntpath, stmts, format = loadFileStore(self.path, self.defaultStatements, self.initialContext)
+        self.reload()
+        
+    def reload(self):
+        '''reload from file'''
+        ntpath, stmts, format, self.fileSize, self.mtime = loadFileStore(self.path, 
+                        self.defaultStatements, self.initialContext)
         MemStore.__init__(self, stmts)
         
 class TransactionFileStore(TransactionModel, FileStore): pass
@@ -270,14 +291,20 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseO
     format = extmap.get(ext, 'unknown')        
 
     if os.path.exists(path):
+        stat = os.stat(path)
+        mtime = stat.st_mtime
+        fsize = stat.st_size
         from vesper.utils import Uri
         uri = Uri.OsPathToUri(path)
         options = parseOptions or {}
         if incrementHook:
             options['incrementHook']=incrementHook
+        
         stmts, format = parseRDFFromURI(uri, type=format, scope=context,
                                 options=options, getType=True)
     else:
+        mtime = 0
+        fsize = 0
         stmts = defaultStatements
         
     #some stores only support writing to a NTriples file 
@@ -285,5 +312,5 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseO
         base, ext = os.path.splitext(path)
         path = base + '.nt'
     
-    return path, stmts,format
+    return path, stmts,format, fsize, mtime
 

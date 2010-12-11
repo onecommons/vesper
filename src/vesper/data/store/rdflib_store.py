@@ -107,7 +107,7 @@ class RDFLibStore(Model):
 
 class RDFLibFileModel(RDFLibStore):
     def __init__(self,source='', defaultStatements=(), context='', **kw):    
-        ntpath, stmts, format = loadFileStore(source, defaultStatements,context)
+        ntpath, stmts, format, fsize, mtime = loadFileStore(source, defaultStatements,context)
         
         #try to save in source format 
         if format == 'ntriples':
