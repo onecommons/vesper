@@ -791,12 +791,34 @@ False
 True
 >>> defaultproxyattrdict(dict(foo=1)) != defaultproxyattrdict(dict(bar=1))
 True
+>>> defaultproxyattrdict(dict(foo=1)) == dict(foo=1)
+True
+>>> defaultproxyattrdict(dict(foo=1)) == dict(bar=1)
+False
+>>> defaultproxyattrdict(dict(foo=1)) < dict(foo=1)
+False
+>>> defaultproxyattrdict(dict(foo=1)) > dict(foo=1)
+False
+>>> dict(defaultproxyattrdict({'foo':1}))
+{'foo': 1}
+>>> __dt = {}; __dt.update(defaultproxyattrdict({'foo':1})); __dt
+{'foo': 1}
     '''
 
     def __init__(self, d):
         dict.__setattr__(self, '_dict', d)
 
     def __getattribute__(self, name):
+        if name == 'keys':
+            #terrible hack to workaround a bug where CPython's dict.__init__()
+            #and dict.update() can't find defaultproxyattrdict data because they
+            #directly access the base classes data structure (see dict_update_common()
+            #in dictobject.c). To work-around this take advantage of the fact that 
+            #the C implementation checks that this object has a 'keys' attribute first. 
+            #So update our object with the latest state of _dict when 'keys' is looked up.
+            dict.__getattribute__(self, 'clear')()
+            dict.__getattribute__(self, 'update')(self._dict)
+        
         if name == '_dict' or name in defaultproxyattrdict.__dict__:
             return dict.__getattribute__(self, name)
         
@@ -805,7 +827,7 @@ True
             return getattr(_dict, name)
         except AttributeError:
             return _defaultproxyattrdict_getitem(_dict, name)
-
+        
     def __len__(self):
         return len(self._dict)
 
@@ -824,6 +846,12 @@ True
             return self._dict != other
         else:
             return True
+
+    def __cmp__(self, other):
+        if isinstance(other, defaultproxyattrdict):
+            return cmp(self._dict, other._dict)
+        else:
+            return cmp(self._dict,other)
 
     def __repr__(self):
         return repr(self._dict)
