@@ -100,7 +100,7 @@ class BasicStore(DataStore):
                  transaction_log = '',
                  save_history = False,
                  version_storage_path='',
-                 version_model_factor=None,
+                 version_model_factory=None,
                  storage_template_options=None,
                  model_options=None,
                  changeset_hook=None,
@@ -115,7 +115,7 @@ class BasicStore(DataStore):
         '''
         self.requestProcessor = requestProcessor
         self.model_factory = model_factory
-        self.version_model_factor = version_model_factor
+        self.version_model_factory = version_model_factory
         self.schemaFactory = schemaFactory 
         self.application_model = application_model        
         self.storage_path = storage_path        
@@ -213,19 +213,19 @@ class BasicStore(DataStore):
                         options=self.storage_template_options) 
         
         if self.save_history == 'split':                                                
-            version_model_factor = self.version_model_factor
+            version_model_factory = self.version_model_factory
             versionModelOptions = {}
-            if not version_model_factor:
-                if self.version_storage_path and self.model_factory:
+            if not version_model_factory:
+                if self.version_storage_path and self.model_factory:                    
                     #if a both a version path and the model_factory was set, use the model factory
-                    version_model_factor = self.model_factory
+                    version_model_factory = self.model_factory
                     versionModelOptions = self.model_options
                 elif self.storage_path or self.version_storage_path: #use the default
-                    version_model_factor = IncrementalNTriplesFileStoreBase
+                    version_model_factory = IncrementalNTriplesFileStoreBase
                 else:
-                    version_model_factor = MemStore
-
-            if not self.version_storage_path and issubclass(version_model_factor, FileStore):
+                    version_model_factory = MemStore
+            
+            if not self.version_storage_path and issubclass(version_model_factory, FileStore):
                 #generate path based on primary path
                 assert self.storage_path
                 import os.path
@@ -234,11 +234,11 @@ class BasicStore(DataStore):
                 versionStoreSource = self.version_storage_path
             
             if versionStoreSource:
-                normalizeSource = getattr(self.version_model_factor, 
+                normalizeSource = getattr(self.version_model_factory, 
                         'normalizeSource', DataStore._normalizeSource)
                 versionStoreSource = normalizeSource(self, requestProcessor,
                                                      versionStoreSource)
-            revisionModel = version_model_factor(source=versionStoreSource,
+            revisionModel = version_model_factory(source=versionStoreSource,
                                         defaultStatements=[], **versionModelOptions)
         else:
             #either no history or no separate model
