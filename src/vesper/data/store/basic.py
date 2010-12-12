@@ -132,32 +132,44 @@ class FileStore(MemStore):
         self.initialContext = context
         self.defaultStatements = defaultStatements
         self.checkForExternalChanges = checkForExternalChanges
+        serializeOptions = serializeOptions or {}
+        if 'pjson' not in serializeOptions:
+            pjsonOptions = {}
+            serializeOptions['pjson'] = pjsonOptions
+        else:
+            pjsonOptions = serializeOptions['pjson']
+
         if kw.get('preserveOrder'):
             preserveOrder = []
-            if parseOptions is None: parseOptions = {}
+            if parseOptions is None:
+                parseOptions = {}
             parseOptions['saveOrder'] = preserveOrder
-            if serializeOptions is None: 
-                serializeOptions = dict(pjson=dict(saveOrder=preserveOrder))
-            elif 'pjson' not in serializeOptions:
-                serializeOptions['pjson'] = dict(saveOrder=preserveOrder)
-            else:
-                serializeOptions['pjson']['saveOrder'] = preserveOrder
-        
-        ntpath, stmts, format, fsize, mtime = loadFileStore(source, defaultStatements,
-                                        context, incrementHook, parseOptions)
+            pjsonOptions['saveOrder'] = preserveOrder
+        self.serializeOptions = serializeOptions
+                
+        stmts, format, fsize, mtime = loadFileStore(source, context, 
+                                        incrementHook, parseOptions)
+        if stmts is None:
+            stmts = defaultStatements
         if self.canWriteFormat(format):
             self.path = source
             self.format = format
             self.mtime = mtime
             self.fileSize = fsize
         else:
-            #source is in a format we can read by not write
-            #so output ntriples if we need to write
-            self.path = ntpath
+            path = source
+            if path:
+                #source is in a format we can read by not write
+                #so output ntriples if we need to write
+                #some stores only support writing to a NTriples file 
+                if not path.endswith('.nt'):
+                    base, ext = os.path.splitext(path)
+                    path = base + '.nt'                
+            self.path = path
             self.format = 'ntriples'
             self.mtime = 0
             self.fileSize = 0
-        self.serializeOptions = serializeOptions
+        
         MemStore.__init__(self, stmts)    
 
     def canWriteFormat(self, format):
@@ -171,6 +183,8 @@ class FileStore(MemStore):
         return self.mtime < stat.st_mtime or self.fileSize != stat.st_size
 
     def commit(self, **kw):
+        if not self.path: #nowhere to save to
+            return
         if self.checkForExternalChanges and self.wasModifiedSinceLastWrite():
             raise RuntimeError('error saving to "%s", file was '
                         'modified by another process' % self.path)
@@ -198,8 +212,12 @@ class FileStore(MemStore):
         
     def reload(self):
         '''reload from file'''
-        ntpath, stmts, format, self.fileSize, self.mtime = loadFileStore(self.path, 
-                        self.defaultStatements, self.initialContext)
+        if self.path:
+            stmts, format, self.fileSize, self.mtime = loadFileStore(self.path, self.initialContext)
+            if stmts is None:
+                stmts = self.defaultStatements
+        else:
+            stmts = self.defaultStatements
         MemStore.__init__(self, stmts)
         
 class TransactionFileStore(TransactionModel, FileStore): pass
@@ -274,7 +292,7 @@ class IncrementalNTriplesFileStore(TransactionModel, IncrementalNTriplesFileStor
     def _getChangeList(self):
         return self.queue
 
-def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseOptions=None):
+def loadFileStore(path, context='', incrementHook=None, parseOptions=None):
     '''
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
@@ -288,7 +306,7 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseO
     }
     #try to guess from extension
     base, ext = os.path.splitext(path)
-    format = extmap.get(ext, 'unknown')        
+    format = extmap.get(ext, 'unknown')
 
     if os.path.exists(path):
         stat = os.stat(path)
@@ -305,12 +323,7 @@ def loadFileStore(path, defaultStatements,context='', incrementHook=None, parseO
     else:
         mtime = 0
         fsize = 0
-        stmts = defaultStatements
-        
-    #some stores only support writing to a NTriples file 
-    if not path.endswith('.nt'):
-        base, ext = os.path.splitext(path)
-        path = base + '.nt'
+        stmts = None
     
-    return path, stmts,format, fsize, mtime
+    return stmts, format, fsize, mtime
 

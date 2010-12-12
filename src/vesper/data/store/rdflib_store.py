@@ -1,5 +1,6 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
+import os.path
 import rdflib
 from rdflib.Literal import Literal
 from rdflib.BNode import BNode
@@ -107,7 +108,9 @@ class RDFLibStore(Model):
 
 class RDFLibFileModel(RDFLibStore):
     def __init__(self,source='', defaultStatements=(), context='', **kw):    
-        ntpath, stmts, format, fsize, mtime = loadFileStore(source, defaultStatements,context)
+        stmts, format, fsize, mtime = loadFileStore(source, context)
+        if stmts is None:
+            stmts = defaultStatements
         
         #try to save in source format 
         if format == 'ntriples':
@@ -119,13 +122,14 @@ class RDFLibFileModel(RDFLibStore):
         else:
             #unsupported format, save as ntriples (to new file)
             self.format = 'nt'
-            self.path = ntpath
+            base, ext = os.path.splitext(path)
+            self.path = base + '.nt'
 
         import rdflib        
         RDFLibStore.__init__(self, rdflib.ConjunctiveGraph())
         self.addStatements( stmts )             
 
     def commit(self):
-        self.model.save(self.path, self.format)
+        self.graph.serialize(self.path, self.format)
 
 class TransactionalRDFLibFileModel(TransactionModel, RDFLibFileModel): pass
