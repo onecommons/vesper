@@ -2,7 +2,7 @@
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import sys, unittest, docTest
 
-__all__ = ['glockTest', 'raccoonTest', 'MRUCacheTest', 
+__all__ = ['glockTest', 'appTest', 'MRUCacheTest', 
  'transactionsTest', 'utilsTest', 'RDFDomTest', 'htmlfilterTest',
   'pjsonTest', 'jqlTest', 'jsonqlDocTest', 'jsonqlTutorialTest', 'modelTest', 'FileModelTest']
 
