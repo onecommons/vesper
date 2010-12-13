@@ -36,7 +36,7 @@ if sys.version_info[:2] < (2,5):
     import atexit
     sys.exitfunc = lambda: 0
 
-class RaccoonTestCase(unittest.TestCase):
+class AppTestCase(unittest.TestCase):
     
     def setUp(self):        
         class TestLogHandler(logging.Handler):
@@ -133,10 +133,10 @@ class RaccoonTestCase(unittest.TestCase):
         
     def testUpdatesApp(self):
         # root = app.RequestProcessor(a='testUpdatesApp.py',model_uri = 'test:')
-        app = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:'
-        )
-        app.load()
-        root = app._server                
+        app = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:')        
+        app.load()        
+        root = app._server
+        #print 'model', root.dataStore.model.managedModel.model
         #set timestamp to 0 so tests are reproducible:
         root.dataStore.model.createTxnTimestamp = lambda *args: 0
         expectedChangeSet = makeChangeset('0A', '0A00001')
@@ -158,7 +158,7 @@ class RaccoonTestCase(unittest.TestCase):
         
         #the "foo" request handler defined in testUpdatesApp.py adds content to the store:
         result = root.runActions('http-request', dict(_name='foo'))
-        response = "<html><body>page content.</body></html>"        
+        response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)        
         self.assertEquals(root.dataStore.model.currentVersion, '0A00001')
         
@@ -609,7 +609,7 @@ class RaccoonTestCase(unittest.TestCase):
         import os
         import warnings
         warnings.simplefilter("ignore", RuntimeWarning) #suppress tempnam is insecure warning
-        tmppath = os.tempnam(None, 'raccoontest')+'.json'
+        tmppath = os.tempnam(None, 'vespertest')+'.json'
         try:
             add = {"id":"1",
                     "tags":[
@@ -682,7 +682,7 @@ if __name__ == '__main__':
     except (IndexError, ValueError):
         unittest.main()
     else:
-        tc = RaccoonTestCase(test)
+        tc = AppTestCase(test)
         tc.setUp()
         getattr(tc, test)() #run test
         tc.tearDown()

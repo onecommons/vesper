@@ -32,7 +32,7 @@ log = logging.getLogger("app")
 _defexception = utils.DynaExceptionFactory(__name__)
 
 _defexception('CmdArgError')
-_defexception('RaccoonError')
+_defexception('VesperError')
 _defexception('unusable namespace error')
 _defexception('not authorized')
 
@@ -52,7 +52,7 @@ class ActionWrapperException(utils.NestedException):
 class Requestor(object):
     '''
     Requestor is a helper class that allows python code to invoke a
-    Raccoon request as if it was function call
+    vesper request as if it was function call
 
     Usage:
     response = __requestor__.requestname(**kw)
@@ -191,16 +191,16 @@ def assignAttrs(obj, configDict, varlist, default):
             defaultValue = default
         value = configDict.get(name, defaultValue)
         if default is not None and not isinstance(value, type(default)):
-            raise RaccoonError('config variable %s (of type %s)'
+            raise VesperError('config variable %s (of type %s)'
                                'must be compatible with type %s'
                                % (name, type(value), type(default)))
         setattr(obj, name, value)
 
 ############################################################
-##Raccoon main class
+## main class
 ############################################################
 class RequestProcessor(TransactionProcessor):
-    DEFAULT_CONFIG_PATH = ''#'raccoon-default-config.py'
+    DEFAULT_CONFIG_PATH = ''
 
     requestsRecord = None
 
@@ -528,7 +528,7 @@ class AppConfig(utils.attrdict):
 
         if self.get('record_requests'):
             root.requestsRecord = []
-            root.requestRecordPath = 'debug-wiki.pkl'
+            root.requestRecordPath = 'debug-vesper-requests.pkl'
 
         if not self.get('exec_cmd_and_exit', not startserver):
             port = self.get('port', 8000)
@@ -663,9 +663,11 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
                 path = [path]
             path = list(path) + _current_config.get(configvar,[])
             path = [_normpath(basedir, x) for x in path]
-            _current_config[configvar] = path            
-            assert all([os.path.isdir(x) for x in path]
-                        ), "invalid directory in:" + str(path)
+            _current_config[configvar] = path
+            for p in path:
+                if not os.path.isdir(p):
+                    raise VesperError('bad config variable "%s": '
+                    '%s is not a valid directory' % (configvar, p))
 
         addToPath(static_path, 'static_path')
         addToPath(template_path, 'template_path')
