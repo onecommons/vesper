@@ -139,6 +139,8 @@ class FileStore(MemStore):
         else:
             pjsonOptions = serializeOptions['pjson']
 
+        if 'omitEmbeddedIds' not in pjsonOptions:
+            pjsonOptions['omitEmbeddedIds'] = True
         if kw.get('preserveOrder'):
             preserveOrder = []
             if parseOptions is None:

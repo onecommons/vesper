@@ -19,7 +19,7 @@ def random_name(length):
     return ''.join(random.sample(string.ascii_letters, length))
 
 class BasicModelTestCase(unittest.TestCase):
-    "Tests basic features of the tyrant model class"    
+    "Tests basic features of a store"
     persistentStore = True
 
     def _getModel(self, model):

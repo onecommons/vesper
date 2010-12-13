@@ -28,12 +28,12 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
         return model #self._getModel(model)
 
     def setUp(self):
-        self.tmpdir = tempfile.mkdtemp(prefix="rhizometest."+self.EXT)
+        self.tmpdir = tempfile.mkdtemp(prefix="vespertest."+self.EXT)
         self.tmpfilename = os.path.join(self.tmpdir, 'test.'+self.EXT) 
         
     def tearDown(self):
         #print 'tear down removing', self.tmpdir
-        pass#shutil.rmtree(self.tmpdir)
+        shutil.rmtree(self.tmpdir)
 
     def testCommitFailure(self):
         "test commit transaction isolation across 2 models"
@@ -112,6 +112,42 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
         
 class MultipartJsonFileModelTestCase(FileModelTestCase):
     EXT = 'mjson' 
+
+class SerializationOptions(unittest.TestCase):
+    
+    def testEmbeddedBnodeSerialization(self):
+        tmpdir = tempfile.mkdtemp(prefix="vespertest")
+        try:
+            tmpfilename = os.path.join(tmpdir, 'test.json') 
+            pjsonfile = open(tmpfilename,'w')
+            pjsonfile.write('''
+            [{
+            "id" : "foo",
+            "prop" : { "id" : "bnode:j:e:object:foo:x07c332751f8043a49c5b091768e97c375", 
+                        "label" : "test1" 
+                     }
+            },
+            {
+              "id": "bnode:j:t:object:x07c332751f8043a49c5b091768e97c371", 
+              "tags": [
+                {             
+                  "id": "bnode:j:e:object:bnode:j:t:object:x07c332751f8043a49c5b091768e97c371:x07c332751f8043a49c5b091768e97c372", 
+                  "label": "test2"
+                }
+              ]
+            }]
+            ''')
+            pjsonfile.close()
+            model = FileStore(tmpfilename)
+            model.addStatement(Statement('foo', 'prop2', ''))
+            model.commit()
+            contents = open(tmpfilename).read()
+            expected = ('{"pjson": "0.9", "data": [{"id": "@bnode:j:t:object:x07c332751f8043a49c5b091768e97c371", '
+            '"tags": [{"label": "test2"}]}, {"id": "@foo", "prop2": "", "prop": {"label": "test1"}}],'
+            ' "namemap": {"refpattern": "@((::)?URIREF)"}}')
+            self.assertEqual(expected, contents)
+        finally:
+            shutil.rmtree(tmpdir)
 
 try:
     import rdflib

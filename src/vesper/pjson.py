@@ -222,6 +222,9 @@ def findPropList(model, subject, predicate, objectValue=None, objectType=None, s
     #print 'findprop', listid, list(rows)
     return rows
 
+def _isEmbeddedBnode(uri):
+    return re.match(r'(bnode|_)\:j\:e\:.+', uri)
+
 def loads(data):
     '''
     :param data: A string. 
@@ -243,7 +246,7 @@ class Serializer(object):
     def __init__(self, nameMap = None, preserveTypeInfo=False, 
             includeObjectMap=False, explicitRefObjects=False, asList=False,
             onlyEmbedBnodes=False, parseContext=None, saveOrder=None,
-            serializeIdAsRefs=True):
+            serializeIdAsRefs=True, omitEmbeddedIds=False):
         '''
         { "pjson" : "0.9", "namemap" : {"refs":"@(URIREF)"}, "data": [...] }
         or if `asList == True`: 
@@ -260,9 +263,10 @@ class Serializer(object):
         self.preserveRdfTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
         self.asList = asList
-        self.onlyEmbedBnodes = onlyEmbedBnodes
+        self.onlyEmbedBnodes = onlyEmbedBnodes #objects without embedded ids are always top level
         self.saveOrder = saveOrder
         self.serializeIdAsRefs = serializeIdAsRefs
+        self.omitEmbeddedIds = omitEmbeddedIds
         
         self.nameMap = nameMap and nameMap.copy() or {}        
         if explicitRefObjects:
@@ -423,7 +427,7 @@ class Serializer(object):
                 if objs:
                     return objs[0]                    
         return id
-
+        
     def to_pjson(self, stmts=None, model=None, scope=''):
         #1. build a list of subjectnodes
         #2. map them to object or lists, building id => [ objrefs ] dict
@@ -465,9 +469,14 @@ class Serializer(object):
             childNodes = root.getProperties(res)
             if not childNodes:
                 #no properties, don't include
-                continue            
-            idValue = self.serializeId(res)
-            currentobj = { idName : idValue }
+                continue
+                                   
+            if self.omitEmbeddedIds and _isEmbeddedBnode(res):
+                currentobj = {}
+            else:
+                idValue = self.serializeId(res)
+                currentobj = { idName : idValue }
+            
             currentlist = []
             #print 'adding to results', res.uri
             results[res] = currentobj
@@ -1061,7 +1070,7 @@ class Parser(object):
     def isEmbeddedBnode(self, id):
         if not isinstance(id, (str,unicode)):
             return False
-        if id.startswith(self.bnodeprefix + 'j:e') or id.startswith(self.bnodeprefix + 'j:proplist:'):
+        if id.startswith(self.bnodeprefix + 'j:e:') or id.startswith(self.bnodeprefix + 'j:proplist:'):
             return True
         return False
 
