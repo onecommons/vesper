@@ -25,7 +25,7 @@ def statement2rdflib(statement):
 def rdflib2Statements(rdflibStatements):
     '''RDFLib triple to Statement'''
     for (subject, predicate, object, context) in rdflibStatements:
-        if isinstance(object, Literal):                
+        if isinstance(object, Literal):
             objectType = object.language or object.datatype or OBJECT_TYPE_LITERAL
         else:
             objectType = OBJECT_TYPE_RESOURCE            
@@ -38,13 +38,19 @@ def URI2node(uri):
     if uri.startswith(BNODE_BASE):
         return BNode('_:'+uri[BNODE_BASE_LEN:])
     else:
+        if ':' not in uri:
+            uri = 'name:'+ uri
         return URIRef(uri)
 
 def node2String(node):
     if isinstance(node, BNode):
         return BNODE_BASE + unicode(node)
     else:
-        return unicode(node)
+        val = unicode(node)
+        if not isinstance(node, Literal) and val.startswith('name:'):
+            return val[5:]
+        else:
+            return val
 
 def object2node(object, objectType):
     if isinstance(object, ResourceUri):
@@ -86,12 +92,20 @@ class RDFLibStore(Model):
             predicate = URI2node(predicate)
         if object is not None:
             object = object2node(object, objecttype)
+        if context is not None:
+            context = URI2node(context)
 
         def _getRdfLibStatements(s, p, o, context):
             for (s, p, o), cg in self.graph.store.triples((s, p, o), context=context):
-                for ctx in cg:
-                    yield s, p, o, ctx
-            
+                if context is not None:
+                    #triple() returns all the contexts the statement appears 
+                    #even when selecting triples that only appear in the given 
+                    #context, but we just want the statements in that context
+                    yield s, p, o, context
+                else:
+                    for ctx in cg:
+                        yield s, p, o, ctx
+                    
         statements = list( rdflib2Statements( _getRdfLibStatements(subject, predicate, object, context) ) )
         statements.sort()
         return removeDupStatementsFromSortedList(statements, asQuad, **(hints or {}))

@@ -113,6 +113,32 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
 class MultipartJsonFileModelTestCase(FileModelTestCase):
     EXT = 'mjson' 
 
+try:
+    import rdflib
+    from vesper.data.store.rdflib_store import RDFLibFileModel, TransactionalRDFLibFileModel
+
+    class RDFFileModelTestCase(FileModelTestCase):
+        EXT = 'rdf' 
+
+        def getModel(self):
+            #print 'opening', self.tmpfilename
+            #sys.stdout.flush()
+            model = RDFLibFileModel(self.tmpfilename)
+            return model 
+
+        def getTransactionModel(self):
+            model = TransactionalRDFLibFileModel(self.tmpfilename)
+            return model 
+
+        def testExternalChange(self):
+            pass #XXX store should support this functionality
+
+        def testCommitFailure(self):
+            pass #XXX enable this test (need a different way to force commit to fail)
+
+except ImportError:
+    print 'skipping rdflib store tests, rdflib not installed'
+    
 class TransactionFileModelTestCase(FileModelTestCase):
 
     def getTransactionModel(self):

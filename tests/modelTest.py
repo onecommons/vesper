@@ -91,27 +91,34 @@ class BasicModelTestCase(unittest.TestCase):
             'objecttype', 'en',
             'context', 'c']
         pairs = zip(*[iter(conditions)]*2)
+        pairs = [ (('subject', 's'),), 
+            (('predicate', 'p'),), 
+            #look up object and objectype together:
+            (('object', 'o'), ('objecttype', 'en')),
+            (('context', 'c'),)]
         
         #each additional condition eliminates one of the matches
-        beginMatches = 5
+        beginMatches = 5+1
         while pairs:
             matches = beginMatches
             kw = {}
-            for k, v in pairs:
+            for p in pairs:
                 #first match each condition individually
-                r1 = model.getStatements(**{k : v})
-                self.assertEqual(len(r1), matches)             
-                self.assertEqual(set(r1), set(stmts[:matches]))            
-                
-                kw[k] = v
+                matches -= len(p)
+                q = dict(p)
+                r1 = model.getStatements(**q) #{k : v})                
+                self.assertEqual(len(r1), matches, 'getstatements(**%s) found %s but expected length %d' % (q,r1,matches))
+                self.assertEqual(set(r1), set(stmts[:matches]))
+                #add to group
+                kw.update(q) #kw[k] = v
                 r2 = model.getStatements(**kw)
                 self.assertEqual(len(r2), matches)             
                 self.assertEqual(set(r2), set(stmts[:matches]))
-                matches -= 1
+                
             
             #repeat tests but start matching at next position
-            pairs.pop(0)
-            beginMatches -= 1
+            popped = pairs.pop(0)
+            beginMatches -= len(popped)
         
         more =  [
         Statement('s', 'p1', 'o2', 'en-1', 'c1'),
@@ -132,7 +139,7 @@ class BasicModelTestCase(unittest.TestCase):
         r = model.getStatements(predicate='p1', object='o')
         self.assertEqual(r, [])
         
-        r = model.getStatements(predicate='p1', object='o2')
+        r = model.getStatements(predicate='p1', object='o2', objecttype='en-1')
         self.assertEqual(set(r), set( (more[0], more[-1]) ) )
 
     def testRemove(self):
