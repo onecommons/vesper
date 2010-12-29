@@ -293,17 +293,17 @@ class BasicStore(DataStore):
             return self.graphManager.getTxnContext() #return a contextUri
         return None
     
-    def join(self, txnService, setCurrentTxn=True):
+    def join(self, txnService, readOnly=False, setCurrentTxn=True):
         if not txnService.isActive():
             return False
         if setCurrentTxn and hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
             txnService.state.kw['__current-transaction'] = txnCtxtResult
         
-        super(BasicStore,self).join(txnService)
+        super(BasicStore,self).join(txnService, readOnly)
         
         for participant in self._txnparticipants:
-            participant.join(txnService)
+            participant.join(txnService, readOnly)
         return True
 
     def _addModelTxnParticipants(self, model, historyModel=None):
@@ -677,6 +677,12 @@ class BasicStore(DataStore):
     def query(self, query=None, bindvars=None, explain=None, debug=False, 
         forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
         import vesper.query
+        if not self.join(self.requestProcessor.txnSvc, readOnly=True):
+            #not in a transaction, so call this inside one
+            func = lambda: self.query(query, bindvars, explain,
+                        debug, forUpdate, captureErrors, contextShapes, useSerializer)
+            return self.requestProcessor.executeTransaction(func)
+        
         if not contextShapes:
             contextShapes = {dict:defaultattrdict}
         results = vesper.query.getResults(query, self.model, bindvars, explain,
@@ -687,7 +693,7 @@ class BasicStore(DataStore):
             return results
 
     def merge(self,changeset): 
-        if not self.join(self.requestProcessor.txnSvc, False):
+        if not self.join(self.requestProcessor.txnSvc, setCurrentTxn=False):
             #not in a transaction, so call this inside one
             func = lambda: self.merge(changeset)
             return self.requestProcessor.executeTransaction(func) 

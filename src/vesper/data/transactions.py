@@ -67,8 +67,6 @@ class BasicTxnErrorHandler(object):
 class TransactionState(object):
     """Helper object representing a single transaction's state"""
 
-    #participants = binding.Make(list)
-    #info         = binding.Make(dict)    
     timestamp    = None
     safeToJoin   = True
     cantCommit   = False
@@ -79,6 +77,9 @@ class TransactionState(object):
     def __init__(self):
        self.participants = []
        self.info = {}
+
+    def addInfo(self, info):
+        self.info.update(info)
 
 class TransactionService(object):
     """Basic transaction service component"""
@@ -91,7 +92,7 @@ class TransactionService(object):
         self.state = self.stateFactory()
         self.log = logging.getLogger(loggerName)
 
-    def join(self, participant):
+    def join(self, participant, readOnly=False):
         if not self.isActive():
             raise OutsideTransaction
         elif self.state.cantCommit:
@@ -222,7 +223,7 @@ class TransactionService(object):
         if self.state.cantCommit:
             raise BrokenTransaction
         elif self.state.safeToJoin:
-            self.state.info.update(info)
+            self.state.addInfo(info)
         else:
             raise TransactionInProgress
 
@@ -251,8 +252,8 @@ class TransactionParticipant(object):
         '''return True if this transaction participant was modified'''    
         return True #default to True if we don't know one way or the other
 
-    def join(self, txnService):
-        return txnService.join(self)
+    def join(self, txnService, readOnly=False):
+        return txnService.join(self, readOnly)
     
     def readyToVote(self, txnService):
         return True
@@ -278,6 +279,12 @@ class RaccoonTransactionState(TransactionState):
         self.kw = {}
         self.retVal = None
         self.lock = None
+        self.readOnly = True
+
+    def addInfo(self, info):
+        self.kw = info.pop('kw', self.kw)        
+        self.retVal = info.pop('retVal', self.retVal)
+        self.info.update(info)
 
 class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals):
     stateFactory = RaccoonTransactionState
@@ -351,10 +358,13 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
                     globalVars=morekw.keys(),
                     errorSequence=errorSequence)
 
-    def join(self, participant):
-        super(RaccoonTransactionService, self).join(participant)
-        if not self.state.lock: #lock on first join
-            self.state.lock = self.server.getLock()
+    def join(self, participant, readOnly=False):
+        super(RaccoonTransactionService, self).join(participant, readOnly)
+        if not readOnly:
+            if not self.state.lock: 
+                #lock on first participant joining that will write
+                self.state.lock = self.server.getLock()
+            self.state.readOnly = False
    
     def _cleanup(self, committed):        
         if committed:

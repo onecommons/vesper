@@ -74,12 +74,13 @@ class RDFLibStore(Model):
         if not graph.context_aware:
             raise RuntimeError("RDFLib Graph must be context aware") 
         self.graph = graph
+        self.txnState = TxnState.BEGIN
 
     def commit(self):
-        pass
+        self.txnState = TxnState.BEGIN
 
     def rollback(self):
-        pass
+        self.txnState = TxnState.BEGIN
                 
     def getStatements(self, subject = None, predicate = None, object=None,
                       objecttype=None, context=None, asQuad=True, hints=None):
@@ -114,11 +115,13 @@ class RDFLibStore(Model):
         '''add the specified statement to the model'''
         s, p, o, c = statement2rdflib(statement)
         self.graph.store.add((s, p, o), context=c, quoted=False)
+        self.txnState = TxnState.DIRTY
 
     def removeStatement(self, statement ):
         '''removes the statement'''
         s, p, o, c = statement2rdflib(statement)
         self.graph.store.remove((s, p, o), context=c)
+        self.txnState = TxnState.DIRTY
 
 class RDFLibFileModel(RDFLibStore):
     def __init__(self,source='', defaultStatements=(), context='', **kw):    
@@ -144,6 +147,8 @@ class RDFLibFileModel(RDFLibStore):
         self.addStatements( stmts )             
 
     def commit(self):
-        self.graph.serialize(self.path, self.format)
+        if self.txnState == TxnState.DIRTY:
+            self.graph.serialize(self.path, self.format)
+        self.txnState = TxnState.BEGIN
 
 class TransactionalRDFLibFileModel(TransactionModel, RDFLibFileModel): pass

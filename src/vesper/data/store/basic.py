@@ -13,8 +13,9 @@ class MemStore(Model):
         self.by_p = {}
         self.by_o = {}
         self.by_c = {}
-        if defaultStatements:            
-            self.addStatements(defaultStatements)
+        if defaultStatements:
+            for stmt in defaultStatements:
+                MemStore.addStatement(self, stmt)
 
     def size(self):
         return len(self.by_s)
@@ -120,7 +121,7 @@ class MemStore(Model):
         return True
 
 class TransactionMemStore(TransactionModel, MemStore): pass
-
+    
 class FileStore(MemStore):
     '''
     Reads the file into memory and write out 
@@ -172,21 +173,46 @@ class FileStore(MemStore):
             self.mtime = 0
             self.fileSize = 0
         
+        self.txnState = TxnState.BEGIN
         MemStore.__init__(self, stmts)    
 
     def canWriteFormat(self, format):
         return canWriteFormat(format)
 
+    def _checkTxnState(self):
+        if self.txnState == TxnState.BEGIN:
+            if self.checkForExternalChanges and self.wasModifiedSinceLastWrite():
+                self.reload()
+            self.txnState = TxnState.READ
+
+    def getStatements(self, subject = None, predicate = None, object = None,
+                      objecttype=None,context=None, asQuad=True, hints=None):
+        self._checkTxnState()
+        return super(FileStore, self).getStatements(subject, predicate, object, 
+                                        objecttype,context, asQuad, hints)
+
+    def addStatement(self, stmt):
+        self._checkTxnState()
+        self.txnState = TxnState.DIRTY
+        return super(FileStore, self).addStatement(stmt)
+
+    def removeStatement(self, stmt):
+        self._checkTxnState()
+        self.txnState = TxnState.DIRTY
+        return super(FileStore, self).removeStatement(stmt)
+        
     def wasModifiedSinceLastWrite(self):
         try:
-           stat = os.stat(self.path)
+            stat = os.stat(self.path)
         except (OSError, IOError):
-           return False
+            return False
         return self.mtime < stat.st_mtime or self.fileSize != stat.st_size
 
     def commit(self, **kw):
-        if not self.path: #nowhere to save to
+        if self.txnState != TxnState.DIRTY or not self.path: 
+            self.txnState = TxnState.BEGIN
             return
+
         if self.checkForExternalChanges and self.wasModifiedSinceLastWrite():
             raise RuntimeError('error saving to "%s", file was '
                         'modified by another process' % self.path)
@@ -206,16 +232,21 @@ class FileStore(MemStore):
         else:                        
             tff.commitTransaction(None)
             tff.finishTransaction(None, True)
-            self.mtime = os.stat(self.path).st_mtime
+            self.txnState = TxnState.BEGIN
+            stat = os.stat(self.path)
+            self.mtime = stat.st_mtime
+            self.fileSize = stat.st_size
 
     def rollback(self):        
-        #XXX only reloading if dirty would be nice
-        self.reload()
+        if self.txnState == TxnState.DIRTY:
+            self.reload()
+        self.txnState = TxnState.BEGIN
         
     def reload(self):
         '''reload from file'''
         if self.path:
-            stmts, format, self.fileSize, self.mtime = loadFileStore(self.path, self.initialContext)
+            stmts, format, self.fileSize, self.mtime = loadFileStore(self.path,
+                                                            self.initialContext)
             if stmts is None:
                 stmts = self.defaultStatements
         else:

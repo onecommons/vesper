@@ -79,6 +79,7 @@ class FileModelTestCase(modelTest.BasicModelTestCase):
     
     def testExternalChange(self):
         model = self.getModel()
+        model.getStatements() #begin a txn
         overwriteString = '{"id":"foo","hello":"world"}'
         def overwrite():
             f = open(model.path, 'w')

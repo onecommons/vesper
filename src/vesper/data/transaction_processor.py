@@ -72,9 +72,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         
     def executeTransaction(self, func, kw=None, retVal=None):
         kw = kw or {}
-        self.txnSvc.begin()
-        self.txnSvc.state.kw = kw
-        self.txnSvc.state.retVal = retVal
+        self.txnSvc.begin(kw = kw, retVal = retVal)
         try:            
             retVal = func()            
         except:
@@ -83,20 +81,16 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
             raise
         else:
             if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                self.txnSvc.addInfo(source=self.get_principal_func(kw))
-                self.txnSvc.state.retVal = retVal                
                 if self.txnSvc.isDirty():
-                    if kw.get('__readOnly'):
+                    if kw.get('__readOnly') or self.txnSvc.state.readOnly:
                         self.log.warning(
-                        'a read-only transaction was modified and aborted')
+                            'a read-only transaction was modified and aborted')
                         self.txnSvc.abort()
-                    elif not self.txnSvc.state.cantCommit:
+                    else:
+                        self.txnSvc.addInfo(source=self.get_principal_func(kw))
                         self.txnSvc.commit()
                 else:
-                    #nothings changed, don't bother committing
-                    #but need to clean up the transaction
-                    self.txnSvc._cleanup(False)
-                       
+                    self.txnSvc.abort()                       
         return retVal
 
     # add a convenience contextmanager on newer versions of python
@@ -106,8 +100,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         @contextmanager
         def inTransaction(self, kw=None):
             kw = kw or {}
-            self.txnSvc.begin()
-            self.txnSvc.state.kw = kw
+            self.txnSvc.begin(kw = kw)
 
             try:
                 yield self
@@ -117,15 +110,13 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                 raise
             else:
                 if self.txnSvc.isActive() and not self.txnSvc.state.aborted:
-                    self.txnSvc.addInfo(source=self.get_principal_func(kw))
                     if self.txnSvc.isDirty():
-                        if kw.get('__readOnly'):
+                        if kw.get('__readOnly') or self.txnSvc.state.readOnly:
                             self.log.warning(
-                            'a read-only transaction was modified and aborted')
+                                'a read-only transaction was modified and aborted')
                             self.txnSvc.abort()
-                        elif not self.txnSvc.state.cantCommit:
+                        else:
+                            self.txnSvc.addInfo(source=self.get_principal_func(kw))
                             self.txnSvc.commit()
                     else:
-                        #nothings changed, don't bother committing
-                        #but need to clean up the transaction
-                        self.txnSvc._cleanup(False)
+                        self.txnSvc.abort()

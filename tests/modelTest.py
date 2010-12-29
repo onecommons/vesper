@@ -90,7 +90,6 @@ class BasicModelTestCase(unittest.TestCase):
             'object', 'o',
             'objecttype', 'en',
             'context', 'c']
-        pairs = zip(*[iter(conditions)]*2)
         pairs = [ (('subject', 's'),), 
             (('predicate', 'p'),), 
             #look up object and objectype together:

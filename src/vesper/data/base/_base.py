@@ -201,6 +201,11 @@ class Model(Tupleset):
            self.reifiedIDs = getReifiedStatements(self.getStatements())
         triple = (stmt.subject, stmt.predicate, stmt.object, stmt.objectType)
         return self.reifiedIDs.get(triple)
+
+class TxnState(object):
+    BEGIN = 'BEGIN'
+    READ = 'READ'
+    DIRTY = 'DIRTY'
    
 def getReifiedStatements(stmts):
     '''
@@ -406,8 +411,9 @@ class TransactionModel(object):
         super(TransactionModel, self).__init__(*args, **kw)
         self.autocommit = False
 
-    def commit(self, **kw):        
+    def commit(self, **kw):    
         if not self.queue:
+            self.txnState = TxnState.BEGIN
             return
         for stmt in self.queue:
             if stmt[0] is Removed:
@@ -419,9 +425,11 @@ class TransactionModel(object):
 
         self.queue = []
         
-    def rollback(self):
-        if self.autocommit:        
+    def rollback(self):        
+        if self.autocommit:
             super(TransactionModel, self).rollback()
+        else:
+            self.txnState = TxnState.BEGIN
         self.queue = []
 
     def _match(self, stmt, subject = None, predicate = None, object = None,
@@ -450,7 +458,8 @@ class TransactionModel(object):
                       objecttype=None,context=None, asQuad=True, hints=None):
         ''' Return all the statements in the model that match the given arguments.
         Any combination of subject and predicate can be None, and any None slot is
-        treated asj a wildcard that matches any value in the model.'''
+        treated as a wildcard that matches any value in the model.
+        '''
         statements = super(TransactionModel, self).getStatements(subject,
                                 predicate, object,objecttype,context, asQuad,hints)
         if not self.queue: 
@@ -485,9 +494,11 @@ class TransactionModel(object):
             return statements
 
     def addStatement(self, statement ):
-        '''add the specified statement to the model'''
+        '''add the specified statement to the model'''        
         if self.autocommit:
-            return super(TransactionModel, self).addStatement(statement)        
+            return super(TransactionModel, self).addStatement(statement)
+        else:
+            self.txnState = TxnState.DIRTY
         
         if self.queue is None: 
             self.queue = []        
@@ -499,9 +510,12 @@ class TransactionModel(object):
             self.queue.append( (statement,) )            
         
     def removeStatement(self, statement ):
-        '''removes the statement'''
+        '''removes the statement'''        
         if self.autocommit:
             return super(TransactionModel, self).removeStatement(statement)
+        else:
+            self.txnState = TxnState.DIRTY
+        
         if self.queue is None: 
             self.queue = []
         try:
