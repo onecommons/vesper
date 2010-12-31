@@ -34,7 +34,7 @@ t % '''
 Four top-level objects, two users and two projects.  
 Many-to-many to One user we have two postal addresses and another we have any at all. 
 
-The :doc:`pjson` module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default :func:`raccoon.createStore` will use a simple in-memory store.
+The :doc:`pjson` module does the serialization from JSON to an internal representation that can be saved in a variety of backends ranging from a JSON text file to SQL database, RDF datastores and simple Memcache or BerkeleyDb. By default :func:`vesper.app.createStore` will use a simple in-memory store.
 
 To illustrate let's create SQL schema that will data mapping. One to many 
 

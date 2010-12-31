@@ -17,6 +17,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                                 inErrorHandler=0)
         self.lockfile = None
         self.log = log
+        self.get_principal_func = lambda kw: ''
 
     def loadDataStore(self, configDict):
         self.model_uri = configDict.get('model_uri')
@@ -35,7 +36,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         else:
             self.LockFile = glock.NullLockFile #the default
         
-        self.txnSvc = transactions.RaccoonTransactionService(self)
+        self.txnSvc = transactions.ProcessorTransactionService(self)
         
         dataStoreFactory = configDict.get('datastore_factory', DataStore.BasicStore)
         self.dataStore = dataStoreFactory(self, **configDict)

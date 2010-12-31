@@ -4,15 +4,15 @@ import os, sys
 
 from vesper.app import argsToKw, createApp
 
-DEFAULT_cmd_usage = 'python raccoon.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.nt -a config.py '
+DEFAULT_cmd_usage = 'python runner.py -l [log.config] -r -d [debug.pkl] -x -s server.cfg -p path -m store.json -a config.py '
 cmd_usage = '''
 -h this help message
 -l [log.config] specify a config file for logging
 -r record requests (ctrl-c to stop recording) 
 -d [debug.pkl]: debug mode (replay the requests saved in debug.pkl)
 -x exit after executing config specific cmd arguments
--m [store.nt] load the RDF model
-   (default model supports .json, .mjson, .rdf, .nt)
+-m [store.json] load the data store
+   (default model supports .json, .mjson, .yaml, .rdf, .nt)
 '''
 
 def parse_args(argv=sys.argv[1:], out=sys.stdout):
@@ -64,7 +64,7 @@ def parse_args(argv=sys.argv[1:], out=sys.stdout):
                 if debugFileName[0] == '-':
                     raise ValueError
             except (IndexError, ValueError):
-                debugFileName = 'debug-wiki.pkl'
+                debugFileName = 'debug-vesperapp.pkl'
             vars['debug_filename'] = debugFileName
 
         else:

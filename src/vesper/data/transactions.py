@@ -270,9 +270,9 @@ class TransactionParticipant(object):
     def finishTransaction(self, txnService, committed):
         self.inTransaction = False
 
-class RaccoonTransactionState(TransactionState):
+class ProcessorTransactionState(TransactionState):
     def __init__(self):
-        super(RaccoonTransactionState, self).__init__()        
+        super(ProcessorTransactionState, self).__init__()        
         self.additions = []
         self.removals = []
         self.newResources = []
@@ -286,15 +286,14 @@ class RaccoonTransactionState(TransactionState):
         self.retVal = info.pop('retVal', self.retVal)
         self.info.update(info)
 
-class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals):
-    stateFactory = RaccoonTransactionState
+class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocals):
+    stateFactory = ProcessorTransactionState
 
     def __init__(self, server):        
         self.server = server
-        #Raccoon associates each request with one transaction context
-        #and one thread; therefore we need one transaction context per thread
-        self.initThreadLocals(state=RaccoonTransactionState())
-        super(RaccoonTransactionService, self).__init__(server.log.name)
+        #one transaction context per thread so that transactions are thread-specific
+        self.initThreadLocals(state=ProcessorTransactionState())
+        super(ProcessorTransactionService, self).__init__(server.log.name)
         
     def newResourceHook(self, uris):
         '''
@@ -359,7 +358,7 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
                     errorSequence=errorSequence)
 
     def join(self, participant, readOnly=False):
-        super(RaccoonTransactionService, self).join(participant, readOnly)
+        super(ProcessorTransactionService, self).join(participant, readOnly)
         if not readOnly:
             if not self.state.lock: 
                 #lock on first participant joining that will write
@@ -376,7 +375,7 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
             
         try:
             lock = self.state.lock
-            super(RaccoonTransactionService, self)._cleanup(committed)
+            super(ProcessorTransactionService, self)._cleanup(committed)
         finally:
             if lock:  #hmm, can we release the lock earlier?
                 lock.release()
@@ -393,10 +392,10 @@ class RaccoonTransactionService(TransactionService,utils.ObjectWithThreadLocals)
             self.abort()
             raise
 
-        super(RaccoonTransactionService, self)._prepareToVote()
+        super(ProcessorTransactionService, self)._prepareToVote()
         
     def _vote(self):
-        super(RaccoonTransactionService, self)._vote()
+        super(ProcessorTransactionService, self)._vote()
         
         #all participants have successfully voted to commit the transaction
         #this trigger let's you look at the completed state

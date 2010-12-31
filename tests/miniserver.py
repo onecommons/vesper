@@ -70,9 +70,3 @@ def api_handler(kw, retval):
     return json.dumps(out,sort_keys=True, indent=4)
 
 createApp(__name__)
-# storage_url="mem://"
-# actions = {
-#     'http-request' : rx.route.gensequence
-# }
-# raccoon.run(globals())
-#     

@@ -16,14 +16,12 @@ class glockTestCase(unittest.TestCase):
         pass
 
     def test1(self):
-        #like rx.raccoon.getLock()
         lock = glock.LockFile(self.lockName)
         lock.obtain()
         lock.release()
 
     def testReentry(self):
         '''test re-entrancy'''
-        #like rx.raccoon.getLock()
         globalLock = glock.LockFile(self.lockName)
         lock = glock.LockGetter(globalLock)
         lock2 = glock.LockGetter(globalLock)
