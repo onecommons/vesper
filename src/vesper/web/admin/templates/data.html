@@ -3,6 +3,7 @@
 <%!
 import re
 from vesper.backports import json
+from vesper.utils import defaultproxyattrdict, attrdict
 
 def selected(test): 
   if test: return 'selected'
@@ -11,18 +12,28 @@ def selected(test):
 def resolve(obj, prop):
   if not obj:
     return obj
-  for name in prop.split('.'):
+  #regex negative look-ahead assertion to escape \ but not \\
+  escbs = r'(?<!(?<!\\)\\)' 
+  for name in re.split(escbs + r'\.', prop):    
     index = None
-    if name[-1] == ']':
-      match = re.match('(.*)\[(.*)\]', name)
+    if name[-1] == ']':      
+      match = re.match('(.+)'+ escbs + r'\[(\d*)\]', name)
       if match:
         name = match.group(1)
         index = match.group(2)
+    name = re.sub(r'\\(.)', r'\1', name)
+    if not hasattr(obj, 'get'):
+      return UNDEFINED
     obj = obj.get(name, UNDEFINED)
-    if not obj:
+    if index:      
+      if not isinstance(obj, list):
+        return UNDEFINED
+      index = int(index)
+      if len(obj) <= index:
+        return UNDEFINED
+      obj = obj[index]
+    elif not obj:
       return obj
-    if index:
-      obj = obj[int(index)]    
   return obj
 
 def q(s):
@@ -30,22 +41,37 @@ def q(s):
   Escape the string so that it can be used in double-quoted attribute values
   '''  
   return s.replace('&', '&amp;').replace('"','&quot;')
+
+def aq(s):
+  '''
+  Escape the string so that it can be used in double-quoted attribute values
+  '''
+  if s.count('"') > s.count("'"):
+    #technically html < 5 doesn't support &apos and so &#39; should be used but all
+    #modern browsers do: see http://code.google.com/p/doctype/wiki/AposCharacterEntity
+    return "'"+s.replace('&', '&amp;').replace("'",'&apos;')+"'"
+  else:
+    return '"'+s.replace('&', '&amp;').replace('"','&quot;')+'"'
   
 def kwtoattr(kw):
   return ' '.join([
-    (name.startswith('_') and name[1:] or name) ##strip _ so we can have python keywords as attributes (e.g. _class)
-    +'="'+ q(value) +'"' for name, value in kw.items()])    
+    ##strip _ so we can have python keywords as attributes (e.g. _class)
+    (name.startswith('_') and name[1:] or name) + '='+ aq(value)
+                                    for name, value in kw.items()])
 
 def getobj(context, kw):
   '''
   If no 'o' parameter is present use the object associated with the parent form.
   '''
   if 'o' in kw:
-    return kw.pop('o')     
+    obj = kw.pop('o') 
+    if isinstance(obj, (str, unicode)):
+      return resolve(context['__'].currobj, obj)
+    return obj
   else:
     return context['__'].currobj
 
-def setFormBindClass(val, kw=None):
+def setFormBindClass(val, kw=None, nullAsJson=False):
   if isinstance(val, (str, unicode, type(UNDEFINED))):
     return '' #don't bother with string
   elif isinstance(val, bool):
@@ -53,7 +79,7 @@ def setFormBindClass(val, kw=None):
   elif isinstance(val, (int, float)):
     btype = 'number'
   elif isinstance(val, type(None)):
-    btype = 'null'
+    btype = nullAsJson and 'json' or 'null'
   else:
     btype = 'json'
 
@@ -72,8 +98,10 @@ def setFormBindClass(val, kw=None):
 def serializeValue(val):  
   if isinstance(val, bool):
     return val and 'true' or 'false'
-  elif isinstance(val, (str, unicode, int, float, type(UNDEFINED))):
+  elif isinstance(val, (str, unicode)):
     return val
+  elif isinstance(val, (int, float, type(UNDEFINED))):
+    return str(val)
   elif isinstance(val, type(None)):
     return ''
   else:
@@ -108,33 +136,38 @@ def serializeValue(val):
   ${caller.body()}
   <%
   __.currobj = oldcurrobj
-  %>
-  </form>
+  %>\
+</form>
 </%def>
 
 <%def name='input(prop, **kw)'>
    <%
    obj = getobj(context, kw)
-   itype = kw.get('type', 'text')
+   itype = kw.pop('type', 'text')
    value = resolve(obj,prop)
    toggleInput = itype in ['radio', 'checkbox']
-   %>
-   ##XXX this isn't very useful, replace it:
-   %if toggleInput and isinstance(value, list):
-      %for v in value:        
-        <%
-        ikw = kw.copy()
-        setFormBindClass(v, ikw)
-        %>      
-        <input type='${itype}' ${kwtoattr(ikw)} checked name='${prop}[]' value='${serializeValue(v)|q}' />
-      % endfor
-   %else:
-     <%
-     setFormBindClass(value, kw)
-     %>      
-     <input type='${itype}' ${kwtoattr(kw)} name='${prop}' ${toggleInput and value and 'checked' or ''}  \
-                                                  value='${serializeValue(value)|q}'>${caller.body()}</input>
-   %endif
+   bindclass = setFormBindClass(value, kw, toggleInput)
+   if 'value' not in kw:
+      if toggleInput and not value:
+        #current value will set input to unchecked state
+        #set the value to will be used if the input is checked
+        #it needs to match the type of current empty value
+        if 'ifempty' in kw:
+          kw['value'] = kw.pop('ifempty')
+        else:
+          if not bindclass or bindclass == 'type[string]':
+            #in html, input.value defaults to "on" when checked
+            kw['value'] = 'on' 
+          elif bindclass == 'type[number]':
+            kw['value'] = '1'
+          elif bindclass == 'type[boolean]' or bindclass == 'type[json]':
+            kw['value'] = 'true'
+          else:
+            assert 'unexpected bindclass "%s" when setting a default unchecked value' % bindclass
+      else:
+        kw['value'] = serializeValue(value)
+   %> \
+   <input type='${itype}' ${kwtoattr(kw)} name='${prop}' ${toggleInput and value and 'checked ' or ''}>${caller.body()}</input> \
 </%def>
 
 <%def name='hidden(prop, **kw)'>
@@ -142,8 +175,10 @@ def serializeValue(val):
   obj = getobj(context, kw)
   value = resolve(obj, prop)
   setFormBindClass(value, kw)
+  if 'value' not in kw:
+    kw['value'] = serializeValue(value)
   %>   
-  <input type='hidden' name='${prop}' ${kwtoattr(kw)} value='${serializeValue(value)|q}' />
+  <input type='hidden' name='${prop}' ${kwtoattr(kw)} />
 </%def>
 
 <%def name='select(prop, options, **kw)'>
@@ -154,31 +189,35 @@ def serializeValue(val):
   if islist:
     prop += '[]'
   %>
-  <select ${kwtoattr(kw)} name='${prop}' ${islist and 'multiple' or ''}> \
-  % for option in options:
-    <% 
+  <select ${kwtoattr(kw)} name='${prop}' ${islist and 'multiple' or ''}> 
+% for option in options:
+<% 
     __.option = option
     label = option
+    optionVal = option
     if isinstance(option, dict):
+      if not isinstance(option, attrdict):
+        __.option = defaultproxyattrdict(option)
       if option.get('id'):
-        option = '@' + option['id'] #XXX
-      elif option.get('value'):
+        optionVal = option['id']
+      elif 'value' in option:
         label = option.get('label', option['value'])
-        option = option['value']
+        optionVal = option['value']
+        
       if islist:
-        match = option in selection
+        match = optionVal in selection
       else:
-        match = option == selection
+        match = optionVal == selection
     else:
-      match = option == selection
-    bindclass = setFormBindClass(option)
+      match = optionVal == selection
+    bindclass = setFormBindClass(optionVal)
     %> \
-    <option ${selected(match)} class='${bindclass}' value="${serializeValue(option)|q}">${capture(caller.body) or label}</option>
-  % endfor
+    <option ${selected(match)} class='${bindclass}' value=${serializeValue(optionVal)|aq}>${capture(caller.body) or label}</option>
+% endfor
   <%
   __.option = UNDEFINED
-  %>
- </select>
+  %>\
+</select>
 </%def>
 
 <%def name='textarea(prop, **kw)'>

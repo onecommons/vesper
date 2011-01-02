@@ -1,13 +1,12 @@
 <html>
-<!--
-
--->
+<!-- test data.js -->
   <head>
     <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/logger/assets/logger.css"> 
     <link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/yuitest/assets/testlogger.css"> 
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yahoo-dom-event/yahoo-dom-event.js"></script> 
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/logger/logger-min.js"></script> 
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yuitest/yuitest.js"></script>
+    <script type="text/javascript" src="yuitest-async.js"></script>
     <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.js"></script>
     <script type="text/javascript" src="js/json2.js"></script>
     <script type="text/javascript" src="js/data.js"></script>
@@ -15,9 +14,6 @@
   <body>
   
   <script type="text/javascript">
-  function assertJsonEqual(o1, o2) {
-    Assert.areEqual(JSON.stringify(o1), JSON.stringify(o2));
-  }
 
   function verifyQuery(testcase, query, expected, done) {
     var errormsg = 'unexpected result for ' + query;
@@ -31,73 +27,9 @@
     });
   }
    
-    var Assert = YAHOO.util.Assert;
-    var ArrayAssert = YAHOO.util.ArrayAssert;
     var logger = new YAHOO.tool.TestLogger(); // Log results to browser window
     var suite = new YAHOO.tool.TestSuite("data.js Test Suite");
 
-    /** Asserts raise an error when they fail and asyncronous won't be running 
-     *  within the TestRunner try/catch block. 
-     *  offthread() runs code with assertions its own try/catch block and
-     *  passes the exception to TestCase.resume() if it fails (which terminates the TestCase)
-     *  
-     *  @param done: If true, call resume() after executing
-     */
-    YAHOO.tool.TestCase.prototype.offthread = function(func, done) {
-      try {
-        func();
-        if (done) {
-            this.resumeOffthread();
-        }        
-      } catch (e) {
-        if (window.console) console.log('offset thread error', e);
-        this.offthreadError = e;
-        this.resumeOffthread();
-      }
-    };
-
-    YAHOO.tool.TestCase.prototype.resumeOffthread = function() {
-      if (!YAHOO.tool.TestRunner._cur || this !== YAHOO.tool.TestRunner._cur.parent.testObject) {
-        //this can happen if a Assert failed thus aborting the current testcase before this callback runs
-        if (window.console) console.log('wait already ran', YAHOO.tool.TestRunner);
-        return;
-      } else {
-        if (window.console) console.log('resumeOffthread called', YAHOO.tool.TestRunner);
-      }        
-      var testcase = this;      
-      this.resume(function() {
-         var offthreadError = testcase.offthreadError;
-         if (window.console) console.log('resumeOffThread running', offthreadError);
-         if (!YAHOO.lang.isUndefined(testcase.offthreadError)) 
-            delete testcase.offthreadError;
-         Assert.isUndefined(offthreadError);         
-      });
-    };
-
-    YAHOO.tool.TestCase.prototype.checkResponse = function(data, shouldSucceed, failMsg, expectedErrorCode) {
-      this.offthread(function() {
-         if (shouldSucceed) {
-           var msg = 'checkResponse: unexpected error ' + failMsg;
-           if (window.console) {
-              if (!YAHOO.lang.isUndefined(data.error)) 
-                console.log(msg, data);
-           }
-           Assert.isUndefined(data.error, msg);
-         } else {
-           var msg = 'checkResponse: unexpected success ' + failMsg;
-           if (window.console) {
-             if (!YAHOO.lang.isObject(data.error)) 
-                console.log(msg, data);
-           }
-           Assert.isObject(data.error, msg);
-           if (expectedErrorCode) {
-              Assert.areEqual(data.error.code, expectedErrorCode, 
-                  'checkResponse: unexpected error code: ' + data.error.code);
-           }
-         }
-      });
-    };
-        
     suite.add( new YAHOO.tool.TestCase({
         name: "data.js test1",
         

@@ -1,7 +1,7 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import webbrowser, unittest
-import multiprocessing, random
+import multiprocessing, random, tempfile, os.path
 from vesper.utils import Uri
 from vesper.backports import json
 from vesper import app
@@ -19,10 +19,12 @@ def startVesperInstance(port, queue):
         kw._responseHeaders['Content-Type'] = 'application/json'
         return '"OK"'
     
-    print "creating vesper instance on port %d)" % (port)
-    app.createApp(__name__, 'vesper.web.baseapp', port=port, storage_url="mem://", 
-        static_path=['.'], 
-        actions = {'load-model':[sendServerStartAction]}
+    print "creating vesper instance on port %d)" % (port),'tmp at', tempfile.gettempdir()
+    app.createApp(__name__, 'vesper.web.admin', port=port, storage_url="mem://", 
+        static_path='browser', 
+        actions = {'load-model':[sendServerStartAction]},
+        template_path='browser/templates',
+        mako_module_dir = os.path.join(tempfile.gettempdir(), 'browserTest_makomodules')
     ).run()
     # blocks forever
 
@@ -37,11 +39,11 @@ class BrowserTestRunnerTest(unittest.TestCase):
 
     def testBrowserTests(self):
         serverProcess, queue, port = self.startServer()
-        urls = ['db_tests.html','binder_tests.html']
+        urls = ['static/db_tests.html','static/binder_tests.html','data_test.html']
         try: 
             queue.get(True, 5) #raise Queue.EMPTY if server isn't ready in 5 second 
             for name in urls:
-                url = 'http://localhost:%d/static/%s' % (port, name)
+                url = 'http://localhost:%d/%s' % (port, name)
                 print 'running ', url
                 webbrowser.open(url)
                 testResults = queue.get(True, 20) #raise Queue.EMPTY if browser unittests haven't finished in 20 seconds

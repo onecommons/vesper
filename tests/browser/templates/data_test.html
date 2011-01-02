@@ -1,0 +1,298 @@
+## -*- coding: utf-8 -*-
+<%namespace name='slots' file="slots.html" />
+<%namespace name='basic' file="basic.html" />
+<%namespace name='df' file="data.html" />
+
+<%doc>
+Tests that the data mako tag library renders correctly and that submitting a rendered form works
+
+Todo:
+<%df:hidden />
+
+<%df:list prop='foo.bar'>
+##generates bodies for each 
+    ##if prop is ommitted use current item: (sets name = {prop}[])
+   <df:input type='checkbox'/> 
+    ##prop foo on current item, sets name = {prop}[{i}].foo
+    <df:input prop='foo' />
+    ##second item on current item (i.e. nested array): sets name = {prop}[{i}][1]
+    <df:input prop='[1]' />
+    
+    ##nested list tags:
+    <%df:list prop='children'>
+    </%df>
+    
+</%df:list>
+
+##microdata tags
+<df:generic tag='span'></df:generic>
+##shortcuts:
+<df:div></df:div>   
+<df:span></df:span>
+
+</%doc>
+
+<%basic:layout>
+
+<%slots:head>
+<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/logger/assets/logger.css"> 
+<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.1/build/yuitest/assets/testlogger.css"> 
+<script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yahoo-dom-event/yahoo-dom-event.js"></script> 
+<script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/logger/logger-min.js"></script> 
+<script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yuitest/yuitest.js"></script>
+<script type="text/javascript" src="static/yuitest-async.js"></script>
+
+  <title>test data templates</title>
+</%slots:head>
+
+<%slots:css>
+.testclass { border: solid black;}
+</%slots:css>
+
+<%basic:header>
+<b>test data templates</b>
+</%basic:header>
+
+<% 
+testdata = [
+  { 
+    "id" : "testdata1",
+    'a string' : 'v',
+    'foo\\' : { 'ba.r' : 'v' },
+    'has[1]' : 'v',
+    'nested' : { 'object' : {'value' : 1. } },
+    'none' : None,    
+    'enabled' : True, 
+    'disabled' : False,
+    'emptystring' : '',
+    'array' : [0,1],
+    'objectSelection' : '@2',
+    'labeledSelection' : 2,
+    'simpleSelection' : 'two' 
+  }
+]
+
+simpleArray = ['one', 'two']
+
+labeledArray = [{ 'value' : 1, 'label': 'once'}, { 'value' : 2, 'label': 'twice'},
+   { 'value' : 3, 'label': 'three times'} ]
+
+objectArray = [{ "id": "@1", 
+     "name":"option 1",
+     "notes" : ["first"]
+   },
+   { "id": "@2", 
+        "name":"option 2",
+        "notes" : []
+   }
+  ]   
+%>
+
+% for obj in testdata:
+<div class='alertdiv'>
+<%df:form o='${obj}' _class='testclass'>
+<div>
+     <div class='test'>text field bound to a string property <%df:input prop='a string' /> </div>
+     <div class='expected'><input type='text' value="v" name='a string' /> </div>
+</div>
+<div>  
+   <div class='test'>test escaping with "foo\\.ba\.r": <%df:input prop='foo\\.ba\.r' /></div>
+   <div class='expected'><input type='text' value="v" name='foo\\.ba\.r' ></input></div>
+</div>
+<div>  
+   <div class='test'>test escaping with "has\[1]": <%df:input prop='has\[1]' /> </div>
+   <div class='expected'><input type='text' value="v" name='has\[1]' ></input></div>
+</div>
+<div>
+   <div class='test'>text field bound to a number property <%df:input prop='nested.object.value' maxlength='4' size='4'/>        
+   </div>
+   <div class='expected'><input type='text' maxlength="4" class="type[number]" value="1.0" size="4" name='nested.object.value' ></input></div>
+</div>    
+<div>    
+   <div class='test'>text field bound to a null property <%df:input prop='none' /> 
+   </div>
+   <div class='expected'><input type='text' class="type[null]" value="" name='none'></input> </div>
+</div>    
+<div>    
+   <div class='test'>text field bound to a missing property <%df:input prop='missing' /> 
+   </div>
+  <div class='expected'><input type='text' value="" name='missing' ></input> </div>
+</div>
+<div>
+   <div class='test'>text field bound to a nested missing property <%df:input prop='nested.missing.value' /> 
+   </div>
+    <div class='expected'><input type='text' value="" name='nested.missing.value' ></input> </div>
+   ##XXX: ifmissing support -- value to use if property is missing
+</div>
+<div>   
+   <div class='test'>checkbox bound to true: <%df:input type='checkbox' prop='enabled' /> </div>
+   <div class='expected'>
+     <input type='checkbox' class="type[boolean]" value="true" name='enabled' checked />
+   </div>
+     ##XXX test unchecking sets to false
+</div>
+<div>   
+   <div class='test'>checkbox bound to false <%df:input type='checkbox' prop='disabled' /></div>
+   <div class='expected'>
+     <input type='checkbox' class="type[boolean]" value="true" name='disabled' />
+   </div>
+</div>
+<div>
+   <div class='test'>checkbox bound to value "v": <%df:input type='checkbox' prop='a string' /> </div>
+   <div class='expected'>
+     <input type='checkbox' value="v" name='a string' checked />
+   </div>
+</div>
+<div> 
+   <div class='test'>checkbox bound to "": <%df:input type='checkbox' prop='emptystring' /> </div>
+   <div class='expected'>
+     <input type='checkbox' value="on" name='emptystring' />
+   </div>
+</div>
+<div>
+   <div class='test'>checkbox bound to "" with ifempty: 
+     <%df:input type='checkbox' prop='emptystring' ifempty="hello" /> </div>
+   <div class='expected'>
+     <input type='checkbox' value="hello" name='emptystring' />
+   </div>
+</div>
+<div>
+   <div class='test'>checkbox bound to null: <%df:input type='checkbox' prop='none' />  </div>
+   <div class='expected'>
+     <input type='checkbox' class="type[json]" value="true" name='none' />
+   </div>
+</div>
+<div>
+   <div class='test'>checkbox bound to null with ifempty: 
+      <%df:input type='checkbox' prop='none' ifempty='"@ref"' />  </div>
+   <div class='expected'>
+     <input <input type='checkbox' class="type[json]" value='"@ref"' name='none'/>
+   </div>
+</div>
+<div>
+   
+   ##XXX handle and test checkboxes with a property whose value ='on' 
+   
+    <div class='test'>test list with index 0: <%df:input prop='array[0]' /> </div>
+   <div class='expected'>
+     <input type='text' class="type[number]" value="0" name='array[0]' />
+   </div>    
+</div>
+<div>
+    <div class='test'>test list with index 1: <%df:input prop='array[1]' /> </div>
+   <div class='expected'>
+     <input type='text' class="type[number]" value="1" name='array[1]' />
+   </div>    
+</div>
+<div>
+    <div class='test'>test out-of-range index: <%df:input prop='array[2]' /> </div>
+   <div class='expected'>
+     <input type='text' value="" name='array[2]' />
+   </div>    
+</div>
+<div>
+   <div class='test'> test list: <%df:input prop='array' /> </div>
+   <div class='expected'>
+     <input type='text' class="type[json]" value="[0, 1]" name='array' ></input>
+   </div>    
+</div>
+<div>   
+   <div class='test'>Select using simple array as options: 
+     <%df:select options='${simpleArray}' prop='simpleSelection' />
+   </div>
+   <div class='expected'>
+     <select  name='simpleSelection' > 
+       <option  class='' value="one">one</option>
+        <option selected class='' value="two">two</option>
+     </select>   
+   </div>    
+</div>
+<div>
+   <div class='test'>Select using object array as options: 
+     <%df:select options='${objectArray}' prop='objectSelection'>${__.option.name} (${df.module.resolve(__.option,'notes[0]')})</%df:select> 
+   </div>
+   <div class='expected'>
+    <select  name='objectSelection' > 
+     <option  class='' value="@1">option 1 (first)</option>
+     <option selected class='' value="@2">option 2 ()</option>
+    </select> 
+   </div>    
+</div>
+<div>
+   <div class='test'>Select using labeled array as options: 
+     <%df:select options='${labeledArray}' prop='labeledSelection' /> 
+  </div>
+   <div class='expected'>
+    <select  name='labeledSelection' > 
+       <option  class='type[number]' value="1">once</option>
+       <option selected class='type[number]' value="2">twice</option>
+       <option  class='type[number]' value="3">three times</option>
+    </select>   
+   </div>      
+</div>
+   ##XXX test multiple select
+</%df:form>
+</div>
+% endfor
+
+  <script type="text/javascript">
+   
+    var logger = new YAHOO.tool.TestLogger(); // Log results to browser window
+    var suite = new YAHOO.tool.TestSuite("data template Test Suite");
+
+    suite.add( new YAHOO.tool.TestCase({
+        name: "data.js test1",
+        
+        testForm : function() {
+          var $form = $('form:has(input[type=hidden][name=id][value=testdata1])');
+          Assert.areEqual(1, $form.size());
+          
+          $form.children('div:has(.test)').each( function() {
+            var $test = $(this).find('.test');
+            var $expected = $(this).find('.expected');
+            Assert.areEqual(1, $expected.length);
+            
+            var $expectedInputs = $expected.find('input');
+            var $testInputs = $test.find('input');
+            Assert.areEqual($expectedInputs.length, $testInputs.length);            
+            if ($expectedInputs.length) {
+              $expectedInputs.each(function(index) {
+                 Assert.areEqual(this.value, $testInputs.get(index).value);
+                 Assert.areEqual(this.checked, $testInputs.get(index).checked);
+             });
+           }
+            var $expectedOptions = $expected.find('option');
+            var $testOptions = $test.find('option');
+            Assert.areEqual($expectedOptions.length, $testOptions.length);            
+            if ($expectedOptions.length) {
+              $expectedOptions.each(function(index) {
+                 Assert.areEqual(this.value, $testOptions.get(index).value);
+                 Assert.areEqual(this.innerHTML, $testOptions.get(index).innerHTML);
+             });
+           }            
+          });
+        }
+        
+  }));
+
+    var TestRunner = YAHOO.tool.TestRunner;
+    TestRunner.add( suite );
+    function testRunComplete(data) {
+      if (window.console) console.log('test run complete', data);
+      var results = JSON.stringify(data.results);
+      $.ajax({
+        type: 'POST',
+        url: '/testresult',
+        data: results,
+        processData: false, 
+        contentType: 'application/json',
+        dataType: "json"
+      }); 
+    }
+    TestRunner.subscribe(TestRunner.COMPLETE_EVENT, testRunComplete);        
+    TestRunner.run();
+  </script> 
+
+<div id='test1'></div>
+
+</%basic:layout>

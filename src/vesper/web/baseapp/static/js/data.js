@@ -261,9 +261,10 @@ function bindElement(elem) {
         var binder = Binder.FormBinder.bind( elem ); 
         return binder.serialize();
     }
-    
+            
     //otherwise emulate HTML microdata scheme
     //see http://dev.w3.org/html5/spec/microdata.html
+    //except also include forms controls serialized as above
     var itemElems = [];
 
     function getItem(elem) {    
@@ -330,17 +331,17 @@ function bindElement(elem) {
         }
     }
     
-    $('[itemprop]', elem).each(function(){
+    var elems = $(elem).find('*').andSelf();
+    elems.filter('[itemprop]').each(function(){
        var $this = $(this);
        var parent = $this.parent().closest('[itemscope],[itemid]');
        if (parent.length) {
-           //XXX exclude if parent is outside of elem
            var item = getItem(parent.get(0));
            addProp(item, this);
        }
     });
  
-    $('[itemref]', elem).each(function(){
+    elems.filter('[itemref]').each(function(){
         var item = getItem(this);
         var refs = $(this).attr('itemref').split(/\s+/);
         $('#'+refs.join(',#')).each(function() {
@@ -350,6 +351,15 @@ function bindElement(elem) {
         });
     });
     
+    elems.filter(':input').each(function(){
+        var parent = $(this).parent().closest('[itemscope],[itemid]');
+        if (parent.length) {
+            var item = getItem(parent.get(0));
+            var binder = Binder.FormBinder.bind(null, item); 
+            binder.serializeField(this);
+        }
+    });
+        
     var itemDict = {};
     var items = $.map($.unique(itemElems), function(elem) {
         var item = $(elem).data('item');        
@@ -513,8 +523,9 @@ Binder.TypeRegistry = {
       return String(value);
     },
     parse: function( value ) {
-      return value && value != "" ? value : undefined;
-    }
+      return value ? value : undefined;
+    },
+    empty: function() { return ''; }
   },
   'number': {
     format: function( value ) {
@@ -522,7 +533,8 @@ Binder.TypeRegistry = {
     },
     parse: function( value ) {
       return Number( value );
-    }
+    },
+    empty: function() { return 0; }
   },
   'boolean': {
     format: function( value ) {
@@ -531,26 +543,29 @@ Binder.TypeRegistry = {
     parse: function( value ) {
       if( value ) {
         value = value.toLowerCase();
-        return "true" == value || "yes" == value;
+        return "true" == value || "yes" == value || "on" == value;
       }
       return false;
-    }
+    },
+    empty: function() { return false; }
   },
   'json': {
     format: function( value ) {
       return JSON.stringify(value);
     },
     parse: function( value ) {
-      return value && value != "" ? JSON.parse(value) : undefined;
-    }
+      return value ? JSON.parse(value) : undefined;
+    },
+    empty: function() { return null; }
   },
-  'null': {
+  'null': { //if a null field is essentially treated as a string
     format: function( value ) {
       return '';
     },
     parse: function( value ) {
       return value ? value : null; 
-    }
+    },
+    empty: function() { return null; }
   }   
 };
 
@@ -606,6 +621,11 @@ Binder.FormBinder.prototype = {
     }
     return handler ? handler.parse( value ) : String(value);
   },
+  _getEmpty: function(element) {
+      var type = this._getType( element );
+      var handler = Binder.TypeRegistry[type];
+      return handler ? handler.empty() : "";
+  },
   _getAccessor: function( obj ) {
     if( obj == undefined ) {
       return this.accessor || new Binder.PropertyAccessor( obj );
@@ -627,15 +647,17 @@ Binder.FormBinder.prototype = {
     var accessor = this._getAccessor( obj );
     var value = undefined;
     if( element.type == "radio" || element.type == "checkbox" )  {
-      if( element.value != "" && element.value != "on" ) {
-        value = this._parse( element.name, element.value, element );        
+      if( element.value != "" && element.value != "on" ) {          
+        value = this._parse( element.name, element.value, element );
         if( element.checked ) {
           accessor.set( element.name, value );
         } else if( accessor.isIndexed( element.name ) ) {
           var values = accessor.get( element.name );
           values = Binder.Util.filter( values, function( item) { return item != value; } );
           accessor.set( element.name, values );
-        } 
+        } else { //added: set to empty value
+          accessor.set( element.name, this._getEmpty(element) );
+        }
       } else { 
         value = element.checked;
         accessor.set( element.name, value );
@@ -652,6 +674,7 @@ Binder.FormBinder.prototype = {
         value = this._parse( element.name, element.value, element );
         accessor.set( element.name, value );      
     }
+    return accessor.target;
   },
   deserialize: function( obj ) {
     var accessor = this._getAccessor( obj );

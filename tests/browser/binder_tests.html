@@ -249,7 +249,7 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           var obj = {};
           var binder = new Binder.FormBinder( document.getElementById( "testForm1" ), obj );
           binder.deserialize();
-          assertJsonEqual(obj, {});
+          assertJsonEqual({}, obj);
         },
         
         testSerializeFields: function() {
@@ -298,7 +298,7 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           //console.log('items', itemsJson);
           //console.log($('#microdata1expected').text());
           var expected = JSON.stringify(JSON.parse($('#microdata1expected').text()));
-          Assert.areEqual(itemsJson, expected);
+          Assert.areEqual(expected, itemsJson);
           
           var items2 = JSON.stringify(bindElement($$('microdata2')) );
           var items2again = JSON.stringify(bindElement($$('microdata2')) );
@@ -309,9 +309,23 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           //Assert.areEqual(items2, items2asRefs); 
           
           var items3 = JSON.stringify(bindElement($$('microdata3')) );
-          Assert.areEqual(items3, '[{"flavor":["Lemon sorbet","Apricot sorbet"]}]');
+          Assert.areEqual('[{"flavor":["Lemon sorbet","Apricot sorbet"]}]', items3);
           var items4 = JSON.stringify(bindElement($$('microdata4')) );
-          Assert.areEqual(items4, '[{"favorite-color":"orange","favorite-fruit":"orange"}]');          
+          Assert.areEqual('[{"favorite-color":"orange","favorite-fruit":"orange"}]', items4);
+          
+          //test binding on individual property element
+          var items5 = JSON.stringify(bindElement($$('testprop1')) );
+          Assert.areEqual('[{"id":"testid","favorite-color":"orange","favorite-fruit":"orange"}]', items5);
+          
+          //test binding on form fields
+          var items6 = JSON.stringify(bindElement($$('microdata6')) );
+          Assert.areEqual('[{"id":"testid","enabled":true,"disabled":false}]', items6);
+
+          //test binding on individual input field
+          var items7 = JSON.stringify(bindElement($$('testprop2')) );
+          Assert.areEqual('[{"id":"testid","enabled":true}]', items7);
+          var items8 = JSON.stringify(bindElement($$('testprop3')) );
+          Assert.areEqual('[{"id":"testid","disabled":false}]', items8);
         }
         
     }));
@@ -413,6 +427,15 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
 
 <div id='microdata4'itemscope=itemscope>
  <span itemprop="favorite-color favorite-fruit">orange</span>
+</div>
+
+<div itemid='testid'>
+ <span id='testprop1' itemprop="favorite-color favorite-fruit">orange</span>
+</div>
+
+<div id='microdata6' itemid='testid' itemscope=itemscope>
+   Enabled: <input id='testprop2' type='checkbox' class="type[boolean]" type="checkbox" name='enabled' checked value='true'></input>
+   Disabled: <input id='testprop3' type='checkbox' class="type[boolean]" type="checkbox" name='disabled' value='true'></input>
 </div>
 
 <textarea id='microdata1expected'>
