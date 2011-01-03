@@ -3,6 +3,7 @@
 import unittest
 import random
 import time
+import os
 import multiprocessing
 from urllib2 import urlopen
 from urllib import urlencode
@@ -53,6 +54,20 @@ def startMorbidQueue(port):
     reactor.run()
 
 def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
+    try:
+        import coverage, sys, signal, atexit
+        coverage.process_startup()        
+        
+        def safeterminate(num, frame):
+            #coverage registers an atexit function
+            #so have atexit functions called when terminating            
+            atexit._run_exitfuncs() #for some reason sys.exit isn't calling this
+            sys.exit()
+        
+        signal.signal(signal.SIGTERM, safeterminate)
+    except ImportError:
+        pass
+    
     print "creating vesper instance:%s (%s:%d)" % (nodeId, queueHost, port)
     conf = {
         'storage_url':"mem://",

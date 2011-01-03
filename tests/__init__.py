@@ -34,6 +34,10 @@ else:
     __all__.append("basicTyrantTest")
     
 if __name__ == '__main__':
+    import sys
+    if '--browser' in sys.argv:
+        __all__.append('browserTest')
+
     suites = unittest.TestLoader().loadTestsFromNames(__all__)
     suites.addTests(docTest.suite)
     result = unittest.TextTestRunner().run(suites)

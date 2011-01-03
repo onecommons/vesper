@@ -563,8 +563,8 @@ def _normpath(basedir, path):
         return path
     else:
         tmp = os.path.normpath(os.path.join(basedir, path))
-        if os.path.isabs(tmp):
-            return tmp
+        #assert os.path.isabs(tmp), 'not abs path %s, from %s + %s' % (tmp,basedir,path) 
+        return tmp 
 
 def _get_module_path(modulename):
     "for a modulename like 'vesper.web.admin' return a tuple (absolute_module_path, is_directory)"
