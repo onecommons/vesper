@@ -508,7 +508,9 @@ def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
     stream.close()
     return parseRDFFromString(contents.decode('utf8'), modelbaseuri, type, scope, options, getType)
 
-def _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap):
+def _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap, format='xml'):
+    #note: using format "xml" instead of "pretty-xml" because that latter is buggier
+    #(e.g. run RDFStaticTestCase.testSerialize with "pretty-xml")
     import rdflib
     from vesper.data.store.rdflib_store import statement2rdflib
     graph = rdflib.ConjunctiveGraph()
@@ -518,8 +520,8 @@ def _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap):
     for stmt in statements:
         s, p, o, c = statement2rdflib(stmt)
         graph.store.add((s, p, o), context=c, quoted=False)
-
-    graph.serialize(stream, format="pretty-xml", max_depth=3)
+        
+    graph.serialize(stream, format=format, max_depth=3)
 
 def _serializeRDFXMLWithRedland(stream, statements, uri2prefixMap):
     import RDF

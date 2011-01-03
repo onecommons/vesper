@@ -2,9 +2,9 @@
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import os.path
 import rdflib
-from rdflib.Literal import Literal
-from rdflib.BNode import BNode
-from rdflib.URIRef import URIRef
+from rdflib import Literal
+from rdflib import BNode
+from rdflib import URIRef
 
 from vesper.data.base import * # XXX
 from vesper.data.store.basic import loadFileStore
@@ -36,7 +36,7 @@ def rdflib2Statements(rdflibStatements):
 
 def URI2node(uri): 
     if uri.startswith(BNODE_BASE):
-        return BNode('_:'+uri[BNODE_BASE_LEN:])
+        return BNode(uri[BNODE_BASE_LEN:])
     else:
         if ':' not in uri:
             uri = 'name:'+ uri
