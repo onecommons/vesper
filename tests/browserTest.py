@@ -54,7 +54,7 @@ class BrowserTestRunnerTest(unittest.TestCase):
 
     def testBrowserTests(self):
         serverProcess, queue, port = self.startServer()
-        urls = []#'static/db_tests.html', 'static/binder_tests.html','data_test.html']
+        urls = ['static/db_tests.html', 'static/binder_tests.html','data_test.html']
         try: 
             queue.get(True, 5) #raise Queue.EMPTY if server isn't ready in 5 second 
             for name in urls:
