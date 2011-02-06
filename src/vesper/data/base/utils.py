@@ -566,12 +566,13 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
     from vesper.data import base
     if type.startswith('http://rx4rdf.sf.net/ns/wiki#rdfformat-'):
         type = type.split('-', 1)[1]
-
+    
+    options = options or {}
     if type == 'rdfxml':        
         if rdfxmlSerializer:
-            return rdfxmlSerializer(stream, statements, uri2prefixMap)
+            return rdfxmlSerializer(stream, statements, uri2prefixMap, **options)
         try:
-            _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap)
+            _serializeRDFXMLWithRdflib(stream, statements, uri2prefixMap, **options)
         except ImportError:
             try:
                 _serializeRDFXMLWithRedland(stream, statements, uri2prefixMap)
@@ -583,8 +584,7 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         writeTriples(statements, stream, writejson=True)
     elif type == 'pjson' or type == 'mjson':
         isMjson = type == 'mjson'
-        from vesper import pjson, multipartjson
-        options = options or {}
+        from vesper import pjson, multipartjson        
         if 'pjson' in options:
             pjsonOptions = options.pop('pjson')
         else:
