@@ -31,9 +31,11 @@ def assert_stmts_match(expected_stmts, result_stmts):
         assert False
 
 def assert_json_and_back_match(src, backagain=True, expectedstmts=None, 
-    includesharedrefs=False, intermediateJson=None, serializerOptions=None):
+    includesharedrefs=False, intermediateJson=None, serializerOptions=None, 
+                                                        parserOptions=None):
     global test_counter; test_counter += 1
     serializerOptions = serializerOptions or {}
+    parserOptions = parserOptions or {}
     if 'serializeIdAsRefs' not in serializerOptions:
         serializerOptions['serializeIdAsRefs'] = False
     if isinstance(src, (str,unicode)):
@@ -42,7 +44,7 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
             test_json = [test_json]
     else:
         test_json = src
-    result_stmts = Parser(generateBnode='counter').to_rdf( test_json )
+    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( test_json)
     #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
@@ -58,10 +60,10 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
     if backagain:
         test_counter -= 1
         assert_stmts_and_back_match(result_stmts,
-                        serializerOptions=serializerOptions)
+            serializerOptions=serializerOptions, parserOptions=parserOptions)
 
 def assert_stmts_and_back_match(stmts, expectedobj = None, 
-                        serializerOptions=None, addOrderInfo=True):
+                        serializerOptions=None, parserOptions=None):
     global test_counter; test_counter += 1                        
     serializerOptions = serializerOptions or {}
     result = Serializer(**serializerOptions).to_pjson( stmts )
@@ -73,7 +75,8 @@ def assert_stmts_and_back_match(stmts, expectedobj = None,
             compare = result
         assert_json_match(expectedobj, compare, True)
     
-    result_stmts = Parser(generateBnode='counter', addOrderInfo=addOrderInfo).to_rdf( result )
+    parserOptions = parserOptions or {}
+    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( result )
     assert_stmts_match(stmts, result_stmts)
 
 class SjsonTestCase(unittest.TestCase):
@@ -112,7 +115,7 @@ def test():
         }
     }]
     assert_stmts_and_back_match(stmts, expected)
-    assert_stmts_and_back_match(stmts, addOrderInfo=False)
+    assert_stmts_and_back_match(stmts, parserOptions=dict(addOrderInfo=False))
 
     src = '''
     { "id" : "atestid",
@@ -210,7 +213,7 @@ def test():
         ]
     )
     
-    assert_stmts_and_back_match(stmts, addOrderInfo=False)
+    assert_stmts_and_back_match(stmts, parserOptions=dict(addOrderInfo=False))
     
     src = dict(namemap = dict(id='itemid', namemap='jsonmap'),
     itemid = 1,
@@ -418,7 +421,8 @@ def test():
         "datatype": "json",         
         "value": 1}], 
       "prop2": [ "@ref", {"context": "scope1", "$ref": "ref"}]
-      }]
+      }],
+     parserOptions=dict(checkForDuplicateIds=False)
     )
 
     src = [{
@@ -550,6 +554,22 @@ def test():
     intermediateJson = [{ 'id' : "1", 'prop1': "@" }]
     assert_json_and_back_match(src, intermediateJson=intermediateJson)
     
+    src = [{
+      'id' : "duplicate1",
+      'prop1': 'test'
+    },
+    { 'id' : '2', 
+    'nested' : {
+      'id' : "duplicate1",
+      'prop2': 'test'
+    }
+    }]
+    try:
+        assert_json_and_back_match(src)
+    except:
+        pass
+    else:
+        assert 0, "duplicate id detection failed"
     
     print 'ran %d tests, all pass' % test_counter
     

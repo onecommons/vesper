@@ -864,7 +864,8 @@ class Parser(object):
             useDefaultRefPattern=True,
             toplevelBnodes=True,
             generateUUID=None,
-            saveOrder=None):
+            saveOrder=None,
+            checkForDuplicateIds=True):
         generateBnode = generateBnode or _defaultBNodeGenerator
         self._genBNode = generateBnode
         if generateBnode == 'uuid': #XXX hackish
@@ -875,6 +876,7 @@ class Parser(object):
         self._bnodeCounter = 0
         self.generateUUID = generateUUID or (lambda: str(uuid.uuid4()))
         self.saveOrder = saveOrder
+        self.checkForDuplicateIds = checkForDuplicateIds
     
         nameMap = nameMap or {}
         if useDefaultRefPattern and 'refpattern' not in nameMap:
@@ -962,9 +964,16 @@ class Parser(object):
                     m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
             return seq
         
+        alreadySeen = set()
         saveOrder = self.saveOrder
         while todo:
             obj, (id, parseContext), parentid = todo.pop(0)
+            if self.checkForDuplicateIds:
+                if id in alreadySeen:
+                    raise RuntimeError("duplicate id encountered: %s" % id)
+                else:
+                    alreadySeen.add(id)
+                  
             if saveOrder is not None: saveOrder.append(id)
                         
             #XXX support top level lists: 'list:' 
