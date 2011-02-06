@@ -303,7 +303,7 @@ listModel = modelFromJson([
 { "id" : "3",
   "mixed" : None
 }
-])
+], checkForDuplicateIds=False)
 
 t % '''
 "forcelist" syntax
@@ -684,21 +684,6 @@ t("{id, maybe value where value = ''}",
   "value" : ""
 }]
 ,model=nullModel)
-
-joinModel = modelFromJson([
-{
-'id' : '1',
-'foo' : 'hello'
-},
-{
-'id' : '2',
-'bar' : 'test'
-},
-{
-'id' : '1',
-'foo' : 'hello'
-},
-])
 
 #filter
 t('''

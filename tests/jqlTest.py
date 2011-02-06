@@ -1908,7 +1908,7 @@ t.model = modelFromJson([
         { "id" : "2", "type" : "post", "tags" : "tag1"},
         { "id" : "2", "type" : "post", "tags" : "tag2"},
         { "id" : "3", "type" : "post"}
-    ])
+    ], checkForDuplicateIds=False)
 
 t(query='''
         { ?tag, id, 
@@ -2443,8 +2443,8 @@ model=[
 'parent' : 1
 },
 {
-'id' : 2,
-'parent' : 3
+'id' : 3,
+'parent' : 4
 }
 ])
 
