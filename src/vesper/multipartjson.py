@@ -7,7 +7,7 @@ r"""
     
     A text section consists of header line which fits this pattern:
     = id endmarker
-    where `id` consists of alphanumeric character and endmarker is any sequence of non-whitespace characters
+    where `id` consists of one or more alphanumeric characters and endmarker is any sequence of non-whitespace characters
     followed by any number of lines of text as long as it doesn't contain 
     the endmarker
     
@@ -40,6 +40,9 @@ class Blob(object):
                     break
             if done:
                 break
+        if not done:
+            raise RuntimeError('could not generate a unique endmarker for %r' 
+                                                                   % self.id)
         if isinstance(self.data, unicode):
             self.data = self.data.encode('utf8')
         

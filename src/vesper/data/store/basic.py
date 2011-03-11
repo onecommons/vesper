@@ -126,7 +126,8 @@ class FileStore(MemStore):
     '''
     Reads the file into memory and write out 
     '''    
-
+    autocommit = False
+    
     def __init__(self, source='', defaultStatements=(), context='',
            incrementHook=None, serializeOptions=None, parseOptions=None, 
            checkForExternalChanges=True, **kw):
@@ -292,7 +293,7 @@ class IncrementalNTriplesFileStoreBase(FileStore):
             changelist.append( (Removed, statement) )
         return removed
 
-    def commit(self, **kw):                
+    def commit(self, **kw): 
         if os.path.exists(self.path):
             outputfile = file(self.path, "a+")
             changelist = self._getChangeList()
