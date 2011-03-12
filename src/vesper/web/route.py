@@ -88,6 +88,6 @@ def servetemplate(kw, retval):
                         config=kw.__server__.config,
                         server=kw.__server__,
                         __=defaultattrdict(), 
-                        db=kw.__server__.dataStore)
+                        db=kw.__server__.defaultStore)
     else:
         return retval

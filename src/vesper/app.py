@@ -226,6 +226,10 @@ class RequestProcessor(TransactionProcessor):
         self.loadModel()
         self.handleCommandLine(self.argsForConfig)
 
+    @property
+    def defaultStore(self):
+        return self.stores.get('default')
+        
     def handleCommandLine(self, argv):
         '''  the command line is translated into the `_params`
         request variable as follows:
@@ -255,7 +259,24 @@ class RequestProcessor(TransactionProcessor):
 
         initConstants( [ 'actions'], {})
         initConstants( ['default_mime_type'], '')        
-        self.loadDataStore(appVars)
+        self.initLock(appVars)
+        self.txnSvc = transactions.ProcessorTransactionService(self)
+        if 'stores' in appVars:
+            initConstants( [ 'stores'], {})
+            stores = utils.attrdict()
+            for name, storeConfig in appVars['stores'].items():
+                stores[name] = self.loadDataStore(storeConfig)
+                if storeConfig.get('default_store'):
+                    stores['default'] = stores[name]
+            if stores and 'default' not in stores:
+                if len(stores) > 1:
+                    raise VesperError('default store not set')                                        
+                else:
+                    stores['default'] = stores.values()[0]
+            self.stores = stores
+        else:
+            self.stores = utils.attrdict(default=self.loadDataStore(appVars))
+            
         #app_name is a unique name for this request processor instance
         initConstants( ['app_name'], 'root')
         self.log = logging.getLogger("app." + self.app_name)
@@ -542,9 +563,9 @@ def createStore(json='', **kw):
     for name, default in [('storage_url', 'mem://'), ('storage_template', json),
                       ('storage_template_options', dict(toplevelBnodes=False))]:
         if name not in kw:
-            kw[name] = default    
+            kw[name] = default
     root = createApp(**kw).run(False)
-    return root.dataStore
+    return root.defaultStore
 
 def _initConfigState():
     global _current_config, _current_configpath

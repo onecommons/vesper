@@ -16,7 +16,7 @@ def load_data(data):
 
 @Route("api/{action}")
 def api_handler(kw, retval):
-    data_store = kw['__server__'].dataStore
+    data_store = kw['__server__'].defaultStore
     params = kw['_params']
     action = kw['urlvars']['action']
     

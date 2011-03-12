@@ -136,9 +136,10 @@ class AppTestCase(unittest.TestCase):
         app = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:')        
         app.load()        
         root = app._server
-        #print 'model', root.dataStore.model.managedModel.model
+        dataStore = root.defaultStore
+        #print 'model', dataStore.model.managedModel.model
         #set timestamp to 0 so tests are reproducible:
-        root.dataStore.model.createTxnTimestamp = lambda *args: 0
+        dataStore.model.createTxnTimestamp = lambda *args: 0
         expectedChangeSet = makeChangeset('0A', '0A00001')
         
         #set a notifyChangeset hook to test if its called properly
@@ -150,17 +151,17 @@ class AppTestCase(unittest.TestCase):
                                                     if k != 'statements']
             diff = utils.pprintdiff(x(changeset), x(expectedChangeSet))                    
             self.assertEquals(changeset, expectedChangeSet, diff)
-        root.dataStore.model.notifyChangeset = testNotifyChangeset
+        dataStore.model.notifyChangeset = testNotifyChangeset
         
         self.failUnless(root.loadModelHookCalled)
-        self.failUnless(not root.dataStore.model._currentTxn)        
-        self.assertEquals(root.dataStore.model.currentVersion, '0')
+        self.failUnless(not dataStore.model._currentTxn)        
+        self.assertEquals(dataStore.model.currentVersion, '0')
         
         #the "foo" request handler defined in testUpdatesApp.py adds content to the store:
         result = root.runActions('http-request', dict(_name='foo'))
         response = "<html><body>page content.</body></html>"
         self.assertEquals(response, result)        
-        self.assertEquals(root.dataStore.model.currentVersion, '0A00001')
+        self.assertEquals(dataStore.model.currentVersion, '0A00001')
         
         self.assertEquals(root.updateResults['_added']['data'], 
             [{'comment': u'page content.', 'id': '@a_resource', 'label': 'foo'}])
@@ -175,7 +176,7 @@ class AppTestCase(unittest.TestCase):
         root.updateResults = {}
         result = root.runActions('http-request', dict(_name='jj'))                
         self.assertEquals('<html><body>not found!</body></html>', result)
-        self.assertEquals(root.dataStore.model.currentVersion, '0A00001')
+        self.assertEquals(dataStore.model.currentVersion, '0A00001')
         
         self.failUnless('_addedStatements' not in root.updateResults, root.updateResults)
         self.failUnless('_added' not in root.updateResults)
@@ -184,7 +185,7 @@ class AppTestCase(unittest.TestCase):
         
         try:
             #merging our own changeset in again should throw an error:
-            root.dataStore.merge(self.notifyChangeset)
+            dataStore.merge(self.notifyChangeset)
         except RuntimeError, e:
             self.assertEquals(str(e), 'merge received changeset from itself: 0A')
         else:
@@ -193,9 +194,9 @@ class AppTestCase(unittest.TestCase):
         app2 = vesper.app.createApp(baseapp='testUpdatesApp.py', model_uri='test:', trunk_id='0A', branch_id='0B')
         app2.load()
         root2 = app2._server
-        self.failUnless( root2.dataStore.merge(self.notifyChangeset) )
+        self.failUnless( root2.defaultStore.merge(self.notifyChangeset) )
                 
-        self.assertEquals(root2.dataStore.query("{*}"), 
+        self.assertEquals(root2.defaultStore.query("{*}"), 
             [{'comment': 'page content.', 'id':  '@a_resource', 'label': 'foo'}])
 
     def testRemoves(self):
@@ -590,7 +591,7 @@ class AppTestCase(unittest.TestCase):
         if save_history: 
             self.assertEqual(store.model.currentVersion, '0A00001')
         else:
-            self.failUnless(isinstance(root.dataStore.model, DataStore.ModelWrapper))
+            self.failUnless(isinstance(store.model, DataStore.ModelWrapper))
         
     def test2PhaseTxn(self):
         '''
@@ -665,6 +666,41 @@ class AppTestCase(unittest.TestCase):
         )
         root = app.load()
         self.failUnless(root)
+
+    def testMultipleStores(self):
+        app = vesper.app.createApp(stores = { 
+        'config' : dict(storage_template='''{
+            "id" : "c1", "prop" : 1
+        }'''),
+          'data' : dict(default_store=True, storage_template='''{
+          "id" : "d1", "prop" : 1
+        }''')
+        })
+        root = app.load()
+        self.failUnless(root and root.defaultStore is root.stores.data)
+        
+        def transaction():
+            root.stores.config.update(dict(id='c2', prop2=1))
+            root.stores.data.update(dict(id='d1', prop2=1))
+        root.executeTransaction(transaction)
+        
+        cdata = [{'id': '@c2', 'prop2': 1}, {'id': '@c1', u'prop': 1}]
+        ddata = [{'id': '@d1', 'prop2': 1, u'prop': 1}]        
+        self.assertEquals(root.stores.config.query("{*}"), cdata)
+        self.assertEquals(root.defaultStore.query("{*}"), ddata)
+        
+        def transaction2():
+            root.stores.config.update(dict(id='c2', prop3=1))
+            root.stores.data.update(dict(id='d1', prop3=1))
+            raise Error()
+        try:
+            root.executeTransaction(transaction2)
+        except:
+            pass
+        else:
+            self.fail('should have raised an error')
+        self.assertEquals(root.stores.config.query("{*}"), cdata)
+        self.assertEquals(root.defaultStore.query("{*}"), ddata)
         
 if __name__ == '__main__':
     import sys    

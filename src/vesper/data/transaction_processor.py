@@ -19,32 +19,33 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         self.log = log
         self.get_principal_func = lambda kw: ''
 
-    def loadDataStore(self, configDict):
-        self.model_uri = configDict.get('model_uri')
-        if not self.model_uri:
-            import socket
-            self.model_uri= 'http://' + socket.getfqdn() + '/'        
-        self.lockfilepath = configDict.get('file_lock_path')
-            
+    def initLock(self, configDict):
         useFileLock = configDict.get('use_file_lock')
         if useFileLock:
-            if isinstance(useFileLock, type):
+            if callable(useFileLock):
                 self.LockFile = useFileLock
             else:
                 self.LockFile = glock.LockFile
         else:
             self.LockFile = glock.NullLockFile #the default
-        
-        self.txnSvc = transactions.ProcessorTransactionService(self)
-        
+        self.lockfilepath = configDict.get('file_lock_path')
+
+    def loadDataStore(self, configDict):
+        self.model_uri = configDict.get('model_uri')
+        if not self.model_uri:
+            import socket
+            self.model_uri= 'http://' + socket.getfqdn() + '/'
+
         dataStoreFactory = configDict.get('datastore_factory', DataStore.BasicStore)
-        self.dataStore = dataStoreFactory(self, **configDict)
-        self.dataStore.addTrigger = self.txnSvc.addHook
-        self.dataStore.removeTrigger = self.txnSvc.removeHook
+        dataStore = dataStoreFactory(self, **configDict)
+        dataStore.addTrigger = self.txnSvc.addHook
+        dataStore.removeTrigger = self.txnSvc.removeHook
 
         if configDict.get('actions',{}).get('before-new'):
             #newResourceHook is optional since it's expensive
-            self.dataStore.newResourceTrigger = self.txnSvc.newResourceHook
+            dataStore.newResourceTrigger = self.txnSvc.newResourceHook
+            
+        return dataStore
 
     def getLockFile(self):                                 
         if not self.lockfile:
@@ -66,7 +67,8 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     def loadModel(self):
         lock = self.getLock()
         try:
-            self.dataStore.load()
+            for store in self.stores.values():
+                store.load()
         finally:
             lock.release()
         

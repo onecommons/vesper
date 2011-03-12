@@ -14,26 +14,27 @@ badCommitCalled = False
 def testInTransactionAction(kw, retval):
     if kw._name != 'errorInCommit':
         return retval
-    kw.__server__.dataStore.add({"id" : "test", "test" : 'hello!'})
+    dataStore = kw.__server__.defaultStore
+    dataStore.add({"id" : "test", "test" : 'hello!'})
     def badCommit(*args, **kw):
         global badCommitCalled
         badCommitCalled = True 
         raise RuntimeError("this error inside commit")
         
     global originalCommit    
-    originalCommit = kw.__server__.dataStore.model.commit
+    originalCommit = dataStore.model.commit
     from vesper.data import DataStore
-    if isinstance(kw.__server__.dataStore.model, DataStore.ModelWrapper): 
-        kw.__server__.dataStore.model.model.commit = badCommit        
+    if isinstance(dataStore.model, DataStore.ModelWrapper): 
+        dataStore.model.model.commit = badCommit        
     else:
-        kw.__server__.dataStore.model.commit = badCommit 
+        dataStore.model.commit = badCommit 
     return 'success'
 
 @Action
 def errorhandler(kw, retval):
-    #print 'in error handler', kw['_errorInfo']['errorCode'], 'badCommit', badCommitCalled, kw.__server__.dataStore.model
+    #print 'in error handler', kw['_errorInfo']['errorCode'], 'badCommit', badCommitCalled, kw.__server__.defaultStore.model
     if originalCommit:
-        kw.__server__.dataStore.model.commit = originalCommit        
+        kw.__server__.defaultStore.model.commit = originalCommit        
 
     if kw['_errorInfo']['errorCode'] == 404:
         kw['_responseHeaders']['_status'] = 404

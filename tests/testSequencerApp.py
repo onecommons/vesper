@@ -7,7 +7,7 @@ from vesper.web.route import Route, gensequence
 def fromdatastore(kw, retval):
     from vesper import query as jql
     query = "{comment where(label='%s')}" % kw['_name']
-    result = list(jql.runQuery(query, kw['__server__'].dataStore.model))
+    result = list(jql.runQuery(query, kw['__server__'].defaultStore.model))
         
     template = '<html><body>%s</body></html>'
     if result:

@@ -78,7 +78,7 @@ def datarequest(kw, retval):
         response['result'] = result
         return response
 
-    dataStore = kw.__server__.dataStore
+    dataStore = kw.__server__.defaultStore
     postdata = kw._postContent
     # some json libs return unicode keys, which causes problems with **dict usages
     try:
