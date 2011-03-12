@@ -258,8 +258,6 @@ class RequestProcessor(TransactionProcessor):
         self.loadDataStore(appVars)
         #app_name is a unique name for this request processor instance
         initConstants( ['app_name'], 'root')
-        if not self.app_name:
-            self.app_name = re.sub(r'\W','_', self.model_uri)
         self.log = logging.getLogger("app." + self.app_name)
                         
         self.defaultRequestTrigger = appVars.get('default_trigger','http-request')

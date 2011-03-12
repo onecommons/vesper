@@ -153,7 +153,7 @@ class BasicStore(DataStore):
         #of your app's implementation) include that in the model
         if self.application_model:
             stmtGen = base.parseRDFFromString(self.application_model, 
-                requestProcessor.model_resource_uri, scope=graphmod.APPCTX) 
+                requestProcessor.model_uri, scope=graphmod.APPCTX) 
             appmodel = MemStore(stmtGen)
             #XXX MultiModel is not very scalable -- better would be to store 
             #the application data in the model and update it if its difference 
@@ -163,7 +163,7 @@ class BasicStore(DataStore):
         if self.save_history:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
             self.model = self.graphManager = graphmod.MergeableGraphManager(model, 
-                historyModel, requestProcessor.model_resource_uri, lastScope, self.trunk_id, self.branch_id) 
+                historyModel, requestProcessor.model_uri, lastScope, self.trunk_id, self.branch_id) 
             if self._txnparticipants:
                 self._txnparticipants.insert(0, #must go first
                         TwoPhaseTxnGraphManagerAdapter(self.graphManager))
@@ -203,13 +203,13 @@ class BasicStore(DataStore):
         requestProcessor = self.requestProcessor
         if self.save_history:
             #if we're going to be recording history we need a starting context uri
-            initCtxUri = graphmod.getTxnContextUri(requestProcessor.model_resource_uri, 0)
+            initCtxUri = graphmod.getTxnContextUri(requestProcessor.model_uri, 0)
         else:
             initCtxUri = ''
         
         #data used to initialize a new store
         defaultStmts = base.parseRDFFromString(self.storage_template, 
-                        requestProcessor.model_resource_uri, scope=initCtxUri, 
+                        requestProcessor.model_uri, scope=initCtxUri, 
                         options=self.storage_template_options) 
         
         if self.save_history == 'split':                                                

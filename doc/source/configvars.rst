@@ -17,11 +17,11 @@ datastore configuration variables
 
 .. confval:: model_uri
 
-    The base URI reference to be used when creating RDF resources    
-    
-    Default: 'http://' + socket.getfqdn() + '/'
+  The resource that represents the model this instance of the application is running.
 
-    Example: ``model_uri='http://example.com/'``
+  Default: 'http://' + socket.getfqdn() + '/'
+
+  Example: ``model_uri='http://example.com/'``
 
 .. confval:: storage_url 
 
@@ -219,13 +219,6 @@ web configuration variables
     default is '' (not set)
     default_mime_type='text/plain'
 
-.. confval:: model_resource_uri
-
-    The resource that represents the model this instance of the application is running
-    it can be used to assertions about the model itself, e.g its location or which application created it
-    default is the value of model_uri
-    model_resource_uri = 'http://example.org/rhizomeapp/2/20/2004'
-
 .. confval:: default_expires_in
 
     What to do about Expires HTTP response header if it 
@@ -283,35 +276,26 @@ These setting variables are only necessary when developing a new Raccoon applica
 
 .. confval:: actions
 
-      A dictionary that is the heart of an application running on Raccoon 
-      The key is the name of the trigger and the value is list of Actions that are invoked in that order
-      Raccoon currently uses these triggers:
-       * 'http-request' is invoked by RequestProcessor.handleRequest (for http requests) and by the 'site:' URL resolver
-       * 'load-model' is invoked after a model is loaded
+      The dictionary that defines the Actions the app should use.
+      The key is the name of the trigger and the value is a list of Actions that are invoked in that order
+      Vesper currently uses these triggers:
+       * 'http-request' is invoked by HTTPRequestProcessor.handleHTTPRequest
+       * 'load-model' is invoked on start-up after the app's stores have been initialized
        * 'run-cmds' is invoked on start-up to handle command line arguements
-       * 'before-add' and 'before-remove' is invoked every time a statement is added or removed
-       * 'before-new' is invoked when a new resource is added
-       * 'before-prepare' is invoked at the end of a transaction but trigger still has a chance to modify it
-       * 'before-commit' is invoked when transaction frozen and about to be committed, one last chance to abort it
-       * 'after-commit' is invoked after a transaction is completed successfully 
+       * 'before-add' and 'before-remove' is invoked when data is added or removed from a store
+       * 'before-new' is invoked when a new resource is added to a store
+       * 'before-commit' is invoked at the end of a transaction but trigger still has a chance to modify it
+       * 'finalize-commit' is invoked after all transaction participants have successfully prepared to commit, one last chance to abort about the transaction
+       * 'after-commit' is invoked after a transaction has completed successfully 
+       * 'after-abort' is invoked after a transaction was aborted
        * triggerName + '-error' is invoked when an exception is raised while processing a trigger
-      see Action class for more info::
-         
-           actions = { 'http-request' : [Action(['.//myNs:contents/myNs:ContentTransform/myNs:transformed-by/*',], 
-                                                __server__.processContents, matchFirst = False, forEachNode = True)],
-                  'run-cmds' : [ Action(["$import", '$i'], lambda result, kw, contextNode, retVal, rhizome=rhizome: 
-                                      rhizome.doImport(result[0], **kw)),
-                                 Action(['$export', '$e'], lambda result, kw, contextNode, retVal, rhizome=rhizome: 
-                                      rhizome.doExport(result[0], **kw)),
-                              ],
-                  'load-model' : [ FunctorAction(rhizome.initIndex) ],
-                }
 
 .. confval:: default_trigger 
 
-      Used by Requestor objects and the "site:" URL resolver as the trigger to use to invoke a request
-      default is 'http-request'
-      DEFAULT_TRIGGER='http-request'
+      Used by Requestor objects as the trigger to use to invoke a request
+      default is 'http-request'.
+      
+      Example: ``default_trigger='http-request'``
 
 .. confval:: global_request_vars
 
@@ -320,7 +304,7 @@ These setting variables are only necessary when developing a new Raccoon applica
       default is [] (but `vesper.app`  will always adds the following: 
       '_name', '_noErrorHandling', '__current-transaction', and '__readOnly')
 
-      global_request_vars = [ '__account', '_static'] 
+      Example: ``global_request_vars = [ '__account', '_static']``
 
 .. confval:: get_principal_func
 
@@ -339,11 +323,9 @@ These setting variables are only necessary when developing a new Raccoon applica
       Its signature looks like:
       ``def validate_external_request(kw)``
       where `kw` is the request metadata dictionary (which can be modified if necessary).
-      It should raise raccoon.NotAuthorized if the request should not be processed.
+      It should raise vesper.app.NotAuthorized if the request should not be processed.
       
       default is lambda *args: True
-      
-      ``validate_external_request=rhizome.validate_external_request``
 
 .. confval:: secure_file_access
 

@@ -24,7 +24,6 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         if not self.model_uri:
             import socket
             self.model_uri= 'http://' + socket.getfqdn() + '/'        
-        self.model_resource_uri = configDict.get('model_resource_uri', self.model_uri)
         self.lockfilepath = configDict.get('file_lock_path')
             
         useFileLock = configDict.get('use_file_lock')
@@ -50,7 +49,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     def getLockFile(self):                                 
         if not self.lockfile:
             if not self.lockfilepath:
-                lockName = 'r' + str(hash(self.model_resource_uri)) + '.lock'
+                lockName = 'r' + str(hash(self.model_uri)) + '.lock'
                 lockfilepath = os.path.join(tempfile.gettempdir(), lockName)
             else:
                 lockfilepath = self.lockfilepath
