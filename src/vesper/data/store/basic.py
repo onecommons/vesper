@@ -128,7 +128,7 @@ class FileStore(MemStore):
     '''    
     autocommit = False
     
-    def __init__(self, source='', defaultStatements=(), context='',
+    def __init__(self, source, defaultStatements=(), context='',
            incrementHook=None, serializeOptions=None, parseOptions=None, 
            checkForExternalChanges=True, **kw):
         self.initialContext = context
@@ -150,7 +150,10 @@ class FileStore(MemStore):
             parseOptions['saveOrder'] = preserveOrder
             pjsonOptions['saveOrder'] = preserveOrder
         self.serializeOptions = serializeOptions
-                
+        
+        if not source:
+            raise RuntimeError('failed to create FileStore: missing path')
+        
         stmts, format, fsize, mtime = loadFileStore(source, context, 
                                         incrementHook, parseOptions)
         if stmts is None:

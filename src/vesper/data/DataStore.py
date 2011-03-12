@@ -143,8 +143,13 @@ class BasicStore(DataStore):
         if not model:
             #setupHistory didn't initialize the store, so do it now
             #model_factory will load the store specified by `source` or create
-            #new one at that location and initializing it with `defaultStmts`
-            model_factory = self.model_factory or FileStore
+            #new one at that location and initializing it with `defaultStmts`            
+            model_factory = self.model_factory
+            if not model_factory:
+                if source:
+                    model_factory = FileStore
+                else:
+                    model_factory = MemStore
             self.log.info("Using %s at '%s'" % (model_factory.__name__, source))
             model = model_factory(source=source, defaultStatements=defaultStmts,
                                                             **self.model_options)

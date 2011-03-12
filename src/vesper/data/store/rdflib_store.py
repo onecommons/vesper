@@ -124,7 +124,7 @@ class RDFLibStore(Model):
         self.txnState = TxnState.DIRTY
 
 class RDFLibFileModel(RDFLibStore):
-    def __init__(self,source='', defaultStatements=(), context='', **kw):    
+    def __init__(self,source, defaultStatements=(), context='', **kw):    
         stmts, format, fsize, mtime = loadFileStore(source, context)
         if stmts is None:
             stmts = defaultStatements
