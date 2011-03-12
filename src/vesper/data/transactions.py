@@ -310,13 +310,16 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         state = self.state
         if self.isActive() and state.safeToJoin:            
             state.additions.extend(stmts)
-            if 'before-remove' in self.server.actions:
+            for stmt in stmts:
+                if stmt in state.removals:
+                    state.removals.pop( state.removals.index(stmt) )
+            if 'before-add' in self.server.actions:
                 if jsonrep is None:
-                    jsorep = pjson.tojson(stmts)
-                kw = {'_added' : jsorep }
-                #new resource detection is optional since it can be expensive
-                if self.server.dataStore.newResourceTrigger:
-                    kw['_newResources'] = state.newResources
+                    jsonrep = pjson.tojson(stmts)
+                kw = {
+                    '_addedStatements' : state.additions,
+                    '_added' : jsonrep, 
+                    '_newResources' : state.newResources }
                 self._runActions('before-add', kw)
 
     def removeHook(self, stmts, jsonrep=None):
@@ -326,13 +329,17 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         state = self.state
         if self.isActive() and state.safeToJoin:
             state.removals.extend(stmts)
+            for stmt in stmts:
+                if stmt in state.additions:
+                    state.additions.pop( state.additions.index(stmt) )
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
-                    jsorep = pjson.tojson(stmts)
-                kw = {'_removed' : jsorep }
-                #new resource detection is optional since it can be expensive
-                if self.server.dataStore.newResourceTrigger:
-                    kw['_newResources'] = state.newResources                                             
+                    jsonrep = pjson.tojson(stmts)
+                kw = {
+                    '_removedStatements' : state.removals, 
+                    '_removed' : jsonrep, 
+                    '_newResources' : state.newResources 
+                }
                 self._runActions('before-remove', kw)
     
     def _runActions(self, trigger, morekw=None):      
@@ -343,14 +350,11 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
             if morekw is None:                
                 morekw = { 
                 '_addedStatements' : state.additions,
-                '_removedStatements' : state.removals,         
+                '_removedStatements' : state.removals,
                 '_added' : pjson.tojson(state.additions),
-                '_removed' : pjson.tojson(state.removals)
-                         }
-                #new resource detection is optional since it can be expensive
-                if self.server.dataStore.newResourceTrigger:
-                    morekw['_newResources'] = state.newResources            
-
+                '_removed' : pjson.tojson(state.removals),
+                '_newResources' : state.newResources
+                }
             kw.update(morekw)
             errorSequence= self.server.actions.get(trigger+'-error')
             self.server.callActions(actions, kw, state.retVal,
@@ -381,8 +385,9 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
                 lock.release()
         
     def _prepareToVote(self):
-        #xxx: treating these two actions as transaction participants either end of the list
-        #with the action running in voteForCommit() would be more elegant
+        #xxx: treating these this action and "finalize-commit" as 
+        #   transaction participants either end of the list
+        #   with the action running in voteForCommit() would be more elegant
         
         #we're about to complete the transaction,
         #here's the last chance to modify it
@@ -398,11 +403,11 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         super(ProcessorTransactionService, self)._vote()
         
         #all participants have successfully voted to commit the transaction
-        #this trigger let's you look at the completed state
+        #you can't modify the transaction any more but
+        #this trigger let's you look at the completed state    
         #and gives you one last chance to abort the transaction        
         assert not self.state.safeToJoin 
         try:
-            #print self.state.additions
             self._runActions('finalize-commit')
         except:
             self.abort()
