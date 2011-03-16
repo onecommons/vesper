@@ -97,7 +97,7 @@ defaultblobrefname = 'multipartjsonref'
 def loads(data, doResolve=True, handleUnresolved='raise', default=None, 
     returnblobs=False, decoder=None, blobrefname=defaultblobrefname):
     '''
->>> loads("""=multipart-json
+>>> loads(u"""=multipart-json
 ... = id1 ===
 ... adsfasdfasdf
 ... ===
@@ -107,7 +107,7 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
 ... ====
 ... ["a", "json", "array"]
 ... """, returnblobs=True)
-([{'hello': 'world'}, ['a', 'json', 'array']], {'id2': 'adsfas===dfasdf', 'id1': 'adsfasdfasdf'})
+([{u'hello': u'world'}, [u'a', u'json', u'array']], {u'id2': u'adsfas===dfasdf', u'id1': u'adsfasdfasdf'})
     '''
     blobs = {}
     pairs_hook = False
@@ -162,23 +162,6 @@ def loads(data, doResolve=True, handleUnresolved='raise', default=None,
         return objs, blobs
     else:
         return objs
-
-if json.__version__[:3] < '2.0':
-    #the version of json that ships with 2.6 returns unicode even when passed a string
-    #update the docstring so doctests don't fail 
-    loads.__doc__='''
->>> loads("""=multipart-json
-... = id1 ===
-... adsfasdfasdf
-... ===
-... { "hello" : "world" }
-... = id2 ====
-... adsfas===dfasdf
-... ====
-... ["a", "json", "array"]
-... """, returnblobs=True)
-([{u'hello': u'world'}, [u'a', u'json', u'array']], {'id2': 'adsfas===dfasdf', 'id1': 'adsfasdfasdf'})
-    '''
 
 def resolve(json, handleUnresolved='raise', default=None):
     '''
