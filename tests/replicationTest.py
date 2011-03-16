@@ -8,9 +8,6 @@ import multiprocessing
 from urllib2 import urlopen
 from urllib import urlencode
 
-import morbid
-from twisted.internet import reactor
-
 from vesper.backports import json
 from vesper import app
 from vesper.data import replication
@@ -19,25 +16,8 @@ from vesper.web import route
 import logging
 logging.basicConfig()
 
-# uncomment to test against an existing stomp message queue
+# uncomment or use --mq cmd line option to test against an existing stomp message queue
 USE_EXISTING_MQ = None #"test-queue:61613"
-
-def invokeAPI(name, data, where=None, port=8000):
-    "make a vesper api call"
-    url = "http://localhost:%d/api/%s" % (port, name)
-    
-    if isinstance(data, dict):
-        data = json.dumps(data)
-        
-    post = {
-        "data":data
-    }
-    if where:
-        post['where'] = where
-        
-    tmp = urlopen(url, data=urlencode(post)).read()
-    return json.loads(tmp)
-
 
 def startMorbidQueue(port):
     print "starting morbid queue on port %d" % port
@@ -52,6 +32,40 @@ def startMorbidQueue(port):
     stomp_factory = morbid.get_stomp_factory(cfg=options)
     reactor.listenTCP(options['port'], stomp_factory, interface=options['interface'])
     reactor.run()
+
+def startCoilMQ(port):
+    print "starting coilmq queue on port %d" % port
+    server = ThreadedStompServer(('127.0.0.1', port), 
+        queue_manager = QueueManager(store=MemoryQueue()),
+        topic_manager = TopicManager() )
+    server.serve_forever()
+
+try:
+    from coilmq.server.socketserver import ThreadedStompServer
+    from coilmq.topic import TopicManager
+    from coilmq.queue import QueueManager
+    from coilmq.store.memory import MemoryQueue
+    startQueue = startCoilMQ
+except ImportError:
+    import morbid
+    from twisted.internet import reactor
+    startQueue = startMorbidQueue
+
+def invokeAPI(name, data, where=None, port=8000):
+    "make a vesper api call"
+    url = "http://localhost:%d/api/%s" % (port, name)
+
+    if isinstance(data, dict):
+        data = json.dumps(data)
+
+    post = {
+        "data":data
+    }
+    if where:
+        post['where'] = where
+
+    tmp = urlopen(url, data=urlencode(post)).read()
+    return json.loads(tmp)
 
 def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
     try:
@@ -79,10 +93,11 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
         
     }
     # assume remote queue implements message ack
-    if USE_EXISTING_MQ:
-        autoAck=False
-    else:
+    if startQueue is startMorbidQueue:
+        #morbid doesn't support stomp ack
         autoAck=True
+    else:
+        autoAck=False
     
     rep = replication.get_replicator(nodeId, conf['replication_channel'], hosts=conf['replication_hosts'], autoAck=autoAck)
     conf['changeset_hook'] = rep.replication_hook
@@ -110,7 +125,7 @@ class BasicReplicationTest(unittest.TestCase):
         else:
             mq_host = "localhost"
             mq_port = random.randrange(5000,9999)
-            self.morbidProc = multiprocessing.Process(target=startMorbidQueue, args=(mq_port,))
+            self.morbidProc = multiprocessing.Process(target=startQueue, args=(mq_port,))
             self.morbidProc.start()        
         
         self.replicationTopic = "UNITTEST" + str(random.randrange(100,999))
@@ -157,25 +172,13 @@ class BasicReplicationTest(unittest.TestCase):
         time.sleep(1) # XXX
         # do a query on rhizomeB
         r2 = invokeAPI("query", "{*}", port=self.rhizomeB_port)
-        self.assertEquals(expected, r2['results']) # XXX is this order predictable?
-        
-    """
-    def testClientAck(self):
-        import stomp
-        client_id = "testclient-" + str(random.randrange(100,999))
-        
-        conn = stomp.Connection([('localhost', self.morbidQ_port)])
-        conn.start()
-        conn.connect(headers={'client-id':client_id})
-        headers = {
-            'persistent':'true',
-            'clientid':client_id
-        }
-        conn.send("foo", destination='/topic/%s' % self.replicationTopic, headers=headers)
-    """
-        
-        
-        
+        self.assertEquals(expected, r2['results']) # XXX is this order predictable?        
 
 if __name__ == '__main__':
+    if sys.argv.count('--mq'):
+        arg = sys.argv.index('--mq')
+        USE_EXISTING_MQ = sys.argv[arg+1]
+        del sys.argv[arg:arg+2]        
+        startQueue = None
+    
     unittest.main()

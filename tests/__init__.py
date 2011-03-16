@@ -15,12 +15,15 @@ except ImportError:
     print "skipping Bdb tests"
 else:
     __all__.append('BdbModelTest')
-    
+
 try:
     import multiprocessing
-    import stomp
-    import morbid
-    import twisted.internet    
+    import stomp    
+    try:
+        import coilmq
+    except ImportError:
+        import morbid
+        import twisted.internet
 except ImportError:
     print "skipping replication tests"
 else:
@@ -32,6 +35,13 @@ except ImportError:
     print "skipping tokyo tyrant tests"
 else:
     __all__.append("basicTyrantTest")
+
+try:
+    import memcache
+except ImportError:
+    print "skipping memcache tests"
+else:
+    __all__.append("MemCacheModelTest")
     
 if __name__ == '__main__':
     import sys
