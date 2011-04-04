@@ -46,12 +46,13 @@ ol li {
 	/*giving OL's LIs generated numbers*/
 	list-style: decimal outside;	
 }
+/*
 ul li {
-	/*giving UL's LIs generated disc markers*/
+	giving UL's LIs generated disc markers
 	list-style: disc outside;
 }
-dl dd {
-	/*giving UL's LIs generated numbers*/
+*/
+dl dd {	
 	margin-left:1em;
 }
 th,td {

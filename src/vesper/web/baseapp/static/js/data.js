@@ -26,6 +26,7 @@ Txn.prototype = {
     url : '/datarequest',
     
     execute : function(action, data, callback, elem) {
+        var elem = elem || document;
         var requestId = Math.random(); 
         //XXX allow requestid specified to replace a previous request
 
@@ -54,7 +55,6 @@ Txn.prototype = {
         });
                 
         if (callback) {
-            //note: if elem is undefined will bind on doc            
             $(elem).one('dbdata.'+this.txnId, function(event) {
                 //the response is a list and jquery turns that into arguments  
                 konsole.log('thiscallback', arguments);
@@ -83,9 +83,9 @@ Txn.prototype = {
     /* 
     */
     commit : function(callback, elem) {
-        var txnId = this.txnId;
+        var elem = elem || document;
+        var txnId = this.txnId;        
         if (callback) { //callback signature: function(event, *responses)
-            //note: if elem is undefined will bind on doc            
             $(elem).one('dbdata.'+txnId, callback);
         }        
         
@@ -189,7 +189,7 @@ txn.commit();
                     data.bindvars['this'] =  thisid;
                 }                
             }
-            txn.execute(action, data, callback, this[0]);
+            txn.execute(action, data, callback, this.length ? this[0] : null);
          } else {
             this.each(function() {
                 var obj = bindElement(this);
@@ -254,6 +254,7 @@ txn.commit();
         return this;        
      }
    })
+
 })(jQuery);
 
 function bindElement(elem) {    
@@ -701,49 +702,3 @@ Binder.FormBinder.prototype = {
 Binder.FormBinder.bind = function( form, obj ) {
   return new Binder.FormBinder( form, obj );
 };
-
-/* not currently used
-the idea is enable method dispatching based on a jQuery selector
-so DOM elements can be typed.
-E.g.
-$('.class1').dBind({
-  save : function() {...}
-});
-$('.class2').dBind({
-  save : function() {...}
-});
-//"base class":
-$('div').dBind({
-   save : function() {}
-});
-$('container [itemid]').dCall('save', 1,2);
-
-var _funcmap = {};
-function addDispatches(selector, methods) {
-    for (var name in methods) {
-        var funcs = _funcmap[name];
-        if (!funcs) {
-            funcs = {};
-            _funcmap[name] = funcs;
-        }
-        funcs[selector] = methods[name];
-        //XXX selectors should be sorted by specificity
-        //so defaults like "*" go last
-    }   
-}
-
-function dispatch(name, args) {    
-    //preserves order but can be slower
-    var funcs = _funcmap[name];
-    this.each(function() {        
-        for (var selector in funcs) {
-            var $this = $(this);
-            if ($this.is(selector)) {
-                funcs[selector].call($this, args || []);
-                break;
-            }
-        }
-    });
-    return this;
-}
-*/

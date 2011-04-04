@@ -7,7 +7,7 @@
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/logger/logger-min.js"></script> 
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yuitest/yuitest.js"></script>
     <script type="text/javascript" src="yuitest-async.js"></script>
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.js"></script>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.js"></script>
     <script type="text/javascript" src="js/json2.js"></script>
     <script type="text/javascript" src="js/data.js"></script>
   </head>
@@ -17,7 +17,7 @@
 
   function verifyQuery(testcase, query, expected, done) {
     var errormsg = 'unexpected result for ' + query;
-    $().dbQuery(query,
+    $(document).dbQuery(query,
      function(data) {
        testcase.offthread(function() {
         Assert.isUndefined(data.error, errormsg);
@@ -48,7 +48,7 @@
           //javascript doesn't provide an easy way to do deep equality on objects, 
           //so instead we'll compare JSON strings of objects
 
-          $().dbCreate(pjson1,
+          $(document).dbCreate(pjson1,
             function(data) {
               testcase.checkResponse(data, true, 'dbcreate');
               verifyData();
@@ -78,7 +78,7 @@
           */
 
           //test transaction rollback 
-          $().dbBegin().dbAdd({id : '1',
+          $(document).dbBegin().dbAdd({id : '1',
               prop2 : 'another prop'
           }).dbQuery('{* where (id="1")}', function(response) {
             //error -32001 == client-side rollback       
@@ -90,7 +90,7 @@
 
           //the dbCreate() should trigger an error on the server-side because the id 
           //is already defined that aborts the whole transaction 
-          $().dbBegin().dbAdd({
+          $(document).dbBegin().dbAdd({
               id : '1',
               prop2 : 'another prop'
             }, function(response){
@@ -126,11 +126,11 @@
               Assert.areEqual(txnCallbacksCalled, 1);
             }, true); //this is the last test in this testcase
           }
-          $().bind('dbdata-*', customTriggerFunc);
+          $(document).bind('dbdata-*', customTriggerFunc);
 
           var txnCallbacksCalled = 0;
           //make sure commit worked and dbQuery callback was called after dbCreate callback 
-          $().dbBegin().dbReplace({ id : '1' }).dbQuery(
+          $(document).dbBegin().dbReplace({ id : '1' }).dbQuery(
             "{* where (id='1')}",
              function(data) {
                 txnCallbacksCalled++;
@@ -143,7 +143,7 @@
             }).dbCommit(function(event, response) {
               //we need resume() to be called by the last callback which should be this one
               //based on the order in which 'dbdata' handlers are bound
-              //$().unbind('dbdata', customTriggerFunc);
+              //$(document).unbind('dbdata', customTriggerFunc);
               testcase.offthread(function() {                
                 Assert.areEqual(txnCallbacksCalled, 1);
                 Assert.areEqual(customTrigger, 0);

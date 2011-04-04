@@ -4,9 +4,23 @@
  */
 (function($) {
 
-$.widget("ui.hresize", $.extend({}, $.ui.mouse, {
+$.widget("ui.hresize", $.ui.mouse, {
+    
+    widgetEventPrefix: "resize",
 
-    _init: function() {
+    options: {
+        animate: false,
+        animateDuration: "slow",
+        animateEasing: "swing",
+        containment: false,
+        maxHeight: null,
+        maxWidth: null,
+        minHeight: 10,
+        minWidth: 10,
+        zIndex: 1000
+    },
+    
+    _create: function() {
 
         var self = this, o = this.options;
         this.element.addClass("ui-resizable ui-hresize");
@@ -161,22 +175,10 @@ $.widget("ui.hresize", $.extend({}, $.ui.mouse, {
         };
     }
     
-}));
+});
 
 $.extend($.ui.hresize, {
-    version: "1.8a1",
-    eventPrefix: "resize",
-    defaults: $.extend({}, $.ui.mouse.defaults, {
-        animate: false,
-        animateDuration: "slow",
-        animateEasing: "swing",
-        containment: false,
-        maxHeight: null,
-        maxWidth: null,
-        minHeight: 10,
-        minWidth: 10,
-        zIndex: 1000
-    })
+    version: "1.8.11"
 });
 
 var num = function(v) {
