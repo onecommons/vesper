@@ -244,7 +244,7 @@ web configuration variables
     configuration file. This property sets the `module_directory` parameter 
     in the `mako.lookup.TemplateLookup` constructor.
     
-    default is `"mako_module"` relative to the location of the app configuration file.
+    Default is `"mako_module"` relative to the location of the app configuration file.
     
 .. confval:: template_options
 
@@ -252,12 +252,23 @@ web configuration variables
   `mako.lookup.TemplateLookup` constructor used when initializing the template engine.
   Keys in this dictionary override the default values for that parameter.
   
-  default is `{}`
+  Default is `{}`
   
 advanced configuration variables 
 ================================
 
-These setting variables are only necessary when developing a new Raccoon application
+.. confval:: stores
+
+  A dictionary of stores, whose keys are the names of the store and values are dictionaries 
+  containing the datastore configuration settings for that store.
+  
+  If more than one store is specified, a default store must be indicated, in one of two ways:
+  either by naming the store "default" or by including a "default_store" setting in the stores' 
+  dictionary of configuration settings.
+
+  If `stores` is set, then other datastore configuration settings are ignored. 
+  
+  Example: ``stores = {'config': {'storage_path': 'config.json'}, 'data': {'storage_path': 'data.json', 'default_store': True}}``
 
 .. confval:: app_name
 
