@@ -848,7 +848,7 @@ def generateUUIDSequence(start=0, prefix='test:'):
             seq+=1
             yield uuid.uuid3(uuid.NAMESPACE_URL, '%s%04d'%(prefix, seq))
     generator = generateUUID()
-    return lambda: str(generator.next())
+    return lambda obj: 'uuid:' + str(generator.next())
 
 class Parser(object):
     '''
@@ -874,7 +874,7 @@ class Parser(object):
         self.setBNodeOnObj = setBNodeOnObj
         self.toplevelBnodes = toplevelBnodes
         self._bnodeCounter = 0
-        self.generateUUID = generateUUID or (lambda: str(uuid.uuid4()))
+        self.generateUUID = generateUUID or (lambda obj: 'uuid:' + str(uuid.uuid4()))
         self.saveOrder = saveOrder
         self.checkForDuplicateIds = checkForDuplicateIds
     
@@ -897,7 +897,7 @@ class Parser(object):
             objId = newParseContext.getProp(obj, 'id')
             if objId is None:
                 if not parentid and not self.toplevelBnodes:
-                    objId = 'uuid:' + self.generateUUID()
+                    objId = self.generateUUID(obj)
                 else:
                     #mark bnodes for nested objects differently                
                     prefix = parentid and 'j:e:' or 'j:t:'
