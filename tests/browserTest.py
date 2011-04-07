@@ -43,17 +43,25 @@ def startVesperInstance(port, queue):
     ).run()
     # blocks forever
 
+def startServer():
+    port = 5555 #random.randrange(5000,9999)
+    queue = multiprocessing.Queue()        
+    serverProcess = multiprocessing.Process(target=startVesperInstance, args=(port,queue))
+    serverProcess.start()        
+    return serverProcess, queue, port
+
+def run():
+    serverProcess, queue, port = startServer()
+    queue.get(True, 5) #raise Queue.EMPTY if server isn't ready in 5 second 
+    try:
+        serverProcess.join() #block
+    except:
+        serverProcess.terminate()
+    
 class BrowserTestRunnerTest(unittest.TestCase):
 
-    def startServer(self):
-        port = 5555 #random.randrange(5000,9999)
-        queue = multiprocessing.Queue()        
-        serverProcess = multiprocessing.Process(target=startVesperInstance, args=(port,queue))
-        serverProcess.start()        
-        return serverProcess, queue, port
-
     def testBrowserTests(self):
-        serverProcess, queue, port = self.startServer()
+        serverProcess, queue, port = startServer()
         urls = ['static/db_tests.html', 'static/binder_tests.html','data_test.html']
         try: 
             queue.get(True, 5) #raise Queue.EMPTY if server isn't ready in 5 second 
@@ -76,7 +84,10 @@ class BrowserTestRunnerTest(unittest.TestCase):
 keepRunnng = False
 if __name__ == '__main__':
     import sys
-    keepRunnng = '--run' in sys.argv
-    if keepRunnng:
+    if '--run' in sys.argv:
+        run()
+        sys.exit()
+    elif '--wait' in sys.argv:
+        keepRunnng = True
         sys.argv.remove('--run')
     unittest.main()
