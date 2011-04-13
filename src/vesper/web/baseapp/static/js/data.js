@@ -188,6 +188,8 @@ txn.commit();
                     }
                     data.bindvars['this'] =  thisid;
                 }                
+            } else if (!data.id && this.attr('itemid')) {
+                data.id = this.attr('itemid');
             }
             txn.execute(action, data, callback, this.length ? this[0] : null);
          } else {
@@ -203,6 +205,12 @@ txn.commit();
          return this;
      },
 
+     dbData : function() {
+         return this.map(function() {
+             return bindElement(this);
+         }).get();
+     },
+     
      /*
      [txn] [data] [callback]
      */
@@ -257,8 +265,9 @@ txn.commit();
 
 })(jQuery);
 
-function bindElement(elem) {    
-    if (elem.nodeName == 'FORM') {
+function bindElement(elem) {        
+    if (elem.nodeName == 'FORM' && 
+            !elem.hasAttribute('itemscope') && !elem.hasAttribute('itemid')) {
         var binder = Binder.FormBinder.bind( elem ); 
         return binder.serialize();
     }
@@ -332,7 +341,9 @@ function bindElement(elem) {
         }
     }
     
-    var elems = $(elem).find('*').andSelf();
+    var elems = $(elem).find('*');
+    if (!$(elem).is('[itemscope],[itemid]'))
+        elems = elems.andSelf();
     elems.filter('[itemprop]').each(function(){
        var $this = $(this);
        var parent = $this.parent().closest('[itemscope],[itemid]');
@@ -362,8 +373,8 @@ function bindElement(elem) {
     });
         
     var itemDict = {};
-    var items = $.map($.unique(itemElems), function(elem) {
-        var item = $(elem).data('item');        
+    var items = $.map($.unique(itemElems), function(itemElem) {
+        var item = $(itemElem).data('item');        
         if (item.id) {            
             var existing = itemDict[item.id];
             if (existing) {
@@ -374,7 +385,10 @@ function bindElement(elem) {
                 itemDict[item.id] = item;
             }
         }
-        return item;
+        if ($(itemElem).attr('itemprop') && itemElem != $(elem).get(0))
+            return null; //only include top-level items
+        else
+            return item;
     });
     $(itemElems).removeData('item');
     return items;     

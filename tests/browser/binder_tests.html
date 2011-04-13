@@ -308,8 +308,10 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           //console.log('items', items2, items2asRefs);
           //Assert.areEqual(items2, items2asRefs); 
           
+          //test multiple values for a prop
           var items3 = JSON.stringify(bindElement($$('microdata3')) );
           Assert.areEqual('[{"flavor":["Lemon sorbet","Apricot sorbet"]}]', items3);
+          //test multiple properties on an itemprop
           var items4 = JSON.stringify(bindElement($$('microdata4')) );
           Assert.areEqual('[{"favorite-color":"orange","favorite-fruit":"orange"}]', items4);
           
@@ -326,6 +328,14 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           Assert.areEqual('[{"id":"testid","enabled":true}]', items7);
           var items8 = JSON.stringify(bindElement($$('testprop3')) );
           Assert.areEqual('[{"id":"testid","disabled":false}]', items8);
+
+          //don't include prop not descendent of element but find itemid outside it
+          var items9 = JSON.stringify(bindElement($$('nested1')) );
+          Assert.areEqual('[{"id":"n1","label":"foo"}]', items9);
+          
+          //test if bind a nested object the outer object isn't included
+          var items10 = JSON.stringify(bindElement($$('nested-microdata')) );
+          Assert.areEqual('[{"id":"2","label":"foo"}]', items10);
         }
         
     }));
@@ -438,6 +448,19 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
    Disabled: <input id='testprop3' type='checkbox' class="type[boolean]" type="checkbox" name='disabled' value='true'></input>
 </div>
 
+<div itemid=n1>
+ <div id='nested1'>
+    <span itemprop=label>foo</span>
+ </div>
+ <span itemprop=outoftestscope>bar</span>
+</div>
+
+<div itemid=1>
+ <div id='nested-microdata' itemid=2 itemprop=child>
+   <span itemprop=label>foo</span>
+ </div>
+</div>
+
 <textarea id='microdata1expected'>
 [{"id":"http://purl.oreilly.com/works/45U8QJGZSQKDH8N",
   "type":"http://purl.org/vocab/frbr/core#Work",
@@ -452,15 +475,8 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
     "type":"http://purl.org/vocab/frbr/core#Expression",
     "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/EBOOK"}
     ]
-  },
-  {"id":"http://purl.oreilly.com/products/9780596007683.BOOK",
-  "type":"http://purl.org/vocab/frbr/core#Expression",
-  "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/BOOK"
-  },
-  {"id":"http://purl.oreilly.com/products/9780596802189.EBOOK",
-  "type":"http://purl.org/vocab/frbr/core#Expression",
-  "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/EBOOK"
   }]
 </textarea>
+
   </body>
 </html>
