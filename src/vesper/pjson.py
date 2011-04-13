@@ -968,8 +968,8 @@ class Parser(object):
         saveOrder = self.saveOrder
         while todo:
             obj, (id, parseContext), parentid = todo.pop(0)
-            if self.checkForDuplicateIds:
-                if id in alreadySeen:
+            if self.checkForDuplicateIds and len(obj) > 1:
+                if id in alreadySeen:                                                                                
                     raise RuntimeError("duplicate id encountered: %s" % id)
                 else:
                     alreadySeen.add(id)
