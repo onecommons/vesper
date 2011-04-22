@@ -23,14 +23,15 @@ class DataStoreError(Exception):
 
 def _toStatements(contents, **kw):
     if not contents:
-        return [], contents
+        return [], contents, []
     if isinstance(contents, (list, tuple)):
         if isinstance(contents[0], (tuple, base.BaseStatement)):
-            return contents, None #looks like a list of statements
+            return contents, None, [] #looks like a list of statements
         
     #at this point assume contents is pjson
     kw['setBNodeOnObj']=True #set this option so generated ids are visible
-    return pjson.tostatements(contents, **kw), contents
+    stmts, emptyobjs = pjson.Parser(**kw).to_rdf(contents)
+    return stmts, contents, emptyobjs
 
 class DataStore(transactions.TransactionParticipant): # XXX this base class can go away
     '''
@@ -369,7 +370,7 @@ class BasicStore(DataStore):
             func = lambda: self._add(adds, mustBeNewResources)
             return self.requestProcessor.executeTransaction(func)
         
-        stmts, jsonrep = self._toStatements(adds)
+        stmts, jsonrep, emptyobjs = self._toStatements(adds)
         resources = set()
         newresources = []
         for s in stmts:
@@ -458,18 +459,20 @@ class BasicStore(DataStore):
             func = lambda: self.remove(removes)
             return self.requestProcessor.executeTransaction(func)
 
-        resources = []
-        props = []
+        resources = []        
         if isinstance(removes, list):
+            objs = []
+            parseOptions=self.model_options.get('parseOptions', 
+                                        self.storage_template_options)
+            p = pjson.Parser(**parseOptions)
             for r in removes:
                 if isinstance(r, (str,unicode)):
-                    #XXX any pjson idproperty patterns will not be applied
-                    resources.append(r)
+                    resources.append( p.defaultParseContext.parseId(r) )
                 else:
-                    props.append(r)
-            removes = props
+                    objs.append(r)
+            removes = objs
         
-        stmts, jsonrep = self._toStatements(removes)
+        stmts, jsonrep, emptyobjs = self._toStatements(removes)
         if jsonrep is None:
             #must have just been statements, not pjson
             assert not resources
@@ -489,7 +492,7 @@ class BasicStore(DataStore):
         return self._remove(stmts)
         
     def _remove(self, removes):
-        stmts, jsonrep = self._toStatements(removes)
+        stmts, jsonrep, emptyobjs = self._toStatements(removes)
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)        
@@ -551,7 +554,7 @@ class BasicStore(DataStore):
         #replace stmts with matching subject and property
         #if the old value is a list, remove the entire list
         #XXX handle scope: if a non-empty scope is specified, only compare        
-        updateStmts, ujsonrep = self._toStatements(update)
+        updateStmts, ujsonrep, emptyobjs = self._toStatements(update)
         root = OrderedModel(updateStmts, self._isEmbedded)
         currentListResource = None
         for (resource, prop, values) in root.groupbyProp():
@@ -614,17 +617,9 @@ class BasicStore(DataStore):
         
         #replace:
         #replace all properties of the given resources
-        replaceStmts, replaceJson = self._toStatements(replace)
-        if replaceJson:
-            if isinstance(replaceJson, dict):
-                replaceJson = [replaceJson]
-            for o in replaceJson:
-                #if the object is empty mark it for removal
-                #we need to do this here because empty objects won't show up in
-                #replaceStmts
-                if len(o) == 1 and 'id' in o: #XXX handle namemapped pjson
-                    removeid = o['id']
-                    removedResources.add(removeid)
+        replaceStmts, replaceJson, emptyobjs = self._toStatements(replace)
+        if emptyobjs:
+            removedResources.update(emptyobjs)
         
         #get all statements with the subject and remove them (along with associated lists)        
         root = OrderedModel(replaceStmts, self._isEmbedded)
@@ -774,8 +769,8 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
                 else:
                     yield stmt[0]
                     
-        comment = txnService.getInfo().get('source','')
-        if isinstance(comment, (list, tuple)):                
+        comment = txnService.getInfo().get('source','') or ''
+        if isinstance(comment, (list, tuple)):
             comment = comment and comment[0] or ''
             
         outputfile.write("#begin " + comment + "\n")            

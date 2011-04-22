@@ -227,7 +227,7 @@ class AppTestCase(unittest.TestCase):
         self.assertEquals(store.query('{*}'), [{'id': '@hello'}])
         
         #strings are treated as resource ids and the entire object is removed
-        store.remove(["hello"])
+        store.remove(["@hello"])
         self.assertEquals(pjson.tojson(store.model.getStatements())['data'], [])
         self.assertEquals(store.query('{*}'), [])        
 

@@ -885,8 +885,8 @@ class Parser(object):
         self.defaultParseContext.context = scope
     
     def to_rdf(self, json, scope = None):
-        m = MemStore() #XXX
-
+        m = MemStore() 
+        emptyObjects = []
         parentid = ''
         parseContext = self.defaultParseContext
         if scope is None:
@@ -975,7 +975,8 @@ class Parser(object):
                     alreadySeen[id] = obj
                   
             if saveOrder is not None: saveOrder.append(id)
-                        
+            istoplevel = not parentid
+            
             #XXX support top level lists: 'list:' 
             assert isinstance(obj, dict), "only top-level dicts support right now"            
             #XXX propmap
@@ -1057,9 +1058,12 @@ class Parser(object):
                                 
                 else: #simple type
                     m.addStatement( Statement(id, prop, val, objecttype, scope) )
+            
+            if istoplevel and not parseContext.currentProp:
+                emptyObjects.append(id)
             parseContext.currentProp = None
             
-        return m.getStatements()
+        return m.getStatements(), emptyObjects
 
     def _blank(self, prefix=''):
         #prefixes include:
@@ -1156,7 +1160,7 @@ def tojson(statements, **options):
     return results#['results']
 
 def tostatements(contents, **options):
-    return Parser(**options).to_rdf(contents)
+    return Parser(**options).to_rdf(contents)[0]
 
 if __name__ == '__main__':
     import sys

@@ -97,7 +97,7 @@ def modelFromJson(modelsrc, modelname=None, checkForDuplicateIds=True):
     model = pjson.Parser(generateBnode='counter', nameMap=nameMap,        
         toplevelBnodes=True, #set so top-level object use 'counter's
         checkForDuplicateIds = checkForDuplicateIds
-    ).to_rdf(modelsrc)
+    ).to_rdf(modelsrc)[0]
     model = vesper.data.store.basic.MemStore(model)
     model.bnodePrefix = '_:'
     if not modelname:

@@ -44,7 +44,7 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
             test_json = [test_json]
     else:
         test_json = src
-    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( test_json)
+    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( test_json)[0]
     #print 'results_stmts'
     #pprint( result_stmts)
     if expectedstmts is not None:
@@ -76,7 +76,7 @@ def assert_stmts_and_back_match(stmts, expectedobj = None,
         assert_json_match(expectedobj, compare, True)
     
     parserOptions = parserOptions or {}
-    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( result )
+    result_stmts = Parser(generateBnode='counter', **parserOptions).to_rdf( result )[0]
     assert_stmts_match(stmts, result_stmts)
 
 class SjsonTestCase(unittest.TestCase):
@@ -376,7 +376,7 @@ def test():
     ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqprop', 'prop2', 'R', 'context1'),
     ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqsubject', '1', 'R', 'context1')]
     
-    assert Parser().to_rdf(src) == stmts
+    assert Parser().to_rdf(src)[0] == stmts
     assert_json_and_back_match(src)
 
     src = [{"id": "1",
