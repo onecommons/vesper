@@ -964,15 +964,15 @@ class Parser(object):
                     m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
             return seq
         
-        alreadySeen = set()
+        alreadySeen = {}
         saveOrder = self.saveOrder
         while todo:
             obj, (id, parseContext), parentid = todo.pop(0)
             if self.checkForDuplicateIds and len(obj) > 1:
-                if id in alreadySeen:                                                                                
+                if id in alreadySeen and alreadySeen[id] != obj:                                                                 
                     raise RuntimeError("duplicate id encountered: %s" % id)
                 else:
-                    alreadySeen.add(id)
+                    alreadySeen[id] = obj
                   
             if saveOrder is not None: saveOrder.append(id)
                         
