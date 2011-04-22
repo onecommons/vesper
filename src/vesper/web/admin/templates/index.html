@@ -31,15 +31,27 @@ from vesper.backports import json
       -moz-box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);
       -webkit-box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);
   }
+
+  .cmd {
+    border: 1px solid grey;
+    padding: 2px;
+    border-radius: 5px;
+    -moz-border-radius: 5px;
+    -webkit-border-radius: 5px;
+    -webkit-border-radius: 5px;        
+  }
+
   #query {
     width: 100%;
   }
   .query-options {
       float:right;
       padding-right:20px;
+      margin-top: .3em;
   }
   .resultbox {
       padding: 6px;
+      border-radius: 5px;
       -moz-border-radius: 5px;
       -webkit-border-radius: 5px;        
 
@@ -74,12 +86,21 @@ from vesper.backports import json
     </%def>
   <div id="queryinput" class="panel-queryarea">
   Enter your query: <textarea id='query'></textarea>
-  <button id='query-button'>Go</button>
+  <button id='query-button'>Go</button>    
   <div class="query-options">
-    <label><input type="checkbox" id="opt-explain">Explain</label>&nbsp;&nbsp;
+    <span class='cmd'>
+    <label><input type="radio" name='cmd' value='query' checked />Query</label>
+    <label><input type="checkbox" id="opt-explain">Explain</label>
     <label><input type="checkbox" id="opt-forupdate">For Update</label>
-    <label><input type="checkbox" id="opt-debug">Debug</label>    
+    <label><input type="checkbox" id="opt-debug">Debug</label>
+    </span>
+    <label class='cmd'><input type="radio" name='cmd' value='update'>Update</label>
+    <label class='cmd'><input type="radio" name='cmd' value='create'>Create</label>
+    <label class='cmd'><input type="radio" name='cmd' value='replace'>Replace</label>
+    <label class='cmd'><input type="radio" name='cmd' value='add'>Add</label>
+    <label class='cmd'><input type="radio" name='cmd' value='remove'>Remove</label>
   </div>
+  
   </div>
   <div id='error' class="resultbox">
   <b>Error:</b><hr>
@@ -100,39 +121,59 @@ from vesper.backports import json
 
   <%def name="script()">
     <script type='text/javascript'>
+    function runQuery() {
+      var q = {captureErrors:true};
+      q.query = $('#query').val();
+      q.explain = $('#opt-explain').is(':checked');
+      q.forUpdate = $('#opt-forupdate').is(':checked');
+      q.debug = $('#opt-debug').is(':checked');
+      $('#queryresults').dbQuery(q, function(data) {
+          if (data.results) {
+              $('#queryresults').text(JSON.stringify(data.results, null, 4));                      
+              $('#headerquery').text(" - Showing " + data.results.length + " objects");                        
+          }
+          if (data.errors && data.errors.length > 0) {
+              $('#error .precontent').text(JSON.stringify(data.errors, null, 4));
+              $('#error').show();
+          } else {
+              $('#error').hide();
+          }
+          if (data.explain) {
+              $('#explainresults .precontent').text(data.explain);
+              $('#explainresults').show();
+          } else {
+              $('#explainresults').hide();
+          }
+          if (data.debug) {
+              $('#debugresults .precontent').text(data.debug);
+              $('#debugresults').show();
+          } else {
+              $('#debugresults').hide();                      
+          }
+      });
+    }
+    
       <%layout:initPanelJs></%layout:initPanelJs>
       
       $(document).ready(function(){
           $('#query-button').click(function() {
-              var q = {captureErrors:true};
-              q.query = $('#query').val();
-              q.explain = $('#opt-explain').is(':checked');
-              q.forUpdate = $('#opt-forupdate').is(':checked');
-              q.debug = $('#opt-debug').is(':checked');
-              $('#queryresults').dbQuery(q, function(data) {
-                  if (data.results) {
-                      $('#queryresults').text(JSON.stringify(data.results, null, 4));                      
-                      $('#headerquery').text(" - Showing " + data.results.length + " objects");                        
-                  }
-                  if (data.errors && data.errors.length > 0) {
-                      $('#error .precontent').text(JSON.stringify(data.errors, null, 4));
-                      $('#error').show();
-                  } else {
-                      $('#error').hide();
-                  }
-                  if (data.explain) {
-                      $('#explainresults .precontent').text(data.explain);
-                      $('#explainresults').show();
-                  } else {
-                      $('#explainresults').hide();
-                  }
-                  if (data.debug) {
-                      $('#debugresults .precontent').text(data.debug);
-                      $('#debugresults').show();
-                  } else {
-                      $('#debugresults').hide();                      
-                  }
-              });
+              var cmd = $('[name=cmd]:checked').val();   
+              if (cmd == 'query') { 
+                runQuery();
+              } else {
+                try {
+                  var data = JSON.parse($('#query').val());
+                } catch (e) {
+                  $('#error .precontent').text("Error parsing JSON");
+                  $('#error').show();
+                  return;
+                }
+                $('#error').hide();
+                $(document)._executeTxn(cmd, data, function(data) {
+                    $('#queryresults').text(JSON.stringify(data, null, 4));                      
+                    $('#headerquery').text(cmd + " response");
+                });
+              }
           });
       });
       
