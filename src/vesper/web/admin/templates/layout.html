@@ -38,13 +38,13 @@ def kwtoattr(kw, **merge):
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-${call(caller).head}
-
 <link rel="stylesheet" type="text/css" href="static/reset-fonts-grids.css" />
 <link rel="stylesheet" type="text/css" href="static/base.css" />
 
 <link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8.11/themes/ui-lightness/jquery-ui.css" type="text/css" media="all" />
 <link rel="stylesheet" type="text/css" href="static/generic.css" />
+
+${call(caller).head}
 
 %for stylesheets in __.stylesheets:
  ${stylesheets}
@@ -165,7 +165,7 @@ ${call(caller).style}
 }
 
 .panel-body {
-    background-color: #E2EDF4;
+    background-color: whitesmoke; /* #E2EDF4*/
     padding: 6px;
     padding-bottom: 12px;    
     overflow: hidden;
@@ -248,11 +248,12 @@ if attrs:
 </div>
 </%def>
 
-<%def name="renderEntry(i, id, editcontents, entryClass='')">       
-  <form class='entry ${entryClass}' name='entry-${i}' itemid='${id}' accept-charset="UTF-8">
+<%def name="renderEntry(i, id, editcontents, entryClass='', entryAttrs='')">       
+  <form class='entry ${entryClass}' name='entry-${i}' itemid='${id}' accept-charset="UTF-8" ${entryAttrs}>
   %if id:
     <input type='hidden' name='id' value='${id}' />
   %endif
+  <input type="hidden" name="modified" value='0' class='type[number]' />
   <div class='entry-edit' style='display:none'>
    <textarea name='contents' class='expand' style='width: 100%'>${editcontents}</textarea>
    <button class='entry-save-button' disabled='true'>save</button>
@@ -271,7 +272,7 @@ if attrs:
   </form>
 </%def>
 
-<%def name="initPanelJs(refreshPanel='null')">
+<%def name="initPanelJs()">
 /** begin generic panel/item code **/
     
 function startModifyChecking($this){    
@@ -320,7 +321,7 @@ function editEntry(event) {
     return false;
 }
 
-function makePanels(selector, refreshCallback) {
+function makePanels(selector) {
     var panels = $(selector || document);
 
     /*
@@ -350,9 +351,6 @@ function makePanels(selector, refreshCallback) {
         }
         return false;
     });
-
-    if (refreshCallback)
-        $('.panel-header .ui-icon-refresh').live('click', refreshCallback);
 }
 
 var gItemSaveQuery = "{ * where (id=:this)  }";
@@ -400,13 +398,15 @@ function initItems(context) {
    });
    
    $('.entry-save-button', context).click(function(event) {
-     event.preventDefault();         
-     $(this).closest('.entry').dbBegin().dbUpdate().dbQuery(gItemSaveQuery,
+     event.preventDefault();
+     var $entry = $(this).closest('.entry');
+     $entry.find('[name="modified"]').val( new Date().getTime() );
+     $entry.dbBegin().dbUpdate().dbQuery(gItemSaveQuery,
        function(data) {
          console.log('saved entry', data);
          if (!data.error) { //query action returns errors             
              var textarea = $(this).find('.entry-edit textarea');         
-             textarea.data('originalValue', textarea.val());         
+             textarea.data('originalValue', textarea.val());             
              setModified($(this), false);
              toggleEditEntry.call(this);
              if (data.results.length) {
@@ -437,7 +437,7 @@ function initItems(context) {
 
 $(document).ready(function(){
     initItems( document );
-    makePanels('.panel', ${refreshPanel});
+    makePanels('.panel');
      $(".yui-b").sortable({ tolerance: 'pointer', connectWith: '.yui-b', handle : '.panel-header' });
     //see http://www.b-hind.eu/jquery/index.php    
 });
