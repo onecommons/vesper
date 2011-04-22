@@ -300,13 +300,15 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           var expected = JSON.stringify(JSON.parse($('#microdata1expected').text()));
           Assert.areEqual(expected, itemsJson);
           
+          //test state is cleaned up and results are idempotent
           var items2 = JSON.stringify(bindElement($$('microdata2')) );
+          Assert.areEqual('[{"name":"Amanda","band":{"name":"Jazz Band","size":"12"}}]', items2);
           var items2again = JSON.stringify(bindElement($$('microdata2')) );
           Assert.areEqual(items2, items2again);
-          //XXX support itemrefs 
-          //var items2asRefs = JSON.stringify(bindElement($$('amanda')) );
-          //console.log('items', items2, items2asRefs);
-          //Assert.areEqual(items2, items2asRefs); 
+          
+          //test itemrefs 
+          var items2asRefs = JSON.stringify(bindElement($$('amanda')) );
+          Assert.areEqual(items2, items2asRefs); 
           
           //test multiple values for a prop
           var items3 = JSON.stringify(bindElement($$('microdata3')) );
@@ -333,9 +335,17 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           var items9 = JSON.stringify(bindElement($$('nested1')) );
           Assert.areEqual('[{"id":"n1","label":"foo"}]', items9);
           
-          //test if bind a nested object the outer object isn't included
+          //test that when binding a nested object the outer object isn't included
           var items10 = JSON.stringify(bindElement($$('nested-microdata')) );
-          Assert.areEqual('[{"id":"2","label":"foo"}]', items10);
+          Assert.areEqual('[{"id":"2","label":"foo","type":"bar"}]', items10);
+          
+          //test anonymous objects
+          var items11 = JSON.stringify(bindElement($$('outer1')) );
+          Assert.areEqual('[{"id":"1","child":{"id":"2","label":"foo","type":"bar"},"anotherprop":{"comment":"an anonymous object"}},{"id":"3","comment":"an unrelated object"}]', items11);
+          
+          //test rootOnly option
+          var items12 = JSON.stringify(bindElement($$('outer1'), true) );
+          Assert.areEqual('[{"id":"1","child":{"id":"2"},"anotherprop":{"comment":"an anonymous object"}}]', items12);
         }
         
     }));
@@ -413,9 +423,9 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
         </dl>
 </div>
 
-<div itemscope=itemscope id='microdata2'>
+<div itemscope=''  id='microdata2'>
  <p>Name: <span itemprop="name">Amanda</span></p>
- <p>Band: <span itemprop="band" itemscope=itemscope> <span itemprop="name">Jazz Band</span> 
+ <p>Band: <span itemprop="band" itemscope=''> <span itemprop="name">Jazz Band</span> 
    (<span itemprop="size">12</span> players)</span></p>
 </div>
 
@@ -455,26 +465,33 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
  <span itemprop=outoftestscope>bar</span>
 </div>
 
-<div itemid=1>
- <div id='nested-microdata' itemid=2 itemprop=child>
+<div id='outer1' itemid=1>
+ <div id='nested-microdata' itemid=2 itemtype=bar itemprop=child>
    <span itemprop=label>foo</span>
+ </div>
+ <div itemprop=anotherprop itemscope>
+  <span itemprop=comment>an anonymous object</span>
+ </div>
+ <div itemid=3>
+   <span itemprop=comment>an unrelated object</span>
  </div>
 </div>
 
 <textarea id='microdata1expected'>
-[{"id":"http://purl.oreilly.com/works/45U8QJGZSQKDH8N",
-  "type":"http://purl.org/vocab/frbr/core#Work",
+[{"id":"http://purl.oreilly.com/works/45U8QJGZSQKDH8N",  
   "http://purl.org/dc/terms/title": "Just a Geek",
   "http://purl.org/dc/terms/creator":"Wil Wheaton",
   "http://purl.org/vocab/frbr/core#realization":
     [{"id":"http://purl.oreilly.com/products/9780596007683.BOOK",
-    "type":"http://purl.org/vocab/frbr/core#Expression",
-    "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/BOOK"
+    "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/BOOK",
+    "type":"http://purl.org/vocab/frbr/core#Expression"
     },
-    {"id":"http://purl.oreilly.com/products/9780596802189.EBOOK",
-    "type":"http://purl.org/vocab/frbr/core#Expression",
-    "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/EBOOK"}
-    ]
+    {"id":"http://purl.oreilly.com/products/9780596802189.EBOOK",    
+    "http://purl.org/dc/terms/type":"http://purl.oreilly.com/product-types/EBOOK",
+    "type":"http://purl.org/vocab/frbr/core#Expression"
+    }
+    ],
+  "type":"http://purl.org/vocab/frbr/core#Work"
   }]
 </textarea>
 

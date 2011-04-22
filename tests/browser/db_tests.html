@@ -130,7 +130,7 @@
 
           var txnCallbacksCalled = 0;
           //make sure commit worked and dbQuery callback was called after dbCreate callback 
-          $(document).dbBegin().dbReplace({ id : '1' }).dbQuery(
+          $(document).dbBegin().dbDestroy(['1']).dbQuery(
             "{* where (id='1')}",
              function(data) {
                 txnCallbacksCalled++;

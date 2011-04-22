@@ -89,5 +89,5 @@ if __name__ == '__main__':
         sys.exit()
     elif '--wait' in sys.argv:
         keepRunnng = True
-        sys.argv.remove('--run')
+        sys.argv.remove('--wait')
     unittest.main()

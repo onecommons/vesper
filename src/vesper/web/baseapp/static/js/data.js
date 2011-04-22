@@ -119,7 +119,7 @@ Txn.prototype = {
         this.pendingChanges = {}; 
         */
         //XXX path should be configurable
-        konsole.log('requests', this.requests);
+        //konsole.log('requests', this.requests);
         if (this.requests.length) {
             var requests = JSON.stringify(this.requests);
             this.requests = [];
@@ -153,28 +153,45 @@ txn.commit();
 */
 
 (function($) {
+    
+    function deduceArgs(args) {
+        var txn = null;
+        if (args[0]) {
+            if (args[0] instanceof Txn)
+                txn = args.shift();
+        } else if (args.length > 2) {
+            args.shift();
+        }
+        var data = null;
+        if (args[0]) {
+            if (!jQuery.isFunction(args[0]))
+                data = args.shift();
+        } else if (args.length > 1) {
+            args.shift();
+        }        
+        var callback = args[0] || null;
+        return [txn, data, callback];
+    }
+        
     $.fn.extend({    
+        /*
+        action [txn] [data] [callback]
+        */        
       _executeTxn : function() {
          //copy to make real Array
-         var args = Array.prototype.slice.call( arguments );         
+         var args = Array.prototype.slice.call( arguments );
          var action = args.shift();
+         args = deduceArgs(args)
+         var txn = args[0], data = args[1], callback = args[2];
          var commitNow = false;
-         if (args[0] && args[0] instanceof Txn) {   
-              var txn = args.shift();              
-         } else {
-            var txn = this.data('currentTxn');
-            if (!txn) {
-                txn = new Txn();
-                commitNow = true;
-            }
-         }
-         if (args[0] && !jQuery.isFunction(args[0]) ) {
-             var data = args.shift();
-         } else {
-             var data = null;
-         }
-         var callback = args[0] || null;     
-         konsole.log('execute', data, callback);                  
+         if (!txn) {
+             txn = this.data('currentTxn');
+             if (!txn) {
+                 txn = new Txn();
+                 commitNow = true;
+             }
+         }         
+         //konsole.log('execute', data, callback);                  
          if (data) {
             if (action == 'query') {
                 if (typeof data == 'string') {
@@ -205,10 +222,10 @@ txn.commit();
          return this;
      },
 
-     dbData : function() {
+     dbData : function(rootOnly) {
          return this.map(function() {
-             return bindElement(this);
-         }).get();
+             return bindElement(this, rootOnly);
+         });
      },
      
      /*
@@ -230,8 +247,18 @@ txn.commit();
          return this._executeTxn('query', a1,a2, a3);
      },     
      dbRemove : function(a1,a2,a3){
-          return this._executeTxn('remove', a1,a2, a3);
-      },
+         return this._executeTxn('remove', a1,a2, a3);
+     },
+     dbDestroy : function(a1, a2, a3) {
+         var args = deduceArgs(Array.prototype.slice.call(arguments));
+         var txn = args[0], data = args[1], callback = args[2];
+         if (!data) {
+             data = this.map(function() {
+                 return $(this).attr('itemid') || null;
+             }).get();
+        }
+        return this._executeTxn('remove', txn, data, callback);
+     },      
      dbBegin : function() {
         this.data('currentTxn', new Txn());
         return this;
@@ -265,7 +292,20 @@ txn.commit();
 
 })(jQuery);
 
-function bindElement(elem) {        
+function parseAttrPropValue(data) {
+    var jsonstart = /^({|\[|"|-?\d|true$|false$|null$)/;    
+    if ( typeof data === "string" ) {
+        try {
+            return jsonstart.test( data ) ? jQuery.parseJSON( data ) : data;
+        } catch( e ) {
+            return data;
+        }
+    } else {
+        return data;
+    }    
+}
+
+function bindElement(elem, rootOnly, forItemRef) {
     if (elem.nodeName == 'FORM' && 
             !elem.hasAttribute('itemscope') && !elem.hasAttribute('itemid')) {
         var binder = Binder.FormBinder.bind( elem ); 
@@ -275,9 +315,23 @@ function bindElement(elem) {
     //otherwise emulate HTML microdata scheme
     //see http://dev.w3.org/html5/spec/microdata.html
     //except also include forms controls serialized as above
-    var itemElems = [];
+    var itemElems = (forItemRef && forItemRef.itemElems) || [];
 
-    function getItem(elem) {    
+    function setAttrProps(elem, item) {
+        var type = $(elem).attr('itemtype');
+        if (type) 
+            item['type'] = type;
+        var attrs = elem.attributes, name;
+        for ( var i = 0, l = attrs.length; i < l; i++ ) {
+            name = attrs[i].name;
+            if ( name.indexOf( "itemprop-" ) === 0 ) {
+                var val = elem.getAttribute(name);
+                item[name.substr( 9 )] = parseAttrPropValue(val);
+            }
+        }
+    }
+    
+    function getItem(elem) {
         var item = $(elem).data('item');
         if (typeof item != 'undefined') {
             return item;
@@ -286,10 +340,6 @@ function bindElement(elem) {
         var id = $(elem).attr('itemid');
         if (id) 
             item['id'] = id;
-        var type = $(elem).attr('itemtype');
-        if (type) 
-            item['type'] = type;
-
         $(elem).data('item', item);
         itemElems.push(elem);
         return item;
@@ -297,8 +347,7 @@ function bindElement(elem) {
 
     function getPropValue(elem) {
         var $this = $(elem);
-        if ($this.attr('itemscope') || $this.attr('itemid')) {
-            //XXX this need to return a ref, not an item
+        if (elem.hasAttribute('itemscope') || $this.attr('itemid')) {
             return getItem(elem);
         }
         var attr = { 'META' : 'content',
@@ -340,41 +389,78 @@ function bindElement(elem) {
             }
         }
     }
+
+    var descendPredicate;
+    if (typeof rootOnly == 'function') {
+        descendPredicate = rootOnly;
+    } else {
+        //descend unless the value is an itemid (i.e. dont follow separate items)
+        descendPredicate = function(elem) { return !$(elem).attr('itemid'); } 
+    }
+
+    function descend($this) {
+        return $this.children().map(function() {
+          if (descendPredicate(this)) {
+             var desc = descend($(this));
+             if (desc.length) {
+                return [this].concat(desc.get());
+             } else { 
+                return this;
+             }
+          } else { //we want this item to just be a ref
+             $(this).data('itemidonly', true);
+             return this;
+          }
+        });
+    }
     
-    var elems = $(elem).find('*');
-    if (!$(elem).is('[itemscope],[itemid]'))
-        elems = elems.andSelf();
+    var elems = rootOnly ? descend($(elem)) : $(elem).find('*');
+    if (forItemRef || !$(elem).is('[itemscope],[itemscope=],[itemid]'))
+        elems = elems.add(elem);
+        
     elems.filter('[itemprop]').each(function(){
-       var $this = $(this);
-       var parent = $this.parent().closest('[itemscope],[itemid]');
-       if (parent.length) {
-           var item = getItem(parent.get(0));
-           addProp(item, this);
+       var $this = $(this);       
+       var refItem = $(elem).data('itemref');       
+       if (refItem) {           
+           addProp(refItem, this);           
+       } else {
+           var parent = $this.parent().closest('[itemscope],[itemscope=],[itemid]');
+           if (parent.length) {
+               var item = getItem(parent.get(0));
+               addProp(item, this);
+           }
        }
     });
  
-    elems.filter('[itemref]').each(function(){
+    //console.log('elems', elems)
+    var refElems = (forItemRef && forItemRef.refElems) || [];
+    elems.add(elem).filter('[itemref]').each(function(){
         var item = getItem(this);
         var refs = $(this).attr('itemref').split(/\s+/);
         $('#'+refs.join(',#')).each(function() {
-            //XXX each of these refs is a or contains itemprops
-            //maybe outside bindelem scope
-            //need to recursively follow itemref in itemprops            
+            $(this).data('itemref', item);
+            refElems.push(elem);
+            bindElement(this, false, {itemElems:itemElems, refElems:refElems});
         });
     });
     
     elems.filter(':input').each(function(){
-        var parent = $(this).parent().closest('[itemscope],[itemid]');
+        var parent = $(this).parent().closest('[itemscope],[itemscope=],[itemid]');
         if (parent.length) {
             var item = getItem(parent.get(0));
             var binder = Binder.FormBinder.bind(null, item); 
             binder.serializeField(this);
         }
     });
-        
+       
+    if (forItemRef) {
+        return;
+    }
     var itemDict = {};
     var items = $.map($.unique(itemElems), function(itemElem) {
-        var item = $(itemElem).data('item');        
+        var item = $(itemElem).data('item');
+        if (!$(itemElem).data('itemidonly'))
+            setAttrProps(itemElem, item);
         if (item.id) {            
             var existing = itemDict[item.id];
             if (existing) {
@@ -390,7 +476,9 @@ function bindElement(elem) {
         else
             return item;
     });
-    $(itemElems).removeData('item');
+    
+    $(itemElems).removeData('item').removeData('itemidonly');
+    $(refElems).removeData('itemref');    
     return items;     
 }
 
