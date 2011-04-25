@@ -46,16 +46,18 @@ def datarequest(kw, retval):
         #sendJsonRpcError below it will turn the error into json-rpc error response
         if action == 'update':
             addStmts, removeStmts = dataStore.update(data)
-            result = pjson.tojson(addStmts)
+            #XXX better return values
+            result = dict(added=pjson.tojson(addStmts), removed=pjson.tojson(removeStmts))
         elif action == 'replace':
             addStmts, removeStmts = dataStore.replace(data)
-            result = pjson.tojson(addStmts)
+            #XXX better return values
+            result = dict(added=pjson.tojson(addStmts), removed=pjson.tojson(removeStmts))
         elif action == 'add':
             addJson = dataStore.add(data)
-            result = addJson #pjson.tojson(addStmts))
+            result = dict(added=addJson)
         elif action == 'create':
             addJson = dataStore.create(data)
-            result = addJson #pjson.tojson(addStmts))
+            result = dict(added=addJson)
         elif action == 'query':
             #returns { errors, results }
             if isinstance(data, (str, unicode)):
@@ -68,9 +70,8 @@ def datarequest(kw, retval):
                                                     data = result.errors)
                 return response
         elif action == 'remove':
-            #returns None
-            result = dataStore.remove(data)
-            #XXX return better result?
+            removeJson = dataStore.remove(data)
+            result = dict(removed=removeJson)
         else:
             response['error'] = dict(code=-32601, message='Method not found')
             return response
