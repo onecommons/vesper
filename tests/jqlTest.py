@@ -1690,6 +1690,20 @@ t('''
  {'id': '2', 'tags': {'id': 'tag1'}},
 ], unordered=True
 )
+
+#XXX bug: shouldn't need the double maybes -- maybe foo = ?bar should imply that foo is optional
+t('''
+{   id, 
+    'tags' : {id where id=?tag and label = "tag 1"}
+    where maybe (maybe tags) = ?tag
+}
+''',
+[{'id': '3', 'tags': None},
+ {'id': 'tag1', 'tags': None},
+  {'id': '_:1', 'tags': None},
+ {'id': '2', 'tags': {'id': 'tag1'}},
+], unordered=True
+)
  
 #construct an array but note that nulls appear instead an empty list
 t('''
@@ -2420,9 +2434,10 @@ where ?firsttxn = ref(?post.txn) and {?post txn}
 }''')
 
 t.group = 'temp'
-#XXX nested construct joins should always be outer
+#XXX maybe nested construct joins should always be outer
 #because we intuitively expect an empty property value, 
 #not that the outer object filtered out
+#OTOH when the only outer condition joins with the inner you do expect it to filter
 t('''
 {?bm
 id,
