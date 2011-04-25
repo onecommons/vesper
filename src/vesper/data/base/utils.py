@@ -586,9 +586,10 @@ def serializeRDF_Stream(statements,stream,type,uri2prefixMap=None,options=None):
         isMjson = type == 'mjson'
         from vesper import pjson, multipartjson        
         if 'pjson' in options:
+            options = options.copy()
             pjsonOptions = options.pop('pjson')
         else:
-            pjsonOptions = {}
+            pjsonOptions = {}        
         objs = pjson.tojson(statements, preserveTypeInfo=True, asList=isMjson, **pjsonOptions)
         if isMjson:
             return multipartjson.dump(objs, stream, **options)
