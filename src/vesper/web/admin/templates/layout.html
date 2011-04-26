@@ -311,6 +311,11 @@ function toggleEditEntry() {
  }
 
 function editEntry(event) {
+    if (event.target.nodeName == "A") {
+      //live/delegated events don't bubble in dom order so we need this hack 
+      //for live event handlers on A elements
+      return; 
+    }
     event.preventDefault();
     toggleEditEntry.call(this);
     $(this).closest('.entry').find('.entry-edit textarea')[0].focus();
@@ -361,8 +366,8 @@ function initItems(context) {
     } );
    
    $('.item', context).click(editEntry);
-   $('.item-properties, .item-contents a').click(function(event) { event.stopPropagation(); } );
-   ##doesn't work: $('a').live('click', function(event) { console.log('huh!!'); event.stopPropagation(); } );
+   //dont call editEntry when clicking on item-properties area:
+   $('.item-properties').click(function(event) { event.stopPropagation(); } );
    $('.entry-edit-button', context).click(editEntry);
    
    $('.entry-canceledit-button', context).click(function(event) {
@@ -407,7 +412,6 @@ function initItems(context) {
              toggleEditEntry.call(this);
              if (data.results.length) {
                 $('.item-contents', this).html(data.results[0].html);     
-                $('.item-contents a', this).click(function(event) { event.stopPropagation(); } );        
             }
           }
         }).dbCommit();
