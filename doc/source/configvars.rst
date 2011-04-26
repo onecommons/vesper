@@ -253,6 +253,34 @@ web configuration variables
   Keys in this dictionary override the default values for that parameter.
   
   Default is `{}`
+
+configuration variables for command line handling 
+=================================================
+
+.. confval:: cmd_args
+
+   List of arguments to be passed to 'run-cmds' action. By default this will be set with any command line argument 
+   that wasn't applied to a built-in command option.
+
+.. confval:: cmdline_handler
+
+   A function called during command line processing at startup. It takes two arguments: the AppConfig object 
+   and the list of command arguments (excluding any arguments applied to built-in command options)
+   Returns a list of arguments to be applied as config settings and set as `cmd_args` if `cmd_args` is not set.
+      
+  Default: ``lambda app, args: args``
+
+..confval:: cmd_usage
+
+  Command usage string 
+  
+  Default: `"%prog [options] [settings]"`
+
+..confval:: cmd_help
+
+  Help text appended to command line help message (invoked by -h or --help)
+  
+  Default: `"Settings:\n--[name]=VALUE Add [name] to config settings"`
   
 advanced configuration variables 
 ================================
@@ -277,14 +305,7 @@ advanced configuration variables
   Default: `"root"
   `
   Example: ``app_name = 'root'``
-
-.. confval:: cmd_usage
-
-      A string used to display the command-line usage help::
-      
-         cmd_usage = '''--import [dir] [--recurse] [--format format] [--disposition disposition]
-                --export dir [--static]'''
-
+  
 .. confval:: actions
 
       The dictionary that defines the Actions the app should use.
@@ -292,7 +313,7 @@ advanced configuration variables
       Vesper currently uses these triggers:
        * 'http-request' is invoked by HTTPRequestProcessor.handleHTTPRequest
        * 'load-model' is invoked on start-up after the app's stores have been initialized
-       * 'run-cmds' is invoked on start-up to handle command line arguements
+       * 'run-cmds' is invoked on start-up (after 'load-model') to handle command line arguements
        * 'before-add' and 'before-remove' is invoked when data is added or removed from a store
        * 'before-new' is invoked when a new resource is added to a store
        * 'before-commit' is invoked at the end of a transaction but trigger still has a chance to modify it

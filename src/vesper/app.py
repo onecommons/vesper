@@ -7,6 +7,7 @@
     a given configuration.
 """
 import os, os.path, sys, traceback, re
+from optparse import OptionParser
 
 from vesper import utils
 from vesper.utils import MRUCache
@@ -14,6 +15,7 @@ from vesper.utils.Uri import UriToOsPath
 from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
 from vesper.backports import *
+
 
 try:
     import cStringIO
@@ -241,8 +243,7 @@ class RequestProcessor(TransactionProcessor):
         * the entire command line is assigned to the variable 'cmdline'
         '''
         kw = utils.attrdict()
-        kw._params = utils.defaultattrdict(argsToKw(argv))        
-        #XXX use self.cmd_usage
+        kw._params = utils.defaultattrdict(argsToKw(argv))
         kw['cmdline'] = '"' + '" "'.join(argv) + '"'
         self.runActions('run-cmds', kw)
 
@@ -295,7 +296,6 @@ class RequestProcessor(TransactionProcessor):
                                         lambda *args: True)
         self.get_principal_func = appVars.get('get_principal_func', lambda kw: '')        
         self.argsForConfig = appVars.get('argsForConfig', [])
-        #XXX self.cmd_usage = DEFAULT_cmd_usage + kw.get('cmd_usage', '')
         
         if appVars.get('configHook'):
             appVars['configHook'](appVars)
@@ -478,7 +478,7 @@ def argsToKw(argv):
     try:
         arg = i.next()
         while 1:
-            if arg[0] != '-':
+            if arg[0] != '-':            
                 raise CmdArgError('missing arg')
             name = arg.lstrip('-')
             kw[name] = True
@@ -507,28 +507,120 @@ def initLogConfig(logConfig):
     
 class AppConfig(utils.attrdict):
     _server = None
+
+    cmd_usage = "%prog [options] [settings]"
+    cmd_help = '''Settings:\n--[name]=VALUE Add [name] to config settings'''
     
+    parser = OptionParser()
+    parser.add_option("-c", "--config", dest="config", help="path to configuration file")
+    parser.add_option("-s", "--storage", dest="storage", help="storage path or url")
+    parser.add_option("-p", "--port", dest="port", type="int", help="http server listener port")
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", 
+                            default=False, help="set logging level to DEBUG")
+    parser.add_option("-x", "--exit", action="store_true", dest="exit", 
+                                help="exit after executing config specific cmd arguments")
+        
     def updateFromConfigFile(self, filepath):
-        # XXX check to see if we've already started running
         config = {}
         execfile(filepath, config, config)
         self.update(config)
     
-    def load(self):
+    def isBuiltinCmdOption(self, arg):
+        return self.parser.has_option(arg)
+
+    def handleCmdOptions(self, args):
+        (options, args) = self.parser.parse_args(args)
+        if options.config:    
+            print "loading config file from:", args[0]
+            app.updateFromConfigFile(options.config)
+
+        if options.verbose:
+            self.loglevel = logging.DEBUG
+
+        if options.storage:
+            self.storage_url = options.storage
+        if options.port:
+            self.port = int(options.port)
+        if options.exit:
+            self.exec_cmd_and_exit = True
+
+    def _parseCmdLine(self, cmdline):
+        appargs = []
+        mainargs = []
+        want = False
+        while cmdline:
+            arg = cmdline.pop(0)
+            if arg.startswith('-'):
+                want = self.isBuiltinCmdOption(arg)
+                if want:
+                    mainargs.append(arg)
+                else:
+                    appargs.append(arg)
+            elif want:
+                mainargs.append(arg)
+            else:
+                appargs.append(arg)
+
+        self.parser.set_usage(self.get('cmd_usage', self.cmd_usage))
+        self.parser.epilog = self.get('cmd_help', self.cmd_help)
+        
+        if mainargs:
+            self.handleCmdOptions(mainargs)            
+        
+        handler = self.get('cmdline_handler', lambda app, appargs: appargs)
+        appLeftOver = handler(self, appargs)
+        if appLeftOver:
+            #if cmd_args not set, set it to appLeftOver
+            if 'cmd_args' not in self:
+                self.cmd_args = appLeftOver
+            #also treat appLeftOver as config settings
+            try: 
+                self.update( argsToKw(appLeftOver) )            
+            except CmdArgError, e:
+                print "Error:", e.msg
+                self.parser.print_help()
+                sys.exit()
+        
+    def load(self, cmdline=False):
+        '''
+        `cmdline` is a boolean or a list of command line arguments
+        If `cmdline` is True, the system command line is used. 
+        If False command line processing is disabled.
+        '''
+        if isinstance(cmdline, bool):
+            if cmdline:
+                cmdline = sys.argv[1:]
+            else:
+                cmdline = []
+        else:
+            cmdline = cmdline[:]
+        
+        if cmdline:
+            self._parseCmdLine(cmdline)
+        
         if self.get('logconfig'):
             initLogConfig(self['logconfig'])
+        else:
+            log = logging.getLogger()
+            log.setLevel(self.get('loglevel', logging.INFO))
+            # format="%(asctime)s %(levelname)s %(name)s %(message)s"
+            # datefmt="%d %b %H:%M:%S"    
+            # stream = logging.StreamHandler(sys.stdout)
+            # stream.setFormatter(logging.Formatter(format, datefmt))
+            # log.addHandler(stream)
 
         if self.get('storage_url'):
             try:
                 (proto, path) = re.split(r':(?://)?', self['storage_url'],1)
-            except ValueError: # split didn't work
-                raise Exception("storage_url must be of the format 'proto:location'")
-
-            self['model_factory'] = store.get_factory(proto)
+            except ValueError: # split didn't work, assume its file path
+                proto = 'file'
+                path = self['storage_url']
+            
+            if 'model_factory' not in self:
+                self['model_factory'] = store.get_factory(proto)
             if proto == 'file':
                 path = UriToOsPath(path)            
             self['storage_path'] = path
-            #XXX if model_factory is set should override storage_url            
 
         from web import HTTPRequestProcessor
         root = HTTPRequestProcessor(appVars=self.copy())
@@ -537,10 +629,15 @@ class AppConfig(utils.attrdict):
         _initConfigState()
         return self._server
         
-    def run(self, startserver=True, out=sys.stdout):
+    def run(self, startserver=True, cmdline=True, out=sys.stdout):
+        '''
+        `cmdline` is a boolean or a list of command line arguments
+        If `cmdline` is True, the system command line is used. 
+        If False command line processing is disabled.
+        '''
         root = self._server
         if not root:
-            root = self.load()
+            root = self.load(cmdline)
 
         if 'debug_filename' in self:
             self.playbackRequestHistory(self['debug_filename'], out)
@@ -564,7 +661,7 @@ def createStore(json='', **kw):
                       ('storage_template_options', dict(toplevelBnodes=False))]:
         if name not in kw:
             kw[name] = default
-    root = createApp(**kw).run(False)
+    root = createApp(**kw).run(False, False)
     return root.defaultStore
 
 def _initConfigState():
