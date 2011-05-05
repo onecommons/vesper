@@ -1,7 +1,36 @@
-<%def name="component(name)">
+<%!
+from vesper.utils import attrdict
+
+def sortBlocks(blocks):
+  #components go first
+  blocks.sort(key=lambda b: not b.isComponent)
+  sofar = set()
+  neworder = []
+  while blocks:
+    block = blocks.pop(0)
+    for dependency in block.dependencies:
+      if dependency not in sofar:
+        #look ahead for dependency, reorder if found
+        i = 0
+        while i < len(blocks):
+          b = blocks[i]          
+          if b.name == dependency:
+            sofar.add(b.name)
+            neworder.append(b.content)
+            blocks.pop(i)
+            continue
+          i += 1
+    neworder.append(block.content)
+    if block.name:
+      sofar.add(block.name)
+  return neworder
+
+%>
+
+<%def name="component(name, dependencies=None)">
 <%
 oldcurrcomponent = __.currcomponent
-__.currcomponent = name
+__.currcomponent = attrdict(name=name, dependencies=dependencies or [])
 %>
 ${caller.body()}
 <%
@@ -9,30 +38,36 @@ __.currcomponent = oldcurrcomponent
 %>
 </%def>
 
-<%def name='callslot(slot, body=None, priority=False)'><%
-name = __.currcomponent
+<%def name='callslot(slot, body=None, blockName=0, dependencies=None)'><%
+component = __.currcomponent
 ##if we're creating a component now, keep track of that so we don't have to 
 ##worry about duplicating the component if its loaded again
-if not name or (name,slot) not in __.setdefault('components', set()):
+if not component or (component.name,slot) not in __.setdefault('components', set()):
   content = capture(body or caller.body)
   slots = __.setdefault('slots', {})
-  if priority:
-    slots.setdefault(slot, []).insert(0, content)
+  if component:
+    block = attrdict(content=content, isComponent=True, name=blockName or component.name, 
+            dependencies=dependencies or component.dependencies)
   else:
-    slots.setdefault(slot, []).append(content)
-  if name:
-    __.components.add( (name,slot) )
+    block = attrdict(content=content, isComponent=False, name=blockName, dependencies=dependencies or [])
+  #slots will be in added in reverse of import/declaration order 
+  #so push at front of list to fix order  
+  slots.setdefault(slot, []).insert(0, block)
+  if component:
+    __.components.add( (component.name,slot) )
 %></%def>
 
-<%def name='head(priority=False)'>${callslot('head', caller.body, priority)}</%def>
+<%def name='head(priority=0)'>${callslot('head', caller.body, priority)}</%def>
 
-<%def name='css(priority=False)'>${callslot('css', caller.body, priority)}</%def>
+<%def name='css(priority=0)'>${callslot('css', caller.body, priority)}</%def>
 
-<%def name='scripts(priority=False)'>${callslot('scripts', caller.body, priority)}</%def>
+<%def name='scripts(name=None)'>${callslot('scripts', caller.body, name)}</%def>
 
 <%def name='output(slot)'>
-<% if not __.slots: return %>
-%for content in __.slots.get(slot,[]):
+<%
+if not __.slots: return 
+%>
+%for content in sortBlocks(__.slots.get(slot,[])):
  ${content}
 %endfor
 </%def>
@@ -58,51 +93,3 @@ ${output('scripts')}
 </body></html>
 </%def>
 
-<%doc>
-
-<%!
-slotnames = set(['head', 'css', 'scripts'])
-
-class call(object):
-    def __init__(self,obj):
-        self.obj = obj
-        
-    def __getattr__(self, name):
-        func = getattr(self.obj, name, None)
-        if func:
-            return func()
-        else:
-            return ''            
-%>
-
-<%
-components = __.setdefault('components', [])
-if name not in components:   
-  for slotname in slotnames:
-    ssfunc = getattr(caller, slotname, None)
-    if ssfunc:
-      __.setdefault(slotname, []).append(capture(ssfunc))
-  if name:
-     components.append(name)
-%>
-</%def>
-
-<%def name="addslot(name)">
-<% slotnames.add(name) %>
-</%def>
-
-<%def name='head()'%><%
-if name not in __.components:
-  __.setdefault('head', []).append(capture(caller.body))
-%></def>
-
-
-def slotdef(name, context):
-  context.get('__', UNDEFINED).setdefault(name, []).append(context.get('capture', UNDEFINED)
-                        (context.get('caller', UNDEFINED).body))
-  return ''
-
-def create_slotdef(name):
-  module.__dict__['render_'+name] = lambda context: slotdef(name, context) 
-
-</%doc>

@@ -7,6 +7,9 @@ from vesper.utils import attrdict
 from vesper.app import getCurrentApp
 from vesper.backports import json
 import mako.runtime
+import logging
+log = logging.getLogger('datarequest')
+
 #contrary to http://www.makotemplates.org/docs/runtime.html#runtime_context_variables
 #for templates not throwing errors is useful
 #monkey patch so iteration over undefined properties doesn't raise an exception
@@ -96,6 +99,7 @@ def datarequest(kw, retval):
         response = [isinstance(x, dict) and handleRequest(**x) or 
 dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
                                                             for x in requests]
+    log.debug('request: \n  %r\n response:\n   %r', requests, response)
     return json.dumps(response, indent=4) 
 
 @Route('static/{file:.+}')
