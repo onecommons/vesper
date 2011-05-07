@@ -180,6 +180,9 @@ class BasicStore(DataStore):
         #turn on update logging if a log file is specified, which can be used to 
         #re-create the change history of the store
         if self.transaction_log:
+            if not isinstance(self.transaction_log, (str,unicode)):
+                assert self.storage_path and isinstance(self.storage_path, (str,unicode))
+                self.transaction_log = self.storage_path + '.log.nt'
             #XXX doesn't log history model if store is split
             #XXX doesn't log models that are TransactionParticipants themselves
             #XXX doesn't log models that don't support updateAdvisory 

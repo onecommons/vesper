@@ -480,12 +480,22 @@ def argsToKw(argv):
         while 1:
             if arg[0] != '-':            
                 raise CmdArgError('missing arg')
+            longArg = arg[:2] == '--'
             name = arg.lstrip('-')
-            kw[name] = True
-            arg = i.next()
-            if arg[0] != '-':
-                kw[name] = arg
+            if not longArg and len(name) > 1:
+                #e.g. -fname
+                kw[name[0]] = name[1:]
                 arg = i.next()
+            elif longArg and '=' in name:
+                name, val = name.split('=', 1)
+                kw[name] = val
+                arg = i.next()
+            else:                
+                kw[name] = True
+                arg = i.next()
+                if arg[0] != '-':
+                    kw[name] = arg
+                    arg = i.next()
     except StopIteration: pass
     
     return kw
@@ -575,7 +585,8 @@ class AppConfig(utils.attrdict):
                 self.cmd_args = appLeftOver
             #also treat appLeftOver as config settings
             try: 
-                self.update( argsToKw(appLeftOver) )            
+                moreConfig = argsToKw(appLeftOver)
+                self.update( moreConfig )
             except CmdArgError, e:
                 print "Error:", e.msg
                 self.parser.print_help()

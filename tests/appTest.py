@@ -250,7 +250,29 @@ class AppTestCase(unittest.TestCase):
             }])            
         self.assertEquals(store.query('{*}'), [{'id': '@hello', 'tags': ['@tag1']}])
 
+    def XXXtestUpdate2(self):
+        #XXX bug: update needs to replace the embedded object,
+        #not just update the given properties in the embedded object
+        store = vesper.app.createStore({
+          "id": "1",
+          "custom":
+            {
+              "item": "@2",
+              "custom": {
+                "item": "@3",
+              }
+            }
+          ,
+        })
+        from vesper import pjson
+        print 'update', store.update(
+        {"id":"1", "custom":{"item":{"id":"@2"}}}
+        )
+        print 'model', pjson.tojson(store.model.getStatements())['data']
+
+
     def _testUpdateEmbedded(self, op):
+        #XXX test nested lists, nested embedded objects
         updates = utils.attrdict()        
         @vesper.app.Action
         def recordUpdates(kw, retval):
@@ -634,8 +656,7 @@ class AppTestCase(unittest.TestCase):
             self.assertEquals(store2.query("{* where (id='1')}"), [{'id': '@1', 'tags': ['@t', '@t']}])            
         finally:
             os.unlink(tmppath)
-        
-              
+                      
     def testCreateApp(self):
         #this is minimal logconfig that python's logger seems to accept:
         app = vesper.app.createApp(static_path=['static'], 
@@ -666,6 +687,13 @@ class AppTestCase(unittest.TestCase):
         )
         root = app.load()
         self.failUnless(root)
+        
+        cmdline = ['--foo=bar', '--transaction_log=test.log', '-fname']
+        app = vesper.app.createApp()
+        root = app.run(startserver=False, cmdline=cmdline)
+        self.assertEquals(app.foo, 'bar')
+        self.assertEquals(app.f, 'name')
+        self.assertEquals(root.defaultStore.transaction_log, 'test.log')
 
     def testMultipleStores(self):
         app = vesper.app.createApp(stores = { 
