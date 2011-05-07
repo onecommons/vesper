@@ -3,11 +3,12 @@ from vesper.utils import attrdict
 
 def sortBlocks(blocks):
   #components go first
-  blocks.sort(key=lambda b: not b.isComponent)
+  blocks = sorted(blocks, key=lambda b: not b.isComponent)
   sofar = set()
   neworder = []
   while blocks:
     block = blocks.pop(0)
+    assert isinstance(block.dependencies, (list,tuple))
     for dependency in block.dependencies:
       if dependency not in sofar:
         #look ahead for dependency, reorder if found
@@ -38,8 +39,10 @@ __.currcomponent = oldcurrcomponent
 %>
 </%def>
 
-<%def name='callslot(slot, body=None, blockName=0, dependencies=None)'><%
+<%def name='callslot(slot, body=None, blockName=None, dependencies=None)'><%
 component = __.currcomponent
+if not component and blockName:
+  component = attrdict(name=name, dependencies=dependencies or [])
 ##if we're creating a component now, keep track of that so we don't have to 
 ##worry about duplicating the component if its loaded again
 if not component or (component.name,slot) not in __.setdefault('components', set()):
@@ -51,7 +54,7 @@ if not component or (component.name,slot) not in __.setdefault('components', set
   else:
     block = attrdict(content=content, isComponent=False, name=blockName, dependencies=dependencies or [])
   #slots will be in added in reverse of import/declaration order 
-  #so push at front of list to fix order  
+  #so push at front of list to fix order
   slots.setdefault(slot, []).insert(0, block)
   if component:
     __.components.add( (component.name,slot) )

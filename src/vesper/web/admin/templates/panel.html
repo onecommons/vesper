@@ -344,12 +344,14 @@ initComponent()
    <button class='entry-save-button' disabled='true'>save</button>
    <button class='entry-preview-button'>preview</button>
    <button class='entry-delete-button'>delete</button>
+   ${slots.output('entry-edit')}   
    <button class='entry-canceledit-button'>cancel</button>
    <div class='preview-contents'></div>
   </div>
-  <div class='item'>${call(caller).renderItemProperties}
+  <div class='item'>
       ## contents are block elements (p) so bullet doesnt appear inline as we want
       <span class='item-bullet'>&bull;</span>
+      ${call(caller).renderItemProperties}
       <div class='item-contents'>
       ${caller.body()}      
       </div>
