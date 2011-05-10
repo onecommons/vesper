@@ -38,30 +38,27 @@ datastore configuration variables
 
 .. confval:: transaction_log
  
-    The path of the transaction log.. The transaction log records in NTriples format a log 
-    of the statements added and removed from the model along with comments on when and by whom.
-    Note: the default file store uses this format so there is not much reason to use this if you are using the default
+    The path of the transaction log. The transaction log records in NTriples format a log 
+    of the statements added and removed from the model along with comments on when and by whom. If the value is True, a file path is created by appending ".log.nt" to ``storeage_path``.
+
+    default is False (no transaction log)
     
-    default is '' (no transaction log)
-    
-    ``transaction_log='/logs/auditTrail.nt'``
+    Example: ``transaction_log='/logs/auditTrail.log.nt'``
 
 .. confval:: storage_template
 
-    A string containing NTriples that is used when 
-    the file specified by storage_path is not found
+    A string that is used as the initial data when creating a new store  
+    (which happens when the file specified by storage_path is not found)
     
-    storage_template='''
-    _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#name> "item-disposition-handler-template" .
-    _:itemdispositionhandlertemplate <http://rx4rdf.sf.net/ns/wiki#revisions> _:itemdispositionhandlertemplate1List .
-    _:itemdispositionhandlertemplate <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://rx4rdf.sf.net/ns/archive#NamedContent> .
+    storage_template='''{
+    "id": "1",
+    "content": "hello world"
+    }
     '''
-.. confval:: application_model 
 
-    A string containing NTriples that are added to the RDF model
-    but are read-only and not saved to disc. Use for structural components such as the schema.
-    
-    application_model='''<http://rx4rdf.sf.net/ns/wiki#item-format-zml'> <http://www.w3.org/2000/01/rdf-schema#label> "ZML" .'''
+.. confval:: storage_template_path
+
+    Path to a file that will be used as the ``storage_template``. 
 
 .. confval:: model_factory
 

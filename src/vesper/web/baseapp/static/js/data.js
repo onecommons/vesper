@@ -4,7 +4,8 @@
  */
 if (!window.console) {
     var konsole = {
-        log : function() {}
+        log : function() {},
+        assert : function(expr, msg) { if (!expr) { debugger; } }
     };
 } else {
     var konsole = window.console;

@@ -97,6 +97,7 @@ class BasicStore(DataStore):
                  schemaFactory=defaultSchemaClass,
                  storage_path ='',
                  storage_template='',
+                 storage_template_path='',
                  application_model='',
                  transaction_log = '',
                  save_history = False,
@@ -122,6 +123,7 @@ class BasicStore(DataStore):
         self.storage_path = storage_path        
         self.version_storage_path = version_storage_path
         self.storage_template = storage_template
+        self.storage_template_path = storage_template_path
         self.transaction_log = transaction_log
         self.save_history = save_history
         self.storage_template_options = storage_template_options or {}
@@ -140,6 +142,8 @@ class BasicStore(DataStore):
         #source is the data source for the store, usually a file path
         #source = normalizeSource(self, requestProcessor, self.storage_path)
         source = self.storage_path
+        if not self.storage_template and self.storage_template_path:
+            self.storage_template = open(self.storage_template_path).read()
         model, defaultStmts, historyModel, lastScope = self.setupHistory(source)
         if not model:
             #setupHistory didn't initialize the store, so do it now
