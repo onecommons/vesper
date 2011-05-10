@@ -158,14 +158,6 @@ function setModified($this, changed) {
    $('.entry-save-button', container)[0].disabled = !changed;
 }
 
-function show() { 
-  startModifyChecking($(this)); 
-}
-
-function hide() { 
-  stopModifyChecking($(this));
-}
-
 function toggleEditEntry() {
     var container = $(this).closest('.entry');
     $('.item,.entry-edit', container).toggle();
@@ -187,20 +179,6 @@ function editEntry(event) {
 function makePanels(selector) {
     var panels = $(selector || document);
 
-    /*
-    do this on the server side to improve load time
-    panels.addClass("ui-helper-clearfix ui-widget")
-                .find(".panel-header")
-                    .addClass("ui-widget-header")
-                    .prepend('<span class="ui-icon showhide-button ui-icon-triangle-1-s"></span>')
-                ;//.end().find(".portlet-content").addClass("ui-widget-content");
-    */
-    
-    /*
-    panels.wrapInner("<div class='panel-body'></div>").prepend(
-        '<div class="panel-header"><span class="ui-icon ui-icon-triangle-1-s"></span></div>');
-   */
-
     $('.panel-body', panels).hresize(); //{ minHeight: 100})
 
     $('.panel-header .showhide-button', panels).live('click', function() {
@@ -220,6 +198,14 @@ var gItemSaveQuery = "{ * where (id=:this)  }";
 
 function initItems(context) {
    context = context || document;
+
+   function show() {
+     startModifyChecking($(this)); 
+   }
+
+   function hide() {
+     stopModifyChecking($(this));
+   }
 
    $('.entry-edit textarea', context).focus(show).blur(hide);
    

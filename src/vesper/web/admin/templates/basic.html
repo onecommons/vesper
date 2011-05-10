@@ -27,13 +27,9 @@ callerbody = capture(caller.body)
 
 <!-- doc3 == 100% -->
 <div id='doc3' class="yui-t4">
-  <div id="hd" class="header-title">      
-    <div>${slots.output('header')}</div>
-    % if errors:
-        <div class='error'>Error:
-        ${'<br/>'.join(errors)}
-        </div>
-    % endif
+##XXX using ui-state-active just because it looks good, shouldn't
+  <div id="hd" class="header-title ui-state-active">
+    ${slots.output('header')}
   </div>
   <div id="bd">
       <div id="yui-main">          
