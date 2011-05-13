@@ -158,10 +158,6 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
 def buildAST(query, namemap=None):
     "parse a query, returning (ast, [error messages])"
     from vesper.query import parse, engine
-    from vesper.pjson import defaultRefPattern
-    if namemap is None:
-        namemap = { 'refpattern' : defaultRefPattern }
-
     return parse.parse(query, engine.SimpleQueryEngine.queryFunctions, False, namemap)
 
 def _parsePjson(parseContext, v):
@@ -175,19 +171,21 @@ def _parsePjson(parseContext, v):
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, 
                     forUpdate=False, contextShapes=None, useSerializer=True):
     from vesper.query import engine
-    if isinstance(useSerializer, dict):
-        if hasattr(ast,'namemap'):
-            useSerializer['namemap'] = ast.namemap
+    
+    astNameMap = getattr(ast,'namemap', None)
+    if isinstance(useSerializer, dict):        
+        if astNameMap is not None:
+            useSerializer['nameMap'] = astNameMap
         serializer = pjson.Serializer(**useSerializer)
     elif useSerializer:
-        serializer = pjson.Serializer(getattr(ast,'namemap',None))
+        serializer = pjson.Serializer(astNameMap)
     else:
         serializer = None
     if bindvars:
         if serializer:
             parseContext = serializer.parseContext
-        elif ast.namemap is not None:
-            parseContext = pjson.ParseContext(ast.namemap)
+        else:
+            parseContext = pjson.ParseContext(astNameMap)
         if parseContext:
             for k, v in bindvars.items():
                 if isinstance(v, (list, tuple)):

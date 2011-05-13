@@ -246,7 +246,10 @@ def p_root(p):
     #we're done parsing so resolve the namemaps now (we had to wait because
     #namemaps inherit from their parent context)
     if select.namemap:
-        p.parser.jqlState.namemap.update( select.namemap )
+        if not p.parser.jqlState.namemap:
+            p.parser.jqlState.namemap = select.namemap
+        else:
+            p.parser.jqlState.namemap.update( select.namemap )
     select.namemap = p.parser.jqlState.namemap
     vesper.query.rewrite.removeDuplicateConstructFilters(select)
     resolveNameMap(None, select)    

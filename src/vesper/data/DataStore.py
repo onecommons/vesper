@@ -692,6 +692,10 @@ class BasicStore(DataStore):
         
         if not contextShapes:
             contextShapes = {dict:defaultattrdict}
+        if useSerializer and isinstance(useSerializer, (bool, int, float)):            
+            pjsonOptions=self.model_options.get('serializeOptions',{}).get('pjson')
+            if pjsonOptions is not None:
+                useSerializer = pjsonOptions
         results = vesper.query.getResults(query, self.model, bindvars, explain,
                     debug, forUpdate, captureErrors, contextShapes, useSerializer)
         if not captureErrors and not explain and not debug:
