@@ -91,6 +91,14 @@ def package_import(name):
         mod = getattr(mod, comp)
     return mod
 
+def recursiveUpdate(dict_, update, dontMerge=()):
+    for key, value in update.items():
+        if (isinstance(value, dict) and isinstance(dict_.get(key), dict) 
+                                                    and key not in dontMerge):
+            recursiveUpdate(dict_[key], value, dontMerge)
+        else:
+            dict_[key] = value
+
 def getTransitiveClosure(aMap):
     def close(done, super, subs):
         done[super] = set(subs)

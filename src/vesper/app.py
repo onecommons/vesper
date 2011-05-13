@@ -212,6 +212,8 @@ class RequestProcessor(TransactionProcessor):
             '_prevkw', '__argv__', '_errorInfo'
             ]
 
+    nonMergableConfigDicts = ['nameMap'] 
+    
     def __init__(self, appVars):
         super(RequestProcessor, self).__init__()
         self.baseDir = os.getcwd() #XXX make configurable
@@ -262,22 +264,25 @@ class RequestProcessor(TransactionProcessor):
         initConstants( ['default_mime_type'], '')        
         self.initLock(appVars)
         self.txnSvc = transactions.ProcessorTransactionService(self)
+        initConstants( [ 'stores', 'storeDefaults'], {})
+        addNewResourceHook = self.actions.get('before-new')
         if 'stores' in appVars:
-            initConstants( [ 'stores'], {})
             stores = utils.attrdict()
             for name, storeConfig in appVars['stores'].items():
-                stores[name] = self.loadDataStore(storeConfig)
+                stores[name] = self.loadDataStore(storeConfig, 
+                                    self.storeDefaults, addNewResourceHook)
                 if storeConfig.get('default_store'):
                     stores['default'] = stores[name]
             if stores and 'default' not in stores:
                 if len(stores) > 1:
-                    raise VesperError('default store not set')                                        
+                    raise VesperError('default store not set')
                 else:
                     stores['default'] = stores.values()[0]
             self.stores = stores
         else:
-            self.stores = utils.attrdict(default=self.loadDataStore(appVars))
-            
+            self.stores = utils.attrdict(default=
+             self.loadDataStore(appVars,self.storeDefaults,addNewResourceHook))
+
         #app_name is a unique name for this request processor instance
         initConstants( ['app_name'], 'root')
         self.log = logging.getLogger("app." + self.app_name)
@@ -519,21 +524,21 @@ class AppConfig(utils.attrdict):
     _server = None
 
     cmd_usage = "%prog [options] [settings]"
-    cmd_help = '''Settings:\n--[name]=VALUE Add [name] to config settings'''
-    
+    cmd_help = '''Settings:\n--name=VALUE Add [name] to config settings'''
+    #XXX add to docs
     parser = OptionParser()
-    parser.add_option("-c", "--config", dest="config", help="path to configuration file")
     parser.add_option("-s", "--storage", dest="storage", help="storage path or url")
+    parser.add_option("-c", "--config", dest="config", help="path to configuration file")
     parser.add_option("-p", "--port", dest="port", type="int", help="http server listener port")
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", 
                             default=False, help="set logging level to DEBUG")
     parser.add_option("-x", "--exit", action="store_true", dest="exit", 
-                                help="exit after executing config specific cmd arguments")
+                                help="exit without running HTTP server")
         
     def updateFromConfigFile(self, filepath):
         config = {}
         execfile(filepath, config, config)
-        self.update(config)
+        utils.recursiveUpdate(self, config, RequestProcessor.nonMergableConfigDicts)
     
     def isBuiltinCmdOption(self, arg):
         return self.parser.has_option(arg)

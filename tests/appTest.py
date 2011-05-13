@@ -688,9 +688,9 @@ class AppTestCase(unittest.TestCase):
         root = app.load()
         self.failUnless(root)
         
-        cmdline = ['--foo=bar', '--transaction_log=test.log', '-fname']
+        cmdline = ['-x', '--foo=bar', '--transaction_log=test.log', '-fname']
         app = vesper.app.createApp()
-        root = app.run(startserver=False, cmdline=cmdline)
+        root = app.run(cmdline=cmdline)
         self.assertEquals(app.foo, 'bar')
         self.assertEquals(app.f, 'name')
         self.assertEquals(root.defaultStore.transaction_log, 'test.log')
@@ -698,25 +698,36 @@ class AppTestCase(unittest.TestCase):
     def testMultipleStores(self):
         app = vesper.app.createApp(stores = { 
         'config' : dict(storage_template='''{
-            "id" : "c1", "prop" : 1
-        }'''),
+            "id" : "@c1", "prop" : 1
+        }''', model_options=dict(
+                serializeOptions = dict(pjson=dict(nameMap=None))
+            )
+        ),
           'data' : dict(default_store=True, storage_template='''{
-          "id" : "d1", "prop" : 1
+          "id" : "@d1", "prop" : 1
         }''')
-        })
+        }, storeDefaults=dict(model_options=dict(
+            serializeOptions = dict(pjson=dict(nameMap={'refpattern': '!((::)?URIREF)'}))
+        ))
+        )
         root = app.load()
         self.failUnless(root and root.defaultStore is root.stores.data)
-        
+        self.assertEquals(root.stores.config.model_options, 
+                    {'serializeOptions': {'pjson': {'nameMap': None}}})
+        self.assertEquals(root.stores.data.model_options, {'serializeOptions':
+                {'pjson': {'nameMap': {'refpattern': '!((::)?URIREF)'}}}})
+
         def transaction():
             root.stores.config.update(dict(id='c2', prop2=1))
             root.stores.data.update(dict(id='d1', prop2=1))
         root.executeTransaction(transaction)
         
         cdata = [{'id': '@c2', 'prop2': 1}, {'id': '@c1', u'prop': 1}]
-        ddata = [{'id': '@d1', 'prop2': 1, u'prop': 1}]        
+        ddata = [{'id': '!d1', 'prop2': 1, u'prop': 1}]
         self.assertEquals(root.stores.config.query("{*}"), cdata)
         self.assertEquals(root.defaultStore.query("{*}"), ddata)
         
+        #test that both stores rollback
         def transaction2():
             root.stores.config.update(dict(id='c2', prop3=1))
             root.stores.data.update(dict(id='d1', prop3=1))

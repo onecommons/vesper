@@ -295,6 +295,14 @@ advanced configuration variables
   
   Example: ``stores = {'config': {'storage_path': 'config.json'}, 'data': {'storage_path': 'data.json', 'default_store': True}}``
 
+.. confval:: storeDefaults
+
+  A dictionary containing datastore configuration settings that are applied to each store defined in the configuration. 
+  Any other datastore settings override the settings here.
+  If the value of the settings is another dictionary of settings (e.g. ``model_options``) those dictionaries are merged recursively.
+  
+  Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}
+  
 .. confval:: app_name
 
   A short name for this application, must be unique within the current ``vesper.app`` process

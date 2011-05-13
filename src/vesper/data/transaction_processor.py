@@ -2,7 +2,7 @@
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import sys
 import tempfile, os.path
-
+import copy
 from vesper import utils
 from vesper.data import DataStore, transactions
 from vesper.utils import glock
@@ -11,7 +11,8 @@ import logging
 log = logging.getLogger("TransactionProcessor")
 
 class TransactionProcessor(utils.ObjectWithThreadLocals):
-    
+
+    nonMergableConfigDicts = ()
     def __init__(self):
         self.initThreadLocals(requestContext=[{}], #stack of dicts
                                 inErrorHandler=0)
@@ -30,7 +31,11 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
             self.LockFile = glock.NullLockFile #the default
         self.lockfilepath = configDict.get('file_lock_path')
 
-    def loadDataStore(self, configDict):
+    def loadDataStore(self, configDict, defaults, addNewResourceHook):
+        if defaults:
+            defaults = copy.deepcopy(defaults)
+            utils.recursiveUpdate(defaults, configDict, self.nonMergableConfigDicts)
+            configDict = defaults
         self.model_uri = configDict.get('model_uri')
         if not self.model_uri:
             import socket
@@ -41,7 +46,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
         dataStore.addTrigger = self.txnSvc.addHook
         dataStore.removeTrigger = self.txnSvc.removeHook
 
-        if configDict.get('actions',{}).get('before-new'):
+        if addNewResourceHook:
             #newResourceHook is optional since it's expensive
             dataStore.newResourceTrigger = self.txnSvc.newResourceHook
             
