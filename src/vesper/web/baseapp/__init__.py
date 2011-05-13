@@ -27,7 +27,8 @@ vesper.utils.defaultattrdict.UNDEFINED = mako.runtime.UNDEFINED
 import vesper.query
 vesper.query.QueryContext.defaultShapes = { dict : vesper.utils.defaultattrdict }
 
-@Route('datarequest')#, REQUEST_METHOD='POST')
+@Route('datarequest')
+@Route('{store:.*}/datarequest')#, REQUEST_METHOD='POST')
 def datarequest(kw, retval): 
     '''
     Accepts a JSON-RPC 2.0 (see http://groups.google.com/group/json-rpc/web/json-rpc-2-0)
@@ -82,23 +83,31 @@ def datarequest(kw, retval):
         response['result'] = result
         return response
 
-    dataStore = kw.__server__.defaultStore
-    postdata = kw._postContent
-    # some json libs return unicode keys, which causes problems with **dict usages
-    try:
-        requests = json.loads(postdata, object_hook=lambda x: 
-                            dict([(str(k),v) for (k,v) in x.items()]))
-    except:
-        response = dict(id=None, jsonrpc='2.0', error=dict(code=-32700, 
-                                                  message='Parse error'))
+    if kw.urlvars.store:
+        dataStore = kw.__server__.stores.get(kw.urlvars.store)
     else:
-        if not isinstance(requests, list):
-           requests = [requests] 
-        #XXX vesper.app should set a default content-type 
-        kw._responseHeaders['Content-Type'] = 'application/json'
-        response = [isinstance(x, dict) and handleRequest(**x) or 
-dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
-                                                            for x in requests]
+        dataStore = kw.__server__.defaultStore
+
+    if not dataStore:
+        response = dict(id=None, jsonrpc='2.0', error=dict(code=-32600, 
+            message='Invalid Request: store "%s" not found' % kw.urlvars.store))
+    else:                                             
+        postdata = kw._postContent
+        # some json libs return unicode keys, which causes problems with **dict usages
+        try:
+            requests = json.loads(postdata, object_hook=lambda x: 
+                                dict([(str(k),v) for (k,v) in x.items()]))
+        except:
+            response = dict(id=None, jsonrpc='2.0', error=dict(code=-32700, 
+                                                      message='Parse error'))
+        else:
+            if not isinstance(requests, list):
+               requests = [requests] 
+            #XXX vesper.app should set a default content-type 
+            kw._responseHeaders['Content-Type'] = 'application/json'
+            response = [isinstance(x, dict) and handleRequest(**x) or 
+    dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
+                                                                for x in requests]
     log.debug('request: \n  %r\n response:\n   %r', requests, response)
     return json.dumps(response, indent=4) 
 

@@ -11,10 +11,12 @@ if (!window.console) {
     var konsole = window.console;
 }
 
-var Txn = function() {
+var Txn = function(url) {
   this.autocommit = false;
   this.requests = [];
   this.txnId = ++Txn.prototype.idcounter;
+  if (url)
+    this.url = url;
   //this.pendingChanges = {};
   //this.successmsg = '';
   //this.errormsg = '';
@@ -24,7 +26,7 @@ Txn.prototype = {
     
     idcounter : 0, 
     
-    url : '/datarequest',
+    url : 'datarequest',
     
     execute : function(action, data, callback, elem) {
         var elem = elem || document;
@@ -188,7 +190,7 @@ txn.commit();
          if (!txn) {
              txn = this.data('currentTxn');
              if (!txn) {
-                 txn = new Txn();
+                 txn = new Txn($.db.url);
                  commitNow = true;
              }
          }         
@@ -261,7 +263,7 @@ txn.commit();
         return this._executeTxn('remove', txn, data, callback);
      },      
      dbBegin : function() {
-        this.data('currentTxn', new Txn());
+        this.data('currentTxn', new Txn($.db.url));
         return this;
      },
      dbCommit : function(callback) {
@@ -290,7 +292,8 @@ txn.commit();
         return this;        
      }
    })
-
+   
+   $.db = { url : null, options : {} };
 })(jQuery);
 
 function parseAttrPropValue(data) {

@@ -26,6 +26,7 @@ def Route(path, route_map=route_map, **vars):
         route_map.connect(None, path, controller=func)
         # print "mapping %s -> %s" % (path, str(func))
         _routemap_dirty = True
+        return func
     return _route
 
 def gensequence(kw, default=None):
