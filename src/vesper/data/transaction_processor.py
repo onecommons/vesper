@@ -71,8 +71,8 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
     
     def loadModel(self):
         lock = self.getLock()
-        try:
-            for store in self.stores.values():
+        try:            
+            for store in set(self.stores.values()):
                 store.load()
         finally:
             lock.release()
