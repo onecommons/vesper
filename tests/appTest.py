@@ -688,10 +688,11 @@ class AppTestCase(unittest.TestCase):
         root = app.load()
         self.failUnless(root)
         
-        cmdline = ['-x', '--foo=bar', '--transaction_log=test.log', '-fname']
+        cmdline = ['-x', '--foo=bar', '--transaction_log=test.log', '-fname', '-c', 'test.config']
         app = vesper.app.createApp()
         root = app.run(cmdline=cmdline)
         self.assertEquals(app.foo, 'bar')
+        self.assertEquals(app.baz, 1)
         self.assertEquals(app.f, 'name')
         self.assertEquals(root.defaultStore.transaction_log, 'test.log')
 

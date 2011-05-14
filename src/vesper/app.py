@@ -546,8 +546,7 @@ class AppConfig(utils.attrdict):
     def handleCmdOptions(self, args):
         (options, args) = self.parser.parse_args(args)
         if options.config:    
-            print "loading config file from:", args[0]
-            app.updateFromConfigFile(options.config)
+            self.updateFromConfigFile(options.config)
 
         if options.verbose:
             self.loglevel = logging.DEBUG
