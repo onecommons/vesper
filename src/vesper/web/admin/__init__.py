@@ -15,7 +15,7 @@ app = createApp(__name__, 'vesper.web.baseapp'
 )
 
 #add routes after createApp if you want them to run after base app's routes
-Route('{path:.+}.html')(servetemplate)
+Route(r'{path:.+\.html}')(servetemplate)
 
 # entry point from setuptools console_scripts, called with no args
 def console_main():

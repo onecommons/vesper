@@ -23,7 +23,7 @@ def Route(path, route_map=route_map, **vars):
         global _routemap_dirty
         if not isinstance(func, Action):
             func = Action(func)
-        route_map.connect(None, path, controller=func)
+        route_map.connect(None, path, controller=func, **vars)
         # print "mapping %s -> %s" % (path, str(func))
         _routemap_dirty = True
         return func
@@ -38,8 +38,7 @@ def gensequence(kw, default=None):
         _routemap_dirty = False
     
     request_url = kw['_name']
-    # print "matching on:'%s' default:%s" % (request_url, str(default))
-    r = route_map.match(request_url)
+    r = route_map.match(request_url, kw.get('_environ'))
     if r:
         kw['urlvars'] = defaultattrdict(r) # XXX should probably strip 'action' & 'controller'
         yield r['controller']
@@ -48,9 +47,6 @@ def gensequence(kw, default=None):
 
 @Action
 def servefile(kw, retval):
-    #value = kw
-    #for n in name.split('.'):
-    #    value = value[n]
     return _servefile(kw,retval,kw._name)
 
 def _servefile(kw, retval, uri):
@@ -59,7 +55,6 @@ def _servefile(kw, retval, uri):
     server = kw.__server__
     for prefix in server.static_path:            
         filepath = os.path.join(prefix.strip(), path)
-        #print 'filepath', filepath
         #check to make sure the path url wasn't trying to sneak outside the path (e.g. by using "..")
         if server.secure_file_access:
             if not os.path.abspath(filepath).startswith(os.path.abspath(prefix)):
@@ -76,12 +71,23 @@ def _servefile(kw, retval, uri):
 @Action #Route(default=True)
 def servetemplate(kw, retval):
     from mako.exceptions import TopLevelLookupException
+    
     path = kw._name
+    db = kw.__server__.defaultStore
+    if kw.urlvars:
+        if 'path' in kw.urlvars:
+            path = kw.urlvars.path
+        if kw.urlvars.db:
+            try:
+                db = kw.__server__.stores[kw.urlvars.db]
+            except KeyError:
+                return retval #not found
+        
     try: 
         template = kw.__server__.template_loader.get_template(path)
     except TopLevelLookupException:
         #couldn't find template
-        return retval
+        return retval #not found
     if template:
         return template.render(params=kw._params, 
                         urlvars=kw.get('urlvars',{}), 
@@ -89,6 +95,6 @@ def servetemplate(kw, retval):
                         config=kw.__server__.config,
                         server=kw.__server__,
                         __=defaultattrdict(), 
-                        db=kw.__server__.defaultStore)
+                        db=db)
     else:
         return retval

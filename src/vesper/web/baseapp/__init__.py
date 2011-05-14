@@ -27,16 +27,14 @@ vesper.utils.defaultattrdict.UNDEFINED = mako.runtime.UNDEFINED
 import vesper.query
 vesper.query.QueryContext.defaultShapes = { dict : vesper.utils.defaultattrdict }
 
-@Route('datarequest')
-@Route('{store:.*}/datarequest')#, REQUEST_METHOD='POST')
-def datarequest(kw, retval): 
+@Route('datarequest', conditions=dict(method=["POST"]))
+@Route('{store:.*}/datarequest', conditions=dict(method=["POST"]))
+def datarequest(kw, retval):
     '''
     Accepts a JSON-RPC 2.0 (see http://groups.google.com/group/json-rpc/web/json-rpc-2-0)
     request (including a batch request).
     '''
     from vesper import pjson
-    if kw._environ.REQUEST_METHOD != 'POST':
-        raise RuntimeError('POST expected')
 
     def handleRequest(id=None, method=0, params=0, jsonrpc=None):
         requestid = id; action = method; data = params
@@ -108,7 +106,7 @@ def datarequest(kw, retval):
             response = [isinstance(x, dict) and handleRequest(**x) or 
     dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
                                                                 for x in requests]
-    log.debug('request: \n  %r\n response:\n   %r', requests, response)
+            log.debug('request: \n  %r\n response:\n   %r', requests, response)
     return json.dumps(response, indent=4) 
 
 @Route('static/{file:.+}')

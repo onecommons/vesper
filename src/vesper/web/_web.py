@@ -131,9 +131,9 @@ class HTTPRequestProcessor(RequestProcessor):
 
     def requestFromEnviron(self, environ):
         import Cookie, wsgiref.util
-        _name = environ['PATH_INFO'].strip('/')
-        if not _name:
-            _name = self.default_page_name
+        _name = environ['PATH_INFO'].lstrip('/')
+        if not _name or _name.endswith('/'):
+            _name += self.default_page_name
 
         _responseCookies = Cookie.SimpleCookie()
         _responseHeaders = utils.attrdict(_status="200 OK") #include response code pseudo-header
