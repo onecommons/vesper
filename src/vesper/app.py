@@ -8,6 +8,7 @@
 """
 import os, os.path, sys, traceback, re
 from optparse import OptionParser
+import itertools
 
 from vesper import utils
 from vesper.utils import MRUCache
@@ -15,7 +16,7 @@ from vesper.utils.Uri import UriToOsPath
 from vesper.data import base, DataStore, transactions, store
 from vesper.data.transaction_processor import TransactionProcessor
 from vesper.backports import *
-
+from vesper import VesperError
 
 try:
     import cStringIO
@@ -34,7 +35,6 @@ log = logging.getLogger("app")
 _defexception = utils.DynaExceptionFactory(__name__)
 
 _defexception('CmdArgError')
-_defexception('VesperError')
 _defexception('unusable namespace error')
 _defexception('not authorized')
 
@@ -789,6 +789,9 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
     
     basedir = _current_configpath[-1] or derived_path
     if basedir is not None:
+        if not os.path.isdir(basedir):
+            basedir = os.path.dirname(basedir)
+
         def addToPath(path, configvar):
             if isinstance(path, (str, unicode)):
                 path = [path]
@@ -806,5 +809,16 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
         #the most derived app to prevent tmp directory spew in current directory
         mako_module_dir = config.get('mako_module_dir', 'mako_modules')
         _current_config.mako_module_dir = _normpath(basedir, mako_module_dir)
-    
+        
+        #storage_template_path should be relative to the app config 
+        #that sets it, not the final (most derived) app
+        for configdict in itertools.chain([_current_config, config.get('storeDefaults')], 
+                                        (config.get('stores') or {}).values()):
+            if not configdict:
+                continue
+            storage_template_path = configdict.get('storage_template_path')
+            if storage_template_path:
+                abspath = _normpath(basedir, storage_template_path)
+                configdict['storage_template_path'] = abspath
+
     return _current_config
