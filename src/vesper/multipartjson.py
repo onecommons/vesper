@@ -24,6 +24,9 @@ r"""
 import re
 
 from vesper.backports import *
+import vesper
+class Error(vesper.VesperError):
+    pass
 
 class Blob(object):
     def __init__(self, id, data):
@@ -41,7 +44,7 @@ class Blob(object):
             if done:
                 break
         if not done:
-            raise RuntimeError('could not generate a unique endmarker for %r' 
+            raise Error('could not generate a unique endmarker for %r' 
                                                                    % self.id)
         if isinstance(self.data, unicode):
             self.data = self.data.encode('utf8')
@@ -57,10 +60,15 @@ class BlobRef(object):
         self.id = id        
         self._pool = pool
         
-    def resolve(self, default=None, pool=None):
+    def resolve(self, default='raise', pool=None):
         if pool is None:
             pool = self._pool
-        return pool.get(self.id, default)
+        if default == 'raise':
+            default = self
+        v = pool.get(self.id, default)
+        if v is self:
+            raise Error('can not find BlobRef: '+ self.id)
+        return v
 
     def __repr__(self):
         return "BlobRef(%r)" % (self.id)
@@ -86,7 +94,7 @@ Blob('an_id', 'blah \\n  blah ')
     #XXX add support for yaml-style folded text sections?
     match = pattern.match(data)
     if not match:
-        raise RuntimeError('bad blob: ' + data[:100])
+        raise Error('bad blob: ' + data[:100])
     id, content = match.group(1), match.group(3)    
     return Blob(id, content), match.end()
 
@@ -193,9 +201,10 @@ def resolve(json, handleUnresolved='raise', default=None):
         if keyiter:
             for k, v in keyiter:
                 if isinstance(v, BlobRef):
-                    val = v.resolve(handleUnresolved != 'usedefault' and v or default)
-                    if val is v and handleUnresolved == 'raise':
-                        raise RuntimeError('can not find BlobRef '+ v.id)
+                    if handleUnresolved == 'raise':
+                        val = v.resolve()
+                    else:
+                        val = v.resolve(default)
                     obj[k] = val
                 elif isinstance(v, (dict, list)):
                     todo.append(v)
