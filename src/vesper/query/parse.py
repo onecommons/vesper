@@ -115,6 +115,7 @@ reserved_constants = {
 }
 
 _namere = r'[A-Za-z_\$][\w_\$]*'
+#XXX use _namere = r'[A-Za-z_\$][\w_\-\$]*'
 
 def t_FLOAT(t):
     r'-?\d+((\.\d+(e|E)(\+|-)?\d+)|(\.\d+)|((e|E)(\+|-)?\d+))'
@@ -864,7 +865,7 @@ def buildparser(errorlog=None, debug=0):
     except AttributeError:
         #yacc.write_table throws AttributeError: 'module' object has no attribute 'split'
         #because its expecting a string not a module
-        #this happens when the jql.parsetab is out of data
+        #this happens when the jql.parsetab is out of date
         tabmodule = 'parsetab'
         errorlog.warning('vesper.query.parsetab was out of date, generating local parsetab.py')
         parser = ply.yacc.yacc(start="root", errorlog=errorlog,tabmodule=tabmodule, optimize=1)

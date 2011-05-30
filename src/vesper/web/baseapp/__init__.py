@@ -152,7 +152,6 @@ try:
 except ImportError:
     actions['http-request-error'] = [sendJsonRpcError]
 
-from vesper.data.store.basic import FileStore
 app = createApp(
     static_path=['static'],
     default_page_name = 'index.html',

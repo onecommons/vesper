@@ -185,15 +185,22 @@ class BasicStore(DataStore):
         #re-create the change history of the store
         if self.transaction_log:
             if not isinstance(self.transaction_log, (str,unicode)):
-                assert self.storage_path and isinstance(self.storage_path, (str,unicode))
-                self.transaction_log = self.storage_path + '.log.nt'
-            #XXX doesn't log history model if store is split
-            #XXX doesn't log models that are TransactionParticipants themselves
-            #XXX doesn't log models that don't support updateAdvisory 
-            if isinstance(self.model, ModelWrapper):
-                self.model.adapter.logPath = self.transaction_log
-            else:                
-                self.log.warning("transaction_log is configured but not compatible with model")
+                if (self.storage_path
+                    and isinstance(self.storage_path, (str,unicode))):
+                    self.transaction_log = self.storage_path + '.log.nt'
+                elif self.storage_template_path:
+                    self.transaction_log = self.storage_template_path + '.log.nt'
+                else:
+                    self.log.warning("unable to determine path for transaction_log")
+            if isinstance(self.transaction_log, (str,unicode)):
+                #XXX doesn't log history model if store is split
+                #XXX doesn't log models that are TransactionParticipants themselves
+                #XXX doesn't log models that don't support updateAdvisory
+                if isinstance(self.model, ModelWrapper):
+                    self.model.adapter.logPath = self.transaction_log
+                else:
+                    self.log.warning(
+                "transaction_log is configured but not compatible with model")
         
         if self.changesetHook:
             assert self.save_history, "replication requires save_history to be on"

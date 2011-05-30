@@ -311,6 +311,13 @@ function testsStarting() {
         }
         return false;
       });
+
+      $('#reset-button').click(function() {
+        //XXX only delete 'recorder.' keys 
+        localStorage.clear(); 
+        alert("localStorage cleared!");
+        return false;
+      });
             
         initUI();
         //note: storage events are only sent to the other windows
@@ -358,6 +365,7 @@ function testsStarting() {
     </table>
 
     <a id='run-script' href='#'>Run Script</a>
+    <a id='reset-button' href='#'>Reset</a>
     <hr>  
     <h1 id="qunit-header">Test Results</h1>
     <h2 id="qunit-banner"></h2>

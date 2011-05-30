@@ -68,6 +68,10 @@ function getPlaybackObjName(path) {
     var scriptBlock = '\n\nvar ' + scriptName +' = new PlaybackScript("' + scriptName + '", "' + path  + '", function() {\n'
      + "//<<NEXT" + scriptName + ">>\n});\n";  
     var ta = $('#current-script');
+    if (!ta.val().trim()) {
+      ta.val("/*\nurl: " + path
+      + "\nstorage-template: \nstore-name: \n*/\n");
+    }
     ta.val(ta.val()+ scriptBlock);
   }
   return scriptName;
@@ -107,7 +111,7 @@ $(document).ready(function(){
     $('#reset-button').click(function() {
       //XXX only delete 'recorder.' keys 
       localStorage.clear(); 
-      alert("reset!");
+      alert("localStorage cleared!");
       return false;
     });
 });

@@ -250,10 +250,10 @@ class RequestProcessor(TransactionProcessor):
         self.runActions('run-cmds', kw)
 
     def loadConfig(self, appVars):
-        self.config = utils.defaultattrdict(appVars)
-
         if appVars.get('beforeConfigHook'):
             appVars['beforeConfigHook'](appVars)
+
+        self.config = utils.defaultattrdict(appVars)
 
         def initConstants(varlist, default):
             #add the given list of config properties as attributes
@@ -278,6 +278,8 @@ class RequestProcessor(TransactionProcessor):
                     raise VesperError('default store not set')
                 else:
                     stores['default'] = stores.values()[0]
+            #XXX in order to allow cmdline and config file storage settings to be useful
+            #merge appVars into the default store's config before loadDataStore
             self.stores = stores
         else:
             self.stores = utils.attrdict(default=
