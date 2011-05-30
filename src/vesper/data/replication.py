@@ -13,9 +13,9 @@ class ChangesetListener(object):
     Receives message notifications from Stomp.
     This is called in a Stomp listener thread, not the main program thread
     """
-    def __init__(self, replicator, storeName='default', autoAck=False):
+    def __init__(self, replicator, storeName='default', sendAck=True):
         self.replicator = replicator
-        self.autoAck = autoAck
+        self.sendAck = sendAck
         self.storeName = storeName
     
     def on_connecting(self, host_and_port):
@@ -68,7 +68,7 @@ class ChangesetListener(object):
                     assert not dataStore.model._currentTxn
                     dataStore.merge(obj)
                     self.replicator.msg_recv += 1
-                    if not self.autoAck:
+                    if self.sendAck:
                         self.replicator.conn.ack({'message-id':message_id})
                 except Exception, e:
                     self.replicator.log.exception("error storing replicated changeset")
@@ -85,12 +85,12 @@ class StompQueueReplicator(object):
     
     log = logging.getLogger("replication")
     
-    def __init__(self, clientid, channel, hosts, storeName='default', autoAck=False):
+    def __init__(self, clientid, channel, hosts, storeName='default', sendAck=True):
         self.clientid = clientid
         self.channel  = channel
         self.hosts    = hosts
         self.storeName = storeName
-        self.autoAck  = autoAck
+        self.sendAck  = sendAck
         self.connected = False
         self.connected_to = None
         
@@ -112,7 +112,7 @@ class StompQueueReplicator(object):
         
         self.log.info("connecting to %s" % str(self.hosts))
         self.conn = stomp.Connection(self.hosts)
-        self.conn.set_listener('changes', ChangesetListener(self, self.storeName, self.autoAck))
+        self.conn.set_listener('changes', ChangesetListener(self, self.storeName, self.sendAck))
         self.conn.start()
         
         subscription_name = "%s-%s" % (self.clientid, self.channel)
@@ -194,7 +194,7 @@ class StompQueueReplicator(object):
         ])
         
 
-def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeName='default', autoAck=False):
+def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeName='default', sendAck=True):
     """
     Connect to a Stomp message queue for replication
     
@@ -204,14 +204,13 @@ def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeNa
     - hosts specifies a list of (host,port) tuples to use for failover
       e.g. hosts=[('tokyo-vm', 61613), ('mqtest-vm', 61613)]
     - storeName specifies which data store to update ('default' by default)
-    - autoAck specifies whether a message acknowlegement should be delayed until after
-      the replication message is successfully processed.  Not all queues (morbidQ)
-      support this
+    - sendAck Specifies whether a acknowledgment message should sent after the message has been processed successfully.
+      Not all Stomp message brokers support this (e.g. MorbidQ doesn't) (default: True) 
     
     Returns a replicator object
     """
     if not hosts:
         hosts=[(host,port)]
     
-    obj = StompQueueReplicator(clientid, channel, hosts, storeName, autoAck)
+    obj = StompQueueReplicator(clientid, channel, hosts, storeName, sendAck)
     return obj

@@ -4,6 +4,7 @@ import unittest
 import random
 import time
 import os
+import sys
 import multiprocessing
 from urllib2 import urlopen
 from urllib import urlencode
@@ -70,7 +71,7 @@ def invokeAPI(name, data, where=None, port=8000):
 def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
     try:
         import coverage, sys, signal, atexit
-        coverage.process_startup()        
+        coverage.process_startup()
         
         def safeterminate(num, frame):
             #coverage registers an atexit function
@@ -93,13 +94,12 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
         
     }
     # assume remote queue implements message ack
+    sendAck=True
     if startQueue is startMorbidQueue:
         #morbid doesn't support stomp ack
-        autoAck=True
-    else:
-        autoAck=False
-    
-    rep = replication.get_replicator(nodeId, conf['replication_channel'], hosts=conf['replication_hosts'], autoAck=autoAck)
+        sendAck=False
+
+    rep = replication.get_replicator(nodeId, conf['replication_channel'], hosts=conf['replication_hosts'], sendAck=sendAck)
     conf['changeset_hook'] = rep.replication_hook
     
     @app.Action
