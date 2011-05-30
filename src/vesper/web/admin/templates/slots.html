@@ -93,6 +93,24 @@ ${output('css')}
 ${callerbody}
 
 ${output('scripts')}
+%if config.testrecorder:
+  <script src="/static/qa/recorder.js"></script>
+%endif
+%if config.testplayback:
+  <script src="/static/qa/qunit.js"></script>
+  <script src="/static/qa/playback.js"></script>
+  <script>
+  var playbackScript = localStorage.getItem('playbackScript');
+  if (playbackScript) {
+     var s = document.createElement("script");
+     s.type = "text/javascript";
+     s.src = playbackScript;
+     (document.getElementsByTagName("head")[0] || document.getElementsByTagName("*")[0])
+      .appendChild(s).parentNode.removeChild(s);    
+  }
+  </script>
+%endif
+
 </body></html>
 </%def>
 

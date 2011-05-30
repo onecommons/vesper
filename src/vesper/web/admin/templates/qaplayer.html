@@ -1,0 +1,368 @@
+<%!
+import re
+%>
+<%
+config.testplayback = True
+%>
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+      "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+  <head>
+    <link rel="stylesheet" href="/static/qa/qunit.css" type="text/css"/>
+    <script src="http://code.jquery.com/jquery-latest.js"> </script>
+    <script src="/static/qa/qunit.js"></script>    
+    <script type="text/javascript">
+    
+    //keep a table listing the status of running test scripts
+    //status states: queued waiting (current playbackScript but moduleStart not received yet) running done
+
+    function addScript(scriptname) {
+      var scriptid = scriptname.replace(/\/|\./g, '-');
+      var row = $('#row'+ scriptid);
+      if (!row.length) {
+        //add a script
+        row = $('#script-status-row-template').clone(true).appendTo('#status-table')
+          .attr('id', 'row'+scriptid).find('td.name').text(scriptname).end();        
+      } 
+      return row;
+    }     
+
+    function scriptStarted(scriptname) {
+      addScript(scriptname).removeClass('queued waiting').addClass('running')
+        .find('td.status').text("Running");
+    }
+
+    function startScript(path, url) {
+      localStorage.setItem('playbackScript', path);
+      scriptAdded(path);
+      if (url) {
+        window.open(url);
+      }
+    }
+    
+    function scriptAdded(scriptname) {
+      var row = addScript(scriptname);
+      if (!row.hasClass('running')) {
+        row.removeClass('queued').addClass('waiting')
+          .find('td.status').text("Waiting");
+      }
+    }
+    
+    function scriptEnded(scriptname) {
+      $('#row'+scriptname.replace(/\/|\./g, '-')).removeClass('running').addClass('done')
+        .find('td.status').text("Done");
+    }
+
+    function startNext() {
+      var queued = $('#status-table .queued');
+      if (queued.length) {
+        var next = queued.eq(0);
+        startScript(next.find('.name').text(), next.find('.url').text());
+        return true;
+      }
+      return false;
+    }
+        
+    function id(name) {
+    	return !!(typeof document !== "undefined" && document && document.getElementById) &&
+    		document.getElementById( name );
+    }
+    function addEvent(elem, type, func) {
+      $(elem).bind(type, func);
+    }
+    
+    var testId = 0;
+var MsgHandler = {
+  assert : function(msg) {
+    console.log('receiving assert for ' + (msg.moduleName||'')+'-'+msg.name);
+    this.tests[(msg.moduleName||'')+'-'+msg.name].assertions.push(msg);
+  },
+  testStart : function(msg) {
+    var key = (msg.moduleName||'') + '-' + msg.name;
+    var test = this.tests[key] = { name: msg.name, 
+      moduleName: msg.moduleName, 
+      id: ++testId,
+      assertions : []
+    };
+    var tests = id("qunit-tests");
+    		if (tests) {
+    		  var name = '<span class="test-name">' + msg.name + '</span>';
+          if ( msg.moduleName ) {
+          			name = '<span class="module-name">' + msg.moduleName + "</span>: " + name;
+          }    		  
+    			var b = document.createElement("strong");
+    				b.innerHTML = "Running " + name;
+    			var li = document.createElement("li");
+    				li.appendChild( b );
+    				li.className = "running";
+    				li.id = "test-output" + test.id;
+    			tests.appendChild( li );
+    		}
+  },
+  testDone : function(msg) {
+    var key = (msg.moduleName||'')+'-'+msg.name;
+    var test = this.tests[key];
+    delete this.tests[key];
+    var tests = id("qunit-tests");
+    if ( tests ) {
+          var good = 0, bad = 0;
+    			var ol  = document.createElement("ol");
+    			var assertions = test.assertions;
+    			for ( var i = 0; i < assertions.length; i++ ) {
+    				var assertion = assertions[i];
+
+    				var li = document.createElement("li");
+    				li.className = assertion.result ? "pass" : "fail";
+    				li.innerHTML = assertion.output || (assertion.result ? "okay" : "failed");
+    				ol.appendChild( li );
+
+    				if ( assertion.result ) {
+    					good++;
+    				} else {
+    					bad++;
+    				}
+    			}
+
+    			if (bad == 0) {
+    				ol.style.display = "none";
+    			}
+
+    			var b = document.createElement("strong");
+    			b.innerHTML = test.name + " <b class='counts'>(<b class='failed'>" + bad + "</b>, <b class='passed'>" + good + "</b>, " + assertions.length + ")</b>";
+
+
+    			var a = document.createElement("a");
+    			a.innerHTML = "Rerun";
+    			a.href = 'about:blank'; //QUnit.url({ filter: getText([b]).replace(/\([^)]+\)$/, "").replace(/(^\s*|\s*$)/g, "") });
+
+
+    			addEvent(b, "click", function() {
+    				var next = b.nextSibling.nextSibling,
+    					display = next.style.display;
+    				next.style.display = display === "none" ? "block" : "none";
+    			});
+
+/*
+    			addEvent(b, "dblclick", function(e) {
+    				var target = e && e.target ? e.target : window.event.srcElement;
+    				if ( target.nodeName.toLowerCase() == "span" || target.nodeName.toLowerCase() == "b" ) {
+    					target = target.parentNode;
+    				}    				
+    				if ( window.location && target.nodeName.toLowerCase() === "strong" ) {
+    					window.location = QUnit.url({ filter: getText([target]).replace(/\([^)]+\)$/, "").replace(/(^\s*|\s*$)/g, "") });
+    				}
+    			});
+*/
+    			var li = id("test-output" + test.id);
+    			li.className = bad ? "fail" : "pass";
+    			li.removeChild( li.firstChild );
+    			li.appendChild( b );
+    			li.appendChild( a );
+    			li.appendChild( ol );
+
+    		}    
+    
+  },    
+  moduleStart : function(msg) { 
+    msg.done = false;
+    this.modules[msg.name] = msg;
+    if (!this.started)
+      this.started = msg.starttime;
+    if (msg.playbackScript)
+      scriptStarted(msg.playbackScript)
+  },
+  moduleDone : function(msg) { 
+    msg.done = true;
+    this.modules[msg.name] = msg;
+    var allDone = true; //XXX add delay in case some modules haven't started yet
+    var all = 0, bad = 0;
+    for (var key in this.modules) {
+      var mod = this.modules[key];
+      all += mod.total;
+      bad += mod.failed;
+      if (!mod.done) {
+        allDone = false;
+        break
+      }      
+    }
+    
+    if (allDone) {
+      if (msg.playbackScript)
+        scriptEnded(msg.playbackScript)
+      
+      if (startNext()) {
+        return;
+      }
+      
+      if ($('#status-table .running, #status-table .waiting').length) {
+        return;
+      }
+      
+      var banner = id("qunit-banner"),
+      		tests = id("qunit-tests"),
+      		runtime = +new Date - this.starttime,
+      		passed = all - bad,
+      		html = [
+      			'Tests completed in ',
+      			runtime,
+      			' milliseconds.<br/>',
+      			'<span class="passed">',
+      			passed,
+      			'</span> tests of <span class="total">',
+      			all,
+      			'</span> passed, <span class="failed">',
+      			bad,
+      			'</span> failed.'
+      		].join('');
+
+      	if ( banner ) {
+      		banner.className = (bad ? "qunit-fail" : "qunit-pass");
+      	}
+
+      	if ( tests ) {
+      		id( "qunit-testresult" ).innerHTML = html;
+      	}
+
+      	if ( typeof document !== "undefined" && document.title ) {
+      		// show (x) for good, (checkmark) for bad suite result in title
+      		// use escape sequences in case file gets loaded with non-utf-8-charset
+      		document.title = (bad ? "\u2716" : "\u2714") + " " + document.title;
+      	}
+    }
+  }
+};
+
+function initUI() {
+
+	var userAgent = id("qunit-userAgent");
+	if ( userAgent ) {
+		userAgent.innerHTML = navigator.userAgent;
+	}
+
+	var toolbar = id("qunit-testrunner-toolbar");
+	if ( toolbar ) {
+		var filter = document.createElement("input");
+		filter.type = "checkbox";
+		filter.id = "qunit-filter-pass";
+		addEvent( filter, "click", function() {
+			var ol = document.getElementById("qunit-tests");
+			if ( filter.checked ) {
+				ol.className = ol.className + " hidepass";
+			} else {
+				var tmp = " " + ol.className.replace( /[\n\t\r]/g, " " ) + " ";
+				ol.className = tmp.replace(/ hidepass /, " ");
+			}
+			if ( defined.sessionStorage ) {
+				if (filter.checked) {
+					sessionStorage.setItem("qunit-filter-passed-tests",  "true");
+				} else {
+					sessionStorage.removeItem("qunit-filter-passed-tests");
+				}
+			}
+		});
+		if ( defined.sessionStorage && sessionStorage.getItem("qunit-filter-passed-tests") ) {
+			filter.checked = true;
+			var ol = document.getElementById("qunit-tests");
+			ol.className = ol.className + " hidepass";
+		}
+		toolbar.appendChild( filter );
+
+		var label = document.createElement("label");
+		label.setAttribute("for", "qunit-filter-pass");
+		label.innerHTML = "Hide passed tests";
+		toolbar.appendChild( label );
+	}
+  
+  testsStarting();
+}
+
+function testsStarting() {
+  var tests = id( "qunit-tests" ),
+  			banner = id( "qunit-banner" ),
+  			result = id( "qunit-testresult" );
+
+  		if ( tests ) {
+  			tests.innerHTML = "";
+  		}
+
+  		if ( banner ) {
+  			banner.className = "";
+  		}
+
+  		if ( result ) {
+  			result.parentNode.removeChild( result );
+  		}
+
+  		if ( tests ) {
+  			result = document.createElement( "p" );
+  			result.id = "qunit-testresult";
+  			result.className = "result";
+  			tests.parentNode.insertBefore( result, tests );
+  			result.innerHTML = 'Running...<br/>&nbsp;';
+  		}
+}
+      
+    $(document).ready(function(){
+      
+      $('#run-script').click(function() {
+        var path = prompt('enter path to script');
+        if (path) {
+          startScript(path)
+        }
+        return false;
+      });
+            
+        initUI();
+        //note: storage events are only sent to the other windows
+        var state = {
+          modules : {},
+          tests : {},
+          starttime : 0
+        };
+        window.addEventListener('storage', function(event) {          
+          if (event.key == 'playback.event' && event.newValue) {
+              var msg = JSON.parse(event.newValue);
+              MsgHandler[msg.type].call(state, msg);
+              localStorage.removeItem('playback.event');
+          }
+        }, false);
+        startNext();
+    });
+    
+    </script>
+  </head>
+  <body>
+    
+    <table border=1 id=status-table>
+    <tr>
+      <td>Script</td>
+      <td>URL</td>
+      <td>Status</td>
+    </tr>
+    %if config.playbackScripts:
+    %for (script, url) in config.playbackScripts:
+      <tr itemscope class='queued' id='row${re.sub(r'\/|\.', '-', script)}'>
+        <td class=name>${script}</td>
+        <td class=url>${url}</td>
+        <td class='status'>Queued</td>
+      </tr>
+    %endfor
+    %endif
+    </table> 
+    <table style='display:none'>
+    <tr itemscope class='queued' id='script-status-row-template'>
+      <td class=name></td>
+      <td class=url></td>
+      <td class='status'>Queued</td>
+    </tr>
+    </table>
+
+    <a id='run-script' href='#'>Run Script</a>
+    <hr>  
+    <h1 id="qunit-header">Test Results</h1>
+    <h2 id="qunit-banner"></h2>
+    <h2 id="qunit-userAgent"></h2>
+    <ol id="qunit-tests">
+    </ol>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+<%
+config.testrecorder = True
+%>
+<html>
+<body>
+
+<p>
+<a id='record-button' href="#">Start</a>
+<a id='reset-button' href="#">Reset</a>
+</p>
+
+<textarea id='current-script' rows=30 cols=80></textarea>
+
+<form name='events'>
+<input type=checkbox name=mouseover /> mouseover
+<input type=checkbox name=mouseout  /> mouseout
+<input type=checkbox name=mousedown /> mousedown 
+<input type=checkbox name=mouseup /> mouseup
+<input type=checkbox name=mousemove /> mousemove
+<input type=checkbox name=click checked /> click 
+<input type=checkbox name=dblclick checked /> dblclick 
+<input type=checkbox name=keyup /> keyup
+<input type=checkbox name=keydown /> keydown 
+<input type=checkbox name=keypress checked /> keypress 
+<input type=checkbox name=coalesce checked /> coalesce 
+</form>
+
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.js"></script>
+
+<script>
+function setButtonState(recording) {
+  if (recording) {
+    localStorage.setItem('recorder.recording', "yes");
+    $('#record-button').addClass('recording').text("Pause");
+  } else {
+    $('#record-button').removeClass('recording').text("Start");
+    localStorage.removeItem('recorder.recording');
+  }
+}
+
+var MsgHandler = {
+  simulate : function(msg) {
+      if (!document.forms.events[msg.eventtype].checked)
+        return;
+      var scriptObjName = getPlaybackObjName(msg.path);
+      var line = "simulate('"+ msg.eventtype + "', '" 
+        + msg.selector + "', " + JSON.stringify(msg.options) + ');';
+      addToScript(scriptObjName, line);
+  },
+  
+  scriptline: function(msg) {
+      var scriptObjName = getPlaybackObjName(msg.path);
+      addToScript(scriptname, msg.line)
+  }
+
+};
+
+var playbackScripts = {};
+
+function getPlaybackObjName(path) {
+  //XXX if lastPath != path create a new PlaybackScript so we can serialize
+  var scriptName = playbackScripts[path];
+  if (!scriptName) {
+    var count = 0;
+    for (var k in playbackScripts) { ++count; }    
+    scriptName = 'script' + (count+1);
+    playbackScripts[path] = scriptName;
+    var scriptBlock = '\n\nvar ' + scriptName +' = new PlaybackScript("' + scriptName + '", "' + path  + '", function() {\n'
+     + "//<<NEXT" + scriptName + ">>\n});\n";  
+    var ta = $('#current-script');
+    ta.val(ta.val()+ scriptBlock);
+  }
+  return scriptName;
+}
+
+function addToScript(scriptName, line) {
+  var ta = $('#current-script');
+  var placeholder = "//<<NEXT" + scriptName + ">>";  
+  var newValue = ta.val().replace(placeholder, line+'\n' + placeholder);  
+  ta.val(newValue).scrollTop(ta.get(0).scrollHeight);  
+}
+
+$(document).ready(function(){
+    var currentScript = localStorage.getItem('recorder.script');
+    if (currentScript) {
+      $('#current-script').val(currentScript);
+    }
+    
+    setButtonState( localStorage.getItem('recorder.recording') );
+  
+    //note: storage events are only sent to the other windows
+    window.addEventListener('storage', function(event) {
+      //console.log(event);
+      if (event.key == 'recorder.event' && event.newValue) {
+          var msg = JSON.parse(event.newValue);
+          MsgHandler[msg.type](msg);
+          localStorage.removeItem('recorder.event');
+      }
+    }, false);
+
+    $('#record-button').click(function() { 
+      //toggle state
+      setButtonState( !localStorage.getItem('recorder.recording') );
+      return false;
+    });
+
+    $('#reset-button').click(function() {
+      //XXX only delete 'recorder.' keys 
+      localStorage.clear(); 
+      alert("reset!");
+      return false;
+    });
+});
+</script>
+</body>
+</html>
