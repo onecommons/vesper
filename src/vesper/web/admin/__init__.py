@@ -44,13 +44,13 @@ def beforeConfigHook(config):
         match = re.match(r"/\*(.+?)\*/", script, re.S)
         if match:
             metadata = match.group(1)
-            match = re.search(r'^url:\s*(\S+)', metadata, re.M)
+            match = re.search(r'^url:[ \t]*(\S+)[ \t]*$', metadata, re.M)
             url = match and match.group(1)
-            match = re.search(r'^storage-template:\s*(\S+)', metadata, re.M)
+            match = re.search(r'^storage-template:[ \t]*(\S+)[ \t]*$', metadata, re.M)
             storage = match and match.group(1)
             if storage and not os.path.isabs(storage):
                 storage = os.path.abspath( os.path.join(os.path.dirname(name), storage))
-            match = re.search(r'^store-name:\s*(\S+)', metadata, re.M)
+            match = re.search(r'^store-name:[ \t]*(\S+)[ \t]*$', metadata, re.M)
             storename = match and match.group(1)
         else:
             url, storage, storename = '', '', ''
