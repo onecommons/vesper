@@ -38,11 +38,40 @@ function setButtonState(recording) {
   }
 }
 
+function clearState(states, path) {
+  var state = states[path];
+  if (!state)
+    return;  
+  if (state.buffer) {
+     var scriptObjName = getPlaybackObjName(path);
+     var options = {}; //state.lastOptions without charCode, keyCode;
+     var line = 'sendKeys(' + JSON.stringify(state.buffer)+ ', "' 
+      + state.lastSelector + '", ' + JSON.stringify(options)+');';
+     addToScript(scriptObjName, line);
+  }
+  delete states[path];  
+}
+
 var MsgHandler = {
   simulate : function(msg) {
       if (!document.forms.events[msg.eventtype].checked)
         return;
       var scriptObjName = getPlaybackObjName(msg.path);
+      var state = this.states[msg.path];
+      if (document.forms.events.coalesce.checked) {
+        if (msg.eventtype == 'keypress') {
+          if (!state)
+            state = this.states[msg.path] = { buffer : ''};          
+          if (!state.lastSelector || state.lastSelector == msg.selector) {
+            state.buffer += String.fromCharCode(msg.options.charCode);
+            state.lastSelector = msg.selector;
+            return;
+          }
+        }
+      }
+      if (state) {
+        clearState(this.states, msg.path);
+      }
       var line = "simulate('"+ msg.eventtype + "', '" 
         + msg.selector + "', " + JSON.stringify(msg.options) + ');';
       addToScript(scriptObjName, line);
@@ -92,18 +121,22 @@ $(document).ready(function(){
     
     setButtonState( localStorage.getItem('recorder.recording') );
   
-    //note: storage events are only sent to the other windows
+    var state = { states : {} };
+    //note: storage events are only sent to the other windows    
     window.addEventListener('storage', function(event) {
-      //console.log(event);
+      //console.log(event);      
       if (event.key == 'recorder.event' && event.newValue) {
           var msg = JSON.parse(event.newValue);
-          MsgHandler[msg.type](msg);
+          MsgHandler[msg.type].call(state, msg);
           localStorage.removeItem('recorder.event');
       }
     }, false);
 
     $('#record-button').click(function() { 
-      //toggle state
+      for (var key in state.states) {
+        clearState(state.states, key);
+      }
+      //toggle record state
       setButtonState( !localStorage.getItem('recorder.recording') );
       return false;
     });

@@ -25,7 +25,7 @@ $.simulate = function(el, type, options) {
 	this.target = el;
 	this.options = options;
 
-	if (/^drag$/.test(type)) {
+	if (/^(drag|sendKeys)$/.test(type)) {
 		this[type].apply(this, [this.target, options]);
 	} else {
 		this.simulateEvent(el, type, options);
@@ -101,7 +101,23 @@ $.extend($.simulate.prototype, {
 		}
 		return evt;
 	},
-
+    sendKeys: function(el, options) {
+        var chars = options.buffer;
+        delete options.buffer;
+        if (document.activeElement != el) {
+            //XXX probably should record and send focus events instead of this
+            $(el).focus();
+        }
+        options = options || {};
+        var isString = typeof chars == 'string';
+        for (var i=0; i < chars.length; i++) {
+            if (isString)
+                options.charCode = chars.charCodeAt(i);
+            else
+                options.charCode = chars[i]; 
+            this.simulateEvent(el, 'keypress', options);
+        }
+    },
 	dispatchEvent: function(el, type, evt) {
 		if (el.dispatchEvent) {
 			el.dispatchEvent(evt);
@@ -157,8 +173,10 @@ $.extend($.simulate, {
 (function(window) {
 //add to global namespace
 window.simulate = function(type, selector, options) {
-    if (window.gRecorder && localStorage.getItem('recorder.recording'))
+    if (window.gRecorder && localStorage.getItem('recorder.recording')) {
+        console.log('skipping playback cuz in record more');
         return; //don't playback while recording
+    }
     try {
         var target = $(selector);
     } catch (e) {
@@ -168,6 +186,18 @@ window.simulate = function(type, selector, options) {
     console.log('playback on', type, selector, options, target);
     equal(target.length, 1, selector);
     target.simulate(type, options);
+    
+    if (type == 'chars') {
+        target.sendKeys(chars, options);
+    } else {
+        
+    }
+},
+
+window.sendKeys = function(chars, selector, options) {
+  options = options || {};
+  options.buffer = chars;
+  return simulate('sendKeys', selector, options);
 },
 
 window.verifyLogMsg = function(msg) {
