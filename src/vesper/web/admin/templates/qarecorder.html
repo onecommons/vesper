@@ -19,6 +19,7 @@ config.testrecorder = True
 <input type=checkbox name=mousemove /> mousemove
 <input type=checkbox name=click checked /> click 
 <input type=checkbox name=dblclick checked /> dblclick 
+<input type=checkbox name=focus checked /> focus
 <input type=checkbox name=keyup /> keyup
 <input type=checkbox name=keydown /> keydown 
 <input type=checkbox name=keypress checked /> keypress 
@@ -129,6 +130,8 @@ $(document).ready(function(){
           var msg = JSON.parse(event.newValue);
           MsgHandler[msg.type].call(state, msg);
           localStorage.removeItem('recorder.event');
+      } else if (event.key == 'recorder.recording') {
+        setButtonState( !event.newValue );
       }
     }, false);
 

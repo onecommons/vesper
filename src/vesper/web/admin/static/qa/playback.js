@@ -27,6 +27,8 @@ $.simulate = function(el, type, options) {
 
 	if (/^(drag|sendKeys)$/.test(type)) {
 		this[type].apply(this, [this.target, options]);
+	} else if (type=='focus') {
+	    $(el).focus();
 	} else {
 		this.simulateEvent(el, type, options);
 	}
@@ -174,8 +176,9 @@ $.extend($.simulate, {
 //add to global namespace
 window.simulate = function(type, selector, options) {
     if (window.gRecorder && localStorage.getItem('recorder.recording')) {
-        console.log('skipping playback cuz in record more');
-        return; //don't playback while recording
+        //don't record while playing back
+        localStorage.removeItem('recorder.recording');
+        if (window.console) console.log('playback disabling recording');
     }
     try {
         var target = $(selector);
@@ -183,7 +186,7 @@ window.simulate = function(type, selector, options) {
         ok(false, "bad selector: " + selector);
         return;
     }        
-    console.log('playback on', type, selector, options, target);
+    if (window.console) console.log('playback on', type, selector, options, target);
     equal(target.length, 1, selector);
     target.simulate(type, options);
     
@@ -201,7 +204,7 @@ window.sendKeys = function(chars, selector, options) {
 },
 
 window.verifyLogMsg = function(msg) {
-    console.log('playback verifying', msg);
+    if (window.console) console.log('playback verifying', msg);
     playback.msgQueue.push(msg);
     checkLogMessage(msg);
 }

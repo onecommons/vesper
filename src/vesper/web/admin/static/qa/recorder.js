@@ -2,7 +2,8 @@ $.event.real_handle = $.event.handle;
 $.event.handle = function(event) {
   if (localStorage.getItem('recorder.recording')) {
     var jEvent = $.event.fix( event || window.event );
-    if (/^mouse(over|out|down|up|move)|(dbl)?click|key(up|down|press)$/.test(jEvent.type)) {            
+    //if (window.console) console.log('ev', jEvent.type);
+    if (/^mouse(over|out|down|up|move)|(dbl)?click|key(up|down|press)|focus$/.test(jEvent.type)) {
         gRecorder.writeEvent(jEvent);
     }
   }
@@ -75,7 +76,7 @@ return {
     sendMsg: function(msg) {
         localStorage.removeItem('recorder.event');
         localStorage.setItem('recorder.event', JSON.stringify(msg));
-        console.log(msg.type, msg.eventtype, msg);
+        if (window.console) console.log('sending msg', msg.type, msg.eventtype, msg);
     },
     
     writeLine: function(line) {
