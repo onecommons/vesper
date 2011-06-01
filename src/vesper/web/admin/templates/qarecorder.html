@@ -78,9 +78,15 @@ var MsgHandler = {
       addToScript(scriptObjName, line);
   },
   
+  log: function(msg) {
+    var scriptObjName = getPlaybackObjName(msg.path);
+    var line = 'verifyLogMsg(' + JSON.stringify(msg.msg) + ');';
+    addToScript(scriptObjName, line);
+  },
+  
   scriptline: function(msg) {
       var scriptObjName = getPlaybackObjName(msg.path);
-      addToScript(scriptname, msg.line)
+      addToScript(scriptObjName, msg.line);
   }
 
 };

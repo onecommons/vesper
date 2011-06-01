@@ -2,13 +2,29 @@ $.event.real_handle = $.event.handle;
 $.event.handle = function(event) {
   if (localStorage.getItem('recorder.recording')) {
     var jEvent = $.event.fix( event || window.event );
-    //if (window.console) console.log('ev', jEvent.type);
+    //if (window.console) console.log('ev', jEvent.type, arguments);
     if (/^mouse(over|out|down|up|move)|(dbl)?click|key(up|down|press)|focus$/.test(jEvent.type)) {
         gRecorder.writeEvent(jEvent);
     }
   }
   return $.event.real_handle.apply(this, Array.prototype.slice.call(arguments));
-}
+};
+
+$(window).bind("keypress keyup keydown", function() {});
+
+window.konsole = {
+    superk : window.konsole || window.console,
+    
+    log : function(msg) {
+      if (this.superk)
+        this.superk.log(msg);
+      if (localStorage.getItem('recorder.recording')) {
+        gRecorder.writeLogAssertion(msg);
+      }
+    },
+    assert : window.konsole && window.konsole.assert || window.console && window.console.assert || 
+      (function(expr, msg) { if (!expr) { debugger; } })
+};
 
 var gRecorder = (function() {
   function generateUniqueSelector(path) {
@@ -67,24 +83,24 @@ return {
         gRecorder.sendMsg( { 
             type : "simulate",
             selector : selector,
-            path : getPath(),
             eventtype : jEvent.type,
             options : options 
         });
     },
 
     sendMsg: function(msg) {
+        msg.path = getPath();
         localStorage.removeItem('recorder.event');
         localStorage.setItem('recorder.event', JSON.stringify(msg));
         if (window.console) console.log('sending msg', msg.type, msg.eventtype, msg);
     },
     
     writeLine: function(line) {
-        gRecorder.sendMsg({type: "scriptline", path: getPath(), line : line});
+        gRecorder.sendMsg({type: "scriptline", line : line});
     },
 
-    writeLogAssertion: function(msg) {
-        gRecorder.writeLine('verifyLogMsg(' + JSON.stringify(msg) + ');');
+    writeLogAssertion: function(msg) {        
+        gRecorder.sendMsg({type: "log", msg: msg});
     }
   };
 })();

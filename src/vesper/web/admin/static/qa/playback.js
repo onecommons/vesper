@@ -174,6 +174,20 @@ $.extend($.simulate, {
 
 (function(window) {
 //add to global namespace
+var superk = window.konsole || window.console;
+var expectedQueue = [];
+var loggedQueue = [];
+
+window.konsole = {
+    log : function(msg) {
+      if (superk)
+        superk.log(msg);
+      if (!checkLogMessage(expectedQueue, msg))
+        loggedQueue.push(msg);
+    },
+    assert : function(expr, msg) { ok(expr, msg); }
+};
+
 window.simulate = function(type, selector, options) {
     if (window.gRecorder && localStorage.getItem('recorder.recording')) {
         //don't record while playing back
@@ -188,13 +202,7 @@ window.simulate = function(type, selector, options) {
     }        
     if (window.console) console.log('playback on', type, selector, options, target);
     equal(target.length, 1, selector);
-    target.simulate(type, options);
-    
-    if (type == 'chars') {
-        target.sendKeys(chars, options);
-    } else {
-        
-    }
+    target.simulate(type, options);    
 },
 
 window.sendKeys = function(chars, selector, options) {
@@ -205,8 +213,8 @@ window.sendKeys = function(chars, selector, options) {
 
 window.verifyLogMsg = function(msg) {
     if (window.console) console.log('playback verifying', msg);
-    playback.msgQueue.push(msg);
-    checkLogMessage(msg);
+    if (!checkLogMessage(loggedQueue, msg))
+        expectedQueue.push(msg);
 }
 
 //logging pushes message to loggedQueue
@@ -215,12 +223,12 @@ window.verifyLogMsg = function(msg) {
 //logging checks if message on expectedQueue, pops if found, else pushes to loggedQueue
 //verifyLogMsg checks if on loggedQueue, pops if found else pushed to expectedQueue (note: possibly inaccurate if duplicate log message are sent)
 
-window.checkLogMessage = function (msg) {
-    if (playback && playback.msgQueue) {
-        for (var i = playback.msgQueue.length; i; ) {
-            var cur = playback.msgQueue[ --i ];
+var checkLogMessage = function (msgQueue, msg) {
+    if (msgQueue) {
+        for (var i = msgQueue.length; i; ) {
+            var cur = msgQueue[ --i ];
             if (msg == cur) {
-                playback.msgQueue.pop();
+                msgQueue.pop();
                 return true;
             }
         }
