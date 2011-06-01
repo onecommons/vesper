@@ -1,6 +1,8 @@
 $.event.real_handle = $.event.handle;
+$.event._last_event = {};
 $.event.handle = function(event) {
-  if (localStorage.getItem('recorder.recording')) {
+  if (localStorage.getItem('recorder.recording') && $.event._last_event[event.type] !== event) {
+    $.event._last_event[event.type] = event;
     var jEvent = $.event.fix( event || window.event );
     //if (window.console) console.log('ev', jEvent.type, arguments);
     if (/^mouse(over|out|down|up|move)|(dbl)?click|key(up|down|press)|focus$/.test(jEvent.type)) {
