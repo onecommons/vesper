@@ -27,6 +27,7 @@ config.testrecorder = True
 </form>
 
 <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.js"></script>
+<script type="text/javascript" src="/static/js/json2.js"></script>
 
 <script>
 function setButtonState(recording) {
@@ -131,9 +132,15 @@ $(document).ready(function(){
     var state = { states : {} };
     //note: storage events are only sent to the other windows    
     window.addEventListener('storage', function(event) {
-      //console.log(event);      
-      if (event.key == 'recorder.event' && event.newValue) {
-          var msg = JSON.parse(event.newValue);
+      //console.log(event);
+      var msg;
+      if (event.domain) { //old Firefox
+         msg = localStorage.getItem('recorder.event');
+      } else if (event.key == 'recorder.event' && event.newValue) {
+          msg = event.newValue;
+      }
+      if (msg) {
+          msg = JSON.parse(msg);
           MsgHandler[msg.type].call(state, msg);
           localStorage.removeItem('recorder.event');
       } else if (event.key == 'recorder.recording') {

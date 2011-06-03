@@ -9,7 +9,8 @@ config.testplayback = True
 <html>
   <head>
     <link rel="stylesheet" href="/static/qa/qunit.css" type="text/css"/>
-    <script src="http://code.jquery.com/jquery-latest.js"> </script>
+    <script src="http://code.jquery.com/jquery-latest.js"></script>
+    <script type="text/javascript" src="/static/js/json2.js"></script>
     <script src="/static/qa/qunit.js"></script>    
     <script type="text/javascript">
     
@@ -355,9 +356,15 @@ function testsStarting() {
           tests : {},
           starttime : 0
         };
-        window.addEventListener('storage', function(event) {          
-          if (event.key == 'playback.event' && event.newValue) {
-              var msg = JSON.parse(event.newValue);
+        window.addEventListener('storage', function(event) {
+          var value;
+          if (event.domain) { //old firefox
+            value = localStorage.getItem('playback.event');
+          } else if (event.key == 'playback.event' && event.newValue) {
+            value = event.newValue;
+          }
+          if (value) {
+              var msg = JSON.parse(value);
               MsgHandler[msg.type].call(state, msg);
               localStorage.removeItem('playback.event');
           }
