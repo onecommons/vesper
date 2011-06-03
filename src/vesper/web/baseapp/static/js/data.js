@@ -60,7 +60,7 @@ Txn.prototype = {
         if (callback) {
             $(elem).one('dbdata.'+this.txnId, function(event) {
                 //the response is a list and jquery turns that into arguments  
-                konsole.log('thiscallback', arguments);
+                //konsole.log('thiscallback', arguments);
                 var responses = arguments; //note: first item is the event
                 for (var i=1; i < responses.length; i++) {
                     var response = responses[i];
@@ -96,7 +96,7 @@ Txn.prototype = {
         function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
-            //console.log('saved!', data, textStatus, 'dbdata.'+txnId);
+            konsole.log('saved!', data, textStatus, 'dbdata.'+txnId);
             if (textStatus == 'success') {
                 $(elem).trigger('dbdata.'+txnId, data);
                 $(elem).trigger('dbdata-*', data);

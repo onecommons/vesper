@@ -10,6 +10,49 @@
 
 (function(window) {
 
+var superk = window.konsole || window.console;
+
+window.konsole = {
+    log : function(msg) {
+      var args = Array.prototype.slice.call(arguments);
+      if (superk)
+        superk.log.apply(superk, args);
+      if (!config.current) 
+        return;
+      try {
+          var msg = JSON.parse(JSON.stringify(args.length != 1 && args || args[0]));
+      } catch (e) {
+          if (window.console) console.log('could not stringify log message:', args);
+          return;
+      }
+      if (!checkLogMessage(config.current.expectedQueue, msg))
+        config.current.loggedQueue.push(msg);
+    },
+    
+    assert : function(expr, msg) { ok(expr, msg); }
+};
+
+/*
+konsole.log pushes message to loggedQueue
+verifyLogMsg pushes message to expectedQueue
+
+kconsole.log checks if message on expectedQueue, pops if found, else pushes to loggedQueue
+verifyLogMsg checks if on loggedQueue, pops if found else pushed to expectedQueue 
+(note: possibly inaccurate if duplicate log message are sent)
+*/
+var checkLogMessage = function (msgQueue, msg) {
+    if (msgQueue) {
+        for (var i = msgQueue.length; i; ) {
+            var cur = msgQueue[ --i ];
+            if (msg == cur) {
+                msgQueue.pop();
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 var QUnit = {
 
 	// call on start of module test to prepend name to all tests
@@ -30,6 +73,13 @@ var QUnit = {
 	 * @example ok( "asdfasdf".length > 5, "There must be at least 5 chars" );
 	 */
 	ok: function(a, msg) {
+	    if (!config.current) {
+	        if (window.console && window.console.assert)
+	            window.console.assert(a, msg);
+	        else
+	            debugger;
+	        return;
+	    }
 		a = !!a;
 		output = escapeHtml(msg);
 		var details = {
@@ -114,7 +164,20 @@ var QUnit = {
 		}
 
 		QUnit.ok(ok, message);
-	}
+	},
+
+    expectLogMsg: function(msg) {
+        if (!checkLogMessage(config.current.loggedQueue, msg))
+            config.current.expectedQueue.push(msg);
+    },
+
+    verifyLogMsgs: function(msg) {
+        if (config.current.expectedQueue.length)
+            QUnit.deepEqual(config.current.loggedQueue, config.current.expectedQueue,
+                                                "didn't receive expected log messages");
+        else
+            QUnit.ok(true, "received expected log messages");
+    }
 
 };
 
@@ -257,6 +320,7 @@ extend(QUnit, {
         localStorage.removeItem('playback.event');
         localStorage.setItem('playback.event', JSON.stringify(msg));
 	},
+	
 });
 
 function validTest( name ) {
@@ -847,21 +911,32 @@ function PlaybackScript(name, path, testfunc) {
     this.path = path;
     this.testName = name;
     this.assertions = [];
+    this.expectedQueue = [];
+    this.loggedQueue = [];
+    
     var enabled = (this.path == location.pathname + location.search);// + location.hash;
     var This = this;
     $(document).ready(function() {
         if (!enabled)
             return;
-            
-        module(name);            
+        var moduleName = name;
+        if (window.playbackScript) {
+            var match = window.playbackScript.match(/^(?:.*\/)?(.+?)(?:\.js)?$/);
+            if (match)
+                moduleName = match[1];
+        }        
+        module(moduleName);
         try {
             This.setup();
         	testfunc();
 		} catch(e) {
 			fail("Test " + This.testName + " died, exception and test follows", e, testfunc);
 			QUnit.ok( false, "Died on test #" + (This.assertions.length + 1) + ": " + e.message + " - " + QUnit.jsDump.parse(e) );
-		}             
-		This.finish();
+		}
+		setTimeout(function() {
+		    verifyLogMsgs();
+		    This.finish();
+	    }, 1500); //hack for now so we can get started
 
     });
 }

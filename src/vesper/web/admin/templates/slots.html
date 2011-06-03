@@ -106,7 +106,7 @@ ${output('scripts')}
      s.type = "text/javascript";
      s.src = playbackScript;
      (document.getElementsByTagName("head")[0] || document.getElementsByTagName("*")[0])
-      .appendChild(s).parentNode.removeChild(s);    
+      .appendChild(s) //this doesnt work in Chrome: .parentNode.removeChild(s);
   }
   </script>
 %endif

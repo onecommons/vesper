@@ -104,6 +104,7 @@ $.extend($.simulate.prototype, {
 		return evt;
 	},
     sendKeys: function(el, options) {
+        //XXX currently only works in firefox 
         var chars = options.buffer;
         delete options.buffer;
         if (document.activeElement != el) {
@@ -174,19 +175,6 @@ $.extend($.simulate, {
 
 (function(window) {
 //add to global namespace
-var superk = window.konsole || window.console;
-var expectedQueue = [];
-var loggedQueue = [];
-
-window.konsole = {
-    log : function(msg) {
-      if (superk)
-        superk.log(msg);
-      if (!checkLogMessage(expectedQueue, msg))
-        loggedQueue.push(msg);
-    },
-    assert : function(expr, msg) { ok(expr, msg); }
-};
 
 window.simulate = function(type, selector, options) {
     if (window.gRecorder && localStorage.getItem('recorder.recording')) {
@@ -203,37 +191,12 @@ window.simulate = function(type, selector, options) {
     if (window.console) console.log('playback on', type, selector, options, target);
     equal(target.length, 1, selector);
     target.simulate(type, options);    
-},
+};
 
 window.sendKeys = function(chars, selector, options) {
   options = options || {};
   options.buffer = chars;
   return simulate('sendKeys', selector, options);
-},
-
-window.verifyLogMsg = function(msg) {
-    if (window.console) console.log('playback verifying', msg);
-    if (!checkLogMessage(loggedQueue, msg))
-        expectedQueue.push(msg);
-}
-
-//logging pushes message to loggedQueue
-//verifyLogMsg pushes message to expectedQueue
-
-//logging checks if message on expectedQueue, pops if found, else pushes to loggedQueue
-//verifyLogMsg checks if on loggedQueue, pops if found else pushed to expectedQueue (note: possibly inaccurate if duplicate log message are sent)
-
-var checkLogMessage = function (msgQueue, msg) {
-    if (msgQueue) {
-        for (var i = msgQueue.length; i; ) {
-            var cur = msgQueue[ --i ];
-            if (msg == cur) {
-                msgQueue.pop();
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
+};
+            
 })(this);

@@ -30,6 +30,7 @@ config.testplayback = True
     function scriptStarted(scriptname) {
       addScript(scriptname).removeClass('queued waiting').addClass('running')
         .find('td.status').text("Running");
+      localStorage.removeItem('playbackScript');
     }
 
     function startScript(path, url) {
@@ -128,10 +129,11 @@ var MsgHandler = {
     			}
 
     			var b = document.createElement("strong");
-    			b.innerHTML = test.name + " <b class='counts'>(<b class='failed'>" + bad + "</b>, <b class='passed'>" + good + "</b>, " + assertions.length + ")</b>";
+    			b.innerHTML = key + " <b class='counts'>(<b class='failed'>" + bad + "</b>, <b class='passed'>" + good + "</b>, " + assertions.length + ")</b>";
 
 
     			var a = document.createElement("a");
+    			a.style.display = 'none';
     			a.innerHTML = "Rerun";
     			a.href = 'about:blank'; //QUnit.url({ filter: getText([b]).replace(/\([^)]+\)$/, "").replace(/(^\s*|\s*$)/g, "") });
 
@@ -318,7 +320,34 @@ function testsStarting() {
         alert("localStorage cleared!");
         return false;
       });
+
+      $('.rerun-cmd').click(function() {
+        var row = $(this).closest('tr');
+        if (row.hasClass('running')) {
+          alert("can't do this while test is running");
+          return;
+        }
+        var name = row.find('.name').text(),
+              url = row.find('.url').text();
+        row.remove();
+        startScript(name, url);
+        return false;
+      });
             
+      $('.skip-cmd').click(function() {
+        var row = $(this).closest('tr');
+        if (row.hasClass('running')) {
+          alert("can't do this while test is running");
+          return;
+        }
+        localStorage.removeItem('playbackScript');
+        row.attr('class', 'skipped').find('td.status').text("Skipped");
+        var running = $('#status-table .running');
+        if (!running.length)
+          startNext();
+        return false;
+      });
+
         initUI();
         //note: storage events are only sent to the other windows
         var state = {
@@ -345,6 +374,7 @@ function testsStarting() {
       <td>Script</td>
       <td>URL</td>
       <td>Status</td>
+      <td></td>
     </tr>
     %if config.playbackScripts:
     %for (script, url) in config.playbackScripts:
@@ -352,6 +382,7 @@ function testsStarting() {
         <td class=name>${script}</td>
         <td class=url>${url}</td>
         <td class='status'>Queued</td>
+        <td><a class='rerun-cmd' href='#'>Rerun</a>&nbsp;<a class='skip-cmd' href='#'>Skip</a></td>
       </tr>
     %endfor
     %endif
@@ -361,6 +392,7 @@ function testsStarting() {
       <td class=name></td>
       <td class=url></td>
       <td class='status'>Queued</td>
+      <td><a class='rerun-cmd' href='#'>Rerun</a>&nbsp;<a class='skip-cmd' href='#'>Skip</a></td>
     </tr>
     </table>
 

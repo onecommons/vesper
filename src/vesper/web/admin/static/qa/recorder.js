@@ -18,11 +18,21 @@ window.konsole = {
     superk : window.konsole || window.console,
     
     log : function(msg) {
-      if (this.superk)
-        this.superk.log(msg);
-      if (localStorage.getItem('recorder.recording')) {
-        gRecorder.writeLogAssertion(msg);
-      }
+        var args = Array.prototype.slice.call(arguments);
+        if (this.superk)
+            this.superk.log.apply(this.superk, args);
+
+        var msg = args.length != 1 && args || args[0];
+        try {
+            JSON.stringify(msg); //make sure this will succeed later
+        } catch (e) {
+            if (window.console) console.log('could not stringify log message:', args);
+            return;
+        }
+        
+        if (localStorage.getItem('recorder.recording')) {
+            gRecorder.writeLogAssertion(msg);
+        }
     },
     assert : window.konsole && window.konsole.assert || window.console && window.console.assert || 
       (function(expr, msg) { if (!expr) { debugger; } })

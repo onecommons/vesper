@@ -80,7 +80,7 @@ var MsgHandler = {
   
   log: function(msg) {
     var scriptObjName = getPlaybackObjName(msg.path);
-    var line = 'verifyLogMsg(' + JSON.stringify(msg.msg) + ');';
+    var line = 'expectLogMsg(' + JSON.stringify(msg.msg) + ');';
     addToScript(scriptObjName, line);
   },
   
