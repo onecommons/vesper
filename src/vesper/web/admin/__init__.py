@@ -81,9 +81,9 @@ def beforeConfigHook(config):
             assert dir
             static_path.append(dir)
 
-        path = os.path.join('/static', path)
+        path = os.path.join('/static', path.lstrip(os.sep))
         if os.sep != '/':
-            path = path.replace(os.sep,'/')
+            path = path.replace(os.sep,'/')        
         return path
 
     config['playbackScripts'] = [(path2url(name), url) for name, url in pages]

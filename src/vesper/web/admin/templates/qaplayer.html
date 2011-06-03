@@ -385,10 +385,10 @@ function testsStarting() {
     </tr>
     %if config.playbackScripts:
     %for (script, url) in config.playbackScripts:
-      <tr itemscope class='queued' id='row${re.sub(r'\/|\.', '-', script)}'>
+      <tr itemscope class='${config.skipPlayback and "skipped" or "queued"}' id='row${re.sub(r'\/|\.', '-', script)}'>
         <td class=name>${script}</td>
         <td class=url>${url}</td>
-        <td class='status'>Queued</td>
+        <td class='status'>${config.skipPlayback and "Skipped" or "Queued"}</td>
         <td><a class='rerun-cmd' href='#'>Rerun</a>&nbsp;<a class='skip-cmd' href='#'>Skip</a></td>
       </tr>
     %endfor
