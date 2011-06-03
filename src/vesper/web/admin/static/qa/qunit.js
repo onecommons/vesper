@@ -44,7 +44,7 @@ var checkLogMessage = function (msgQueue, msg) {
     if (msgQueue) {
         for (var i = msgQueue.length; i; ) {
             var cur = msgQueue[ --i ];
-            if (msg == cur) {
+            if (QUnit.equiv(msg, cur)) {
                 msgQueue.pop();
                 return true;
             }

@@ -30,7 +30,11 @@ Txn.prototype = {
     
     execute : function(action, data, callback, elem) {
         var elem = elem || document;
-        var requestId = Math.random(); 
+        if ($.db && $.db.requestIdBase)
+            var requestId = $.db.requestIdBase + '.' + this.txnId;
+        else
+            var requestId = Math.random();
+
         //XXX allow requestid specified to replace a previous request
 
         //XXX if a new request updates an object in a previous request
@@ -76,7 +80,7 @@ Txn.prototype = {
                 }
             });
         }
-    
+
         if (this.autocommit) 
             this.commit();
 
@@ -96,12 +100,12 @@ Txn.prototype = {
         function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
-            konsole.log('saved!', data, textStatus, 'dbdata.'+txnId);
+            konsole.log("datarequest", data, textStatus, 'dbdata.'+txnId);
             if (textStatus == 'success') {
                 $(elem).trigger('dbdata.'+txnId, data);
                 $(elem).trigger('dbdata-*', data);
             } else {
-                //when textStatus != 'success', data param will be a XMLHttpRequest obj                
+                //when textStatus != 'success', data param will be a XMLHttpRequest obj 
                 var errorObj = {"jsonrpc": "2.0", "id": null,
                   "error": {"code": -32000, 
                         "message": data.statusText || textStatus,
@@ -175,8 +179,8 @@ txn.commit();
         var callback = args[0] || null;
         return [txn, data, callback];
     }
-        
-    $.fn.extend({    
+
+    $.fn.extend({
         /*
         action [txn] [data] [callback]
         */        
@@ -230,7 +234,7 @@ txn.commit();
              return bindElement(this, rootOnly);
          });
      },
-     
+
      /*
      [txn] [data] [callback]
      */
@@ -261,7 +265,7 @@ txn.commit();
              }).get();
         }
         return this._executeTxn('remove', txn, data, callback);
-     },      
+     },
      dbBegin : function() {
         this.data('currentTxn', new Txn($.db.url));
         return this;

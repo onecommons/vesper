@@ -12,6 +12,10 @@ $.event.handle = function(event) {
   return $.event.real_handle.apply(this, Array.prototype.slice.call(arguments));
 };
 
+if ($.db) {
+    $.db.requestIdBase = 'test';
+}
+
 $(window).bind("keypress keyup keydown", function() {});
 
 window.konsole = {
