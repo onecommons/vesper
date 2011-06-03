@@ -200,3 +200,14 @@ window.sendKeys = function(chars, selector, options) {
 };
             
 })(this);
+
+if ($.db) {
+    $.db.requestIdBase = 'test';
+}
+
+if (typeof document.activeElement == 'undefined') {
+    document.addEventListener("focus", function(e) {
+        if (e && e.target)
+            document.activeElement = e.target == document ? null : e.target;
+    }, true);
+}
