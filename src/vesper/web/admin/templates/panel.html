@@ -29,7 +29,7 @@ def kwtoattr(kw, **merge):
     kw[k] = v 
   return ' '.join([
     ##strip _ so we can have python keywords as attributes (e.g. _class)
-    (name.startswith('_') and name[1:] or name) + '='+ aq(value)
+    (name.startswith('_') and name[1:] or name) + '='+ aq(str(value))
                                     for name, value in kw.items()])
 %>
 
