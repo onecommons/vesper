@@ -59,7 +59,11 @@ def beforeConfigHook(config):
         if storename:
             if 'stores' not in config:
                 config['stores'] = { 'default' : config }            
-            store = config['stores'][storename] = dict(storage_url='mem:')
+            store = config['stores'][storename] = dict(storage_url='mem:',
+              storage_template_options = dict(
+                    generateUUID=vesper.pjson.generateUUIDSequence(),
+                    generateBnode='counter')
+            )
             if storage:
                 store['storage_template_path']=storage
             if url:

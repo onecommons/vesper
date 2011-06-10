@@ -840,7 +840,10 @@ class ParseContext(object):
 
 def generateUUIDSequence(start=0, prefix='test:'):
     '''
-    Generates a deterministic sequence of UUIDs. Useful for testing.
+    Generates a deterministic sequence of UUIDs. Useful only for testing.
+    
+    usage:
+    vesper.pjson.Parser(generateUUID=vesper.pjson.generateUUIDSequence())
     '''    
     def generateUUID():
         seq = start
