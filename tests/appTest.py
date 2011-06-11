@@ -695,6 +695,19 @@ class AppTestCase(unittest.TestCase):
         self.assertEquals(app.baz, 1)
         self.assertEquals(app.f, 'name')
         self.assertEquals(root.defaultStore.transaction_log, 'test.log')
+        
+        #test trying to loading a store with the wrong kind of file
+        cmdline = ['-s', 'test.config']
+        app = vesper.app.createApp()
+        from vesper.data.base.utils import ParseException
+        try:
+            root = app.run(cmdline=cmdline)
+        except ParseException, e: 
+            #XXX should report better error message when failing to load store
+            self.assertEquals(str(e), 'unrecognized or invalid file contents')
+        else:
+            self.fail('should have raised a ParseException')
+
 
     def testMultipleStores(self):
         app = vesper.app.createApp(stores = { 

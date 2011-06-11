@@ -190,8 +190,8 @@ class ResourceUri(object):
         return 'ResourceUri('+repr(self.uri)+')'
 
 class ParseException(utils.NestedException):
-    def __init__(self, msg = ''):                
-        utils.NestedException.__init__(self, msg,useNested = True)
+    def __init__(self, msg = '', useNested = False):
+        utils.NestedException.__init__(self, msg,useNested)
 
 def generateBnode(name=None, prefix=''):
     """
@@ -435,9 +435,7 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
                                 StringIO.StringIO(contents), scope,
                                 baseuri, **options))
                 except:
-                    #maybe its n3 or turtle, but we can't detect that
-                    #but we'll try rxml_zml
-                    type = 'rxml_zml'
+                    raise ParseException("unrecognized or invalid file contents")
                             
         if type in ['ntriples', 'ntjson']:
             #use our parser
@@ -486,10 +484,11 @@ def _parseRDFFromString(contents, baseuri, type='unknown', scope=None,
             return stmts
         else:
             raise ParseException('unsupported type: ' + type)
-    except:
-        #XXX why isn't this working?:
-        #raise ParseException("error parsing "+type)
+    except ParseException:
         raise
+    except: #an unexpected Exception
+        raise ParseException("error parsing "+type)
+    
 
 def parseRDFFromURI(uri, type='unknown', modelbaseuri=None, scope=None,
                     options=None, getType=False):
