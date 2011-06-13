@@ -678,7 +678,7 @@ class NamedGraphManager(base.Model):
         '''
         Return the last transaction context that this statement appeared in.
         '''
-        stmts = self.revisionModel.getStatements(*stmt[:4], context=None)
+        stmts = self.revisionModel.getStatements(*stmt[:4], **dict(context=None))
         contexts = [s.scope.split(';;')[0][len(ADDCTX):] for s in stmts
                 if s.scope.startswith(ADDCTX) and s.scope.split(';;')[1] == stmt.scope]
         assert contexts
