@@ -250,19 +250,21 @@ function initItems(context) {
      event.preventDefault();
      var $entry = $(this).closest('.entry');
      $entry.find('[name="modified"]').val( new Date().getTime() );
-     $entry.dbBegin().dbUpdate().dbQuery(gItemSaveQuery,
-       function(data) {
+     $entry.dbBegin().dbUpdate().dbQuery(gItemSaveQuery, {
+       comment: "edited post " + $entry.attr('itemid'),
+       callback: function(data) {
          console.log('saved entry', data);
-         if (!data.error) { //query action returns errors             
-             var textarea = $(this).find('.entry-edit textarea');         
-             textarea.data('originalValue', textarea.val());             
+         if (!data.error) { //query action returns errors 
+             var textarea = $(this).find('.entry-edit textarea');
+             textarea.data('originalValue', textarea.val());
              setModified($(this), false);
              toggleEditEntry.call(this);
              if (data.results.length) {
-                $('.item-contents', this).html(data.results[0].html);     
+                $('.item-contents', this).html(data.results[0].html);
             }
           }
-        }).dbCommit();
+        }
+      }).dbCommit();
    });
 
    $('.entry-delete-button', context).click(function(event) {
@@ -272,10 +274,13 @@ function initItems(context) {
      var entry = $(this).closest('.entry');
      //XXX really delete!
      var data = { id : entry.attr('itemid'), type : '@deleted-post'};
-     entry.dbUpdate(data, function(data) {
+     entry.dbUpdate(data, {
+       comment: "deleted post " + data.id,
+       callback: function(data) {
         if (!data.error) {
             loadPanel();
         }
+      }
      });
    });
 

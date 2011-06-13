@@ -485,6 +485,10 @@ class NamedGraphManager(base.Model):
         if source:
             ctxStmts.append(Statement(txnContext, CTX_NS+'createdBy',
                 source, OBJECT_TYPE_LITERAL, txnContext))
+        comment = txnInfo.get('comment')
+        if comment:
+            ctxStmts.append(Statement(txnContext, CTX_NS+'comment',
+                comment, OBJECT_TYPE_LITERAL, txnContext))
         
         def findContexts(changes):
             return set([(key.scope, value[1].scope)

@@ -80,6 +80,8 @@
           //test transaction rollback 
           $(document).dbBegin().dbAdd({id : '1',
               prop2 : 'another prop'
+          }, {
+            comment : "added prop2"
           }).dbQuery('{* where (id="1")}', function(response) {
             //error -32001 == client-side rollback       
             testcase.checkResponse(response, false, 'rollback', -32001); 

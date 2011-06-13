@@ -94,10 +94,13 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                             'a read-only transaction was modified and aborted')
                         self.txnSvc.abort()
                     else:
-                        self.txnSvc.addInfo(source=self.get_principal_func(kw))
+                        self.txnSvc.addInfo(
+                            source=self.get_principal_func(kw),
+                            comment=kw.get('__transaction_comment')
+                        )
                         self.txnSvc.commit()
                 else:
-                    self.txnSvc.abort()                       
+                    self.txnSvc.abort()
         return retVal
 
     # add a convenience contextmanager on newer versions of python
@@ -123,7 +126,10 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                                 'a read-only transaction was modified and aborted')
                             self.txnSvc.abort()
                         else:
-                            self.txnSvc.addInfo(source=self.get_principal_func(kw))
+                            self.txnSvc.addInfo(
+                                source=self.get_principal_func(kw),
+                                comment=kw.get('__transaction_comment')
+                            )
                             self.txnSvc.commit()
                     else:
                         self.txnSvc.abort()

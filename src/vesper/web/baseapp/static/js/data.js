@@ -15,6 +15,7 @@ var Txn = function(url) {
   this.autocommit = false;
   this.requests = [];
   this.txnId = ++Txn.prototype.idcounter;
+  this.txnComment = '';
   if (url)
     this.url = url;
   //this.pendingChanges = {};
@@ -96,11 +97,12 @@ Txn.prototype = {
             $(elem).one('dbdata.'+txnId, callback);
         }        
         
+        var comment = this.txnComment;
         //var clientErrorMsg = this.clientErrorMsg;
         function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
-            konsole.log("datarequest", data, textStatus, 'dbdata.'+txnId);
+            konsole.log("datarequest", data, textStatus, 'dbdata.'+txnId, comment);
             if (textStatus == 'success') {
                 $(elem).trigger('dbdata.'+txnId, data);
                 $(elem).trigger('dbdata-*', data);
@@ -128,6 +130,15 @@ Txn.prototype = {
         //XXX path should be configurable
         //konsole.log('requests', this.requests);
         if (this.requests.length) {
+            if (this.txnComment) {
+                this.requests.push({
+                    jsonrpc : '2.0',
+                    method : 'transaction_info', 
+                    params : { 'comment' : this.txnComment }, 
+                    id : null
+                });
+                this.txnComment = '';
+            }
             var requests = JSON.stringify(this.requests);
             this.requests = [];
             $.ajax({
@@ -162,34 +173,37 @@ txn.commit();
 (function($) {
     
     function deduceArgs(args) {
-        var txn = null;
-        if (args[0]) {
-            if (args[0] instanceof Txn)
-                txn = args.shift();
-        } else if (args.length > 2) {
-            args.shift();
-        }
+        //return data, { callback, txn, comment}        
+        // accepts: [], [data], [callback], [data, options], [null, options], [null, callback]        
         var data = null;
         if (args[0]) {
             if (!jQuery.isFunction(args[0]))
                 data = args.shift();
         } else if (args.length > 1) {
-            args.shift();
-        }        
-        var callback = args[0] || null;
-        return [txn, data, callback];
+            args.shift(); //[null, callback] or [null, options]
+        }
+        var options = {};
+        if (args[0]) {
+            if (jQuery.isFunction(args[0])) {
+                options.callback = args[0];
+            } else {
+                options = args[0];
+            }
+        }
+        return [data, options];
     }
 
     $.fn.extend({
         /*
-        action [txn] [data] [callback]
+        action [data] [options]
         */        
       _executeTxn : function() {
          //copy to make real Array
          var args = Array.prototype.slice.call( arguments );
          var action = args.shift();
-         args = deduceArgs(args)
-         var txn = args[0], data = args[1], callback = args[2];
+         args = deduceArgs(args);
+         var txn = args[1].txn, data = args[0], callback = args[1].callback,
+            comment = args[1].comment;
          var commitNow = false;
          if (!txn) {
              txn = this.data('currentTxn');
@@ -198,7 +212,7 @@ txn.commit();
                  commitNow = true;
              }
          }         
-         //konsole.log('execute', data, callback);                  
+         konsole.log('execute', action, data, callback);                  
          if (data) {
             if (action == 'query') {
                 if (typeof data == 'string') {
@@ -223,7 +237,12 @@ txn.commit();
                 txn.execute(action, obj, callback, this);
             });
          }
-        
+         if (comment) {
+            if (txn.txnComment) 
+                txn.txnComment += ' and ' + comment;
+            else
+                txn.txnComment = comment;
+         }
          if (commitNow)
             txn.commit(null, this);
          return this;
@@ -236,35 +255,35 @@ txn.commit();
      },
 
      /*
-     [txn] [data] [callback]
+     [data] [callback] or data [options]
      */
      dbAdd : function(a1, a2, a3) {
-         return this._executeTxn('add', a1,a2, a3);
+         return this._executeTxn('add', a1,a2);
      },
      dbCreate : function(a1, a2, a3) {
-         return this._executeTxn('create', a1,a2, a3);
+         return this._executeTxn('create', a1,a2);
      },
      dbUpdate : function(a1, a2, a3) {
-         return this._executeTxn('update', a1,a2, a3);
+         return this._executeTxn('update', a1,a2);
      },     
      dbReplace : function(a1, a2, a3) {
-         return this._executeTxn('replace', a1,a2, a3);
+         return this._executeTxn('replace', a1,a2);
      },     
      dbQuery : function(a1, a2, a3) {
-         return this._executeTxn('query', a1,a2, a3);
+         return this._executeTxn('query', a1,a2);
      },     
      dbRemove : function(a1,a2,a3){
-         return this._executeTxn('remove', a1,a2, a3);
+         return this._executeTxn('remove', a1,a2);
      },
      dbDestroy : function(a1, a2, a3) {
          var args = deduceArgs(Array.prototype.slice.call(arguments));
-         var txn = args[0], data = args[1], callback = args[2];
+         data = args[0], options = args[1];
          if (!data) {
              data = this.map(function() {
                  return $(this).attr('itemid') || null;
              }).get();
         }
-        return this._executeTxn('remove', txn, data, callback);
+        return this._executeTxn('remove', data, options);
      },
      dbBegin : function() {
         this.data('currentTxn', new Txn($.db.url));

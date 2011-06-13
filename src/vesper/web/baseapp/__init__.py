@@ -80,6 +80,14 @@ def datarequest(kw, retval):
         
         response['result'] = result
         return response
+    
+    def checkRequest(x):
+        if isinstance(x, dict) and x['method'] == 'transaction_info':
+            comment = x['params'].get('comment')
+            if comment:
+                kw['__transaction_comment'] =  comment
+            return False #no response for this type of request
+        return True
 
     if kw.urlvars.store:
         dataStore = kw.__server__.stores.get(kw.urlvars.store)
@@ -104,8 +112,9 @@ def datarequest(kw, retval):
             #XXX vesper.app should set a default content-type 
             kw._responseHeaders['Content-Type'] = 'application/json'
             response = [isinstance(x, dict) and handleRequest(**x) or 
-    dict(id=None, jsonrpc='2.0', error=dict(code=-32600, message='Invalid Request'))
-                                                                for x in requests]
+                            dict(id=None, jsonrpc='2.0', 
+                            error=dict(code=-32600, message='Invalid Request'))
+                                for x in requests if checkRequest(x)]
             log.debug('request: \n  %r\n response:\n   %r', requests, response)
     return json.dumps(response, indent=4) 
 
