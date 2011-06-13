@@ -380,8 +380,8 @@ class AppTestCase(unittest.TestCase):
                             ('_:j:e:object:hello:1', 'foo', 'c', 'L', '')])
         self.assertEquals(added, expectedAdded)
 
-    def testMerge(self):
-        store1 = vesper.app.createStore(save_history='split', branch_id='A',
+    def _testMerge(self, save_history):
+        store1 = vesper.app.createStore(save_history=save_history, branch_id='A',
           model_uri = 'test:', 
           #XXX merging needs to check for bnode equivalency
           #it doesn't right now so set 'counter' so bnode names are deterministic
@@ -455,7 +455,11 @@ class AppTestCase(unittest.TestCase):
         self.assertTrue( store1.merge(makeChangeset('0C', '0A00002,0C00001', '0A00002', 'unrelated_resource')) )
         self.assertEquals(store1.query("{* where (id='unrelated_resource') namemap={refpattern:''} }"), 
             [{'comment': 'page content.', 'id': 'unrelated_resource', 'label': 'foo'}])
-                
+
+    def testMerge(self):
+        self._testMerge('split')
+        self._testMerge('combined')
+
     def testMergeConflict(self):        
         store1 = vesper.app.createStore(save_history='split', branch_id='B',model_uri = 'test:')
         store1.add([{ 'id' : 'a_resource',

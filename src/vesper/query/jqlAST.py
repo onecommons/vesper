@@ -402,6 +402,9 @@ class JoinConditionOp(QueryOp):
     def _resolveNameMap(self, parseContext):
         if isinstance(self.position, (str, unicode)):
             self.position = parseContext.parseProp(self.position)
+
+        if isinstance(self.leftPosition, (str, unicode)):
+            self.leftPosition = parseContext.parseProp(self.leftPosition)
         
     def getPositionLabel(self):
         if isinstance(self.position, int):

@@ -37,9 +37,9 @@ log = logging.getLogger("db")
 CTX_NS = u'http://rx4rdf.sf.net/ns/archive#'
 
 TXNCTX = 'context:txn:'  #+ modeluri:starttimestamp;version
-DELCTX = 'context:del:' #+ tnxctx (the tnxctx that excludes this)
-ADDCTX = 'context:add:' # + txnctx;;sourcectx (the context that the statement was added to;; the txnctx that includes this)
-ORGCTX = 'context:org:' #+ (txnctx|addctx);;(del3|del4)ctx (the ctx it was removed from;; the ctx that removed it)
+DELCTX = 'context:del:' #+ tnxctx;;sourcectx (the tnxctx that excludes this ;; the context that the statement was removed from)
+ADDCTX = 'context:add:' # + txnctx;;sourcectx (the txnctx that includes this ;; the context that the statement was added to)
+ORGCTX = 'context:org:' #+ (txnctx|addctx);;(del3|del4)ctx (the ctx it was removed from;; the ctx that removed it) [not used]
 EXTRACTCTX = 'context:extracted:' #+sourceuri (source of the entailment)
 APPCTX = 'context:application:'
 
@@ -66,7 +66,7 @@ def splitContext(ctx):
             result = (ctx, '', parts[0][len(ORGCTX):], '', parts[1])
     elif ctx.startswith(ADDCTX):
         #  org:   add:               txn:                 ;; src ctx  ;;delctx
-        result = ('', ctx[len(ORGCTX):], parts[0][len(ADDCTX):], parts[1], '')
+        result = ('', ctx[len(ADDCTX):], parts[0][len(ADDCTX):], parts[1], '')
     elif ctx.startswith(DELCTX):
         #  org:   add:  txn:;;                src ctx     ;; delctx
         result = ('', '', parts[0][len(DELCTX):], parts[1], ctx)
@@ -669,6 +669,17 @@ class NamedGraphManager(base.Model):
                 assert 0, 'unrecognized context type: ' + ctx
                 
         return list(stmts)
+
+    def getContextForStatement(self, stmt):
+        '''
+        Return the last transaction context that this statement appeared in.
+        '''
+        stmts = self.revisionModel.getStatements(*stmt[:4], context=None)
+        contexts = [s.scope.split(';;')[0][len(ADDCTX):] for s in stmts
+                if s.scope.startswith(ADDCTX) and s.scope.split(';;')[1] == stmt.scope]
+        assert contexts
+        contexts.sort(cmp=self.comparecontextversion)
+        return contexts[-1]
             
 def getTransactionContext(contexturi):
    txnpart = contexturi.split(';;')[0]

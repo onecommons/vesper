@@ -2431,7 +2431,146 @@ t('''
 id, createtime
 
 where ?firsttxn = ref(?post.txn) and {?post txn} 
-}''')
+}''',
+[{'createtime': 1, 'id': 'txn.b1'}, {'createtime': 2, 'id': 'txn.a2'}]
+)
+
+t('''
+{?post
+*,
+'createtime' : ?firsttxn.createtime
+
+where {?firsttxn = ref(?post.txn)} 
+
+order by ?firsttxn.createtime desc
+#XXX bug: using "order by createtime desc" causes createtime to serialized as null
+}''',
+[{'createtime': 2, 'id': 'post1', 'txn': 'txn.a2'},
+ {'createtime': 1, 'id': 'post2', 'txn': 'txn.b1'}]
+)
+
+t.group = 'revisions'
+
+#test that revision function just return null on non-revision stores
+t('''{?obj
+      id,
+      'createdtxnid' : getTransactionId(?obj.txn),
+      'createdon' : getTransactionTime(?obj.txn)      
+      where id = 'post1'
+}''',
+[{'createdon': None, 'createdtxnid': None, 'id': 'post1'}]
+)
+
+import vesper.app
+import vesper.query.revisionfuncs
+store1 = vesper.app.createStore(save_history='split', branch_id='A',
+  model_uri = 'test:', 
+  )
+
+store1.add([{ 'id' : '1', 'type' : 'post',
+'contents' : 'foo'
+}
+])
+
+store1.update([
+{ 'id' : '1', 'contents' : 'bar'
+}, { 'id' : '2', 'contents' : 'newer'
+}
+])
+
+t.model = store1.model
+
+t('''{?obj
+      *,
+      'createdtxnid' : getTransactionId(?obj.type),
+      'lastmodifiedtxnid' : getTransactionId(?obj.contents),
+      'createdby' : getTransactionAuthor(?obj.type),
+
+      #skip these since they'll be different every test run
+      #'createdon' : getTransactionTime(?obj.type),
+      #'lastmodified' : getTransactionTime(?obj.contents),
+
+      where id = '1'
+    }
+    ''',
+    [{'contents': 'bar',
+      'createdby': None,
+      'createdtxnid': 'context:txn:test:;0A00001',
+      'id': '1',
+      'lastmodifiedtxnid': 'context:txn:test:;0A00002',
+      'type': 'post'}]
+)
+
+#need to fix order by 
+skip('''{?obj
+      *
+      order by getTransactionTime(?obj.contents) desc
+    }
+    ''')
+
+#this doesn't work because the main store doesn't have object ?createdtxn.<http://rx4rdf.sf.net/ns/archive#createdOn>
+#so joining on ?createtxn fails
+skip('''{
+      ?obj
+      id,
+      type, 
+      'createdon' : ?createdtxn.<http://rx4rdf.sf.net/ns/archive#createdOn>
+      where id = '1' and {?createdtxn = getTransaction(?obj.type)} 
+    }
+    '''
+)
+
+t.model = store1.model.revisionModel
+
+t('''
+{ ?txn
+id, 
+<txn:baseRevision>, 
+<txn:hasRevision>,
+
+where <rdf:type> == @txn:TransactionContext
+order by <txn:createdOn> desc
+limit 20
+
+ namemap = {
+ "sharedpatterns" : { 
+      'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+      'txn:': 'http://rx4rdf.sf.net/ns/archive#'
+    }
+ }
+}
+''',
+[{'id': 'context:txn:test:;0A00002', 'txn:baseRevision': u'0A00001', 'txn:hasRevision': u'0A00002'},
+ {'id': 'context:txn:test:;0A00001', 'txn:baseRevision': u'0', 'txn:hasRevision': u'0A00001'}]
+)
+
+#XXX need to add support for filtering by context
+skip('''
+{ ?txn
+id, 
+
+'adds' : {
+  *
+  where context = ?txn.<txn:includes>
+ },
+
+'removes' : {
+   *
+   where context = ?txn.<txn:excludes>
+  },
+
+where <rdf:type> == @txn:TransactionContext
+order by <txn:createdOn> desc
+limit 20
+
+ namemap = {
+ "sharedpatterns" : { 
+      'rdf:' : 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+      'txn:': 'http://rx4rdf.sf.net/ns/archive#'
+    }
+ }
+}
+''')
 
 t.group = 'temp'
 #XXX maybe nested construct joins should always be outer
