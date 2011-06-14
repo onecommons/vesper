@@ -75,6 +75,6 @@ p,fieldset,table,pre {
 	/*so things don't run into each other*/
 	margin-bottom:1em;
 }
-/* setting a consistent width, 160px; 
+/* setting a consistent width, 160px; (changed to something else)
    control of type=file still not possible */
-input[type=text],input[type=password],textarea{width:12.25em;*width:11.9em;}
+input[type=text],input[type=password],textarea{width:9.25em;*width:.9em;}
