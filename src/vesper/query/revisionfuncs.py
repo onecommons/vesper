@@ -36,8 +36,10 @@ def _getTransactionFunc(context, op):
     for value, pos, row in getColumn(predictatePos, context.currentRow):
         objectType = row[pos+1]    
         stmt = base.Statement(subject, predicate, value, objectType) #XXX , context.scope
-        vals.append( ResourceUri(context.initialModel.getContextForStatement(stmt)) )
-    return vals
+        contextUri = context.initialModel.getContextForStatement(stmt)
+        if contextUri:            
+            vals.append( ResourceUri(contextUri) )
+    return vals or None
 
 def getTxnId(context, op):
     return flatten(_getTransactionFunc(context, op))

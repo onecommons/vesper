@@ -681,7 +681,9 @@ class NamedGraphManager(base.Model):
         stmts = self.revisionModel.getStatements(*stmt[:4], **dict(context=None))
         contexts = [s.scope.split(';;')[0][len(ADDCTX):] for s in stmts
                 if s.scope.startswith(ADDCTX) and s.scope.split(';;')[1] == stmt.scope]
-        assert contexts
+        if not contexts: 
+            #this can happen with a store that didn't start life as a revision store
+            return None
         contexts.sort(cmp=self.comparecontextversion)
         return contexts[-1]
             
