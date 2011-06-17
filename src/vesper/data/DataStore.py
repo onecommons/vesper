@@ -221,15 +221,10 @@ class BasicStore(DataStore):
 
     def setupHistory(self, source):
         requestProcessor = self.requestProcessor
-        if self.save_history:
-            #if we're going to be recording history we need a starting context uri
-            initCtxUri = graphmod.getTxnContextUri(requestProcessor.model_uri, 0)
-        else:
-            initCtxUri = ''
-        
+
         #data used to initialize a new store
         defaultStmts = base.parseRDFFromString(self.storage_template, 
-                        requestProcessor.model_uri, scope=initCtxUri, 
+                        requestProcessor.model_uri,
                         options=self.storage_template_options) 
         
         if self.save_history == 'split':                                                
@@ -264,26 +259,8 @@ class BasicStore(DataStore):
             #either no history or no separate model
             revisionModel = None
         
-        #WARNING this feature hasn't been tested in a long time and is probably broken
-        #XXX: write unittest or remove this code
-        #if savehistory is on and we are loading a store that has the entire 
-        #change history (e.g. we're loading the transaction log) we also load 
-        #the history into a separate model
-        #
-        #note: to override loadNtriplesIncrementally, set this attribute
-        #on your custom model_factory        
-        if self.save_history == 'split' and getattr(
-                self.model_factory, 'loadNtriplesIncrementally', False):
-            if not revisionModel:
-                revisionModel = MemStore()
-            dmc = graphmod.DeletionModelCreator(revisionModel)
-            model = self.model_factory(source=source,
-                    defaultStatements=defaultStmts, incrementHook=dmc)
-            lastScope = dmc.lastScope
-        else:
-            model = None
-            lastScope = None
-        
+        model = None
+        lastScope = None        
         return model, defaultStmts, revisionModel, lastScope
 
     def isDirty(self, txnService):

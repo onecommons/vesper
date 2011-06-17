@@ -478,9 +478,9 @@ class NamedGraphManager(base.Model):
         ctxStmts.append(Statement(txnContext, CTX_NS+'baseRevision',
             unicode(self._currentTxn.baseRev), OBJECT_TYPE_LITERAL, txnContext))
         ctxStmts.append(Statement(txnContext, CTX_NS+'hasRevision',
-            unicode(self._currentTxn.currentRev), OBJECT_TYPE_LITERAL, txnContext))        
+            unicode(self._currentTxn.currentRev), OBJECT_TYPE_LITERAL, txnContext))
         ctxStmts.append(Statement(txnContext, CTX_NS+'createdOn',
-            unicode(self._currentTxn.timestamp), OBJECT_TYPE_LITERAL, txnContext))
+            unicode(self._currentTxn.timestamp), 'http://www.w3.org/2001/XMLSchema#double', txnContext))
         source = txnInfo.get('source')
         if source:
             ctxStmts.append(Statement(txnContext, CTX_NS+'createdBy',

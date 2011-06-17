@@ -660,7 +660,41 @@ class AppTestCase(unittest.TestCase):
             self.assertEquals(store2.query("{* where (id='1')}"), [{'id': '@1', 'tags': ['@t', '@t']}])            
         finally:
             os.unlink(tmppath)
-                      
+
+    def _testDefaultStatements(self, save_history):
+        defaultJson = {
+          "id" : '0',          
+          'prop' : 'default',
+          'prop2' : 'unchanged'
+        }
+        store1 = vesper.app.createStore(save_history=save_history, branch_id='A',
+         model_uri = 'test:', storage_template=defaultJson)        
+        store1.add([{ 'id' : '1',
+          'prop' : 'added'
+        }
+        ])
+        store1.update([{ 'id' : '0',
+          'prop' : 'updated'
+        }
+        ])
+        self.assertEquals(store1.model.getStatements('0'), 
+          [('0', 'prop', 'updated', 'L', ''), ('0', 'prop2', 'unchanged', 'L', '')])
+        
+        if save_history:
+          #note: default data not stored under a revision context
+          self.assertEquals(
+            [s for s in store1.model.revisionModel.getStatements('0') if s.scope],
+            [('0', 'prop', 'default', 'L', 'context:del:context:txn:test:;0A00002;;'),
+             ('0', 'prop', 'updated', 'L', 'context:add:context:txn:test:;0A00002;;')])
+
+    def testDefaultStatements(self):
+        '''
+        Test revision history updates with multiple transaction participants
+        '''                
+        self._testDefaultStatements(False)
+        self._testDefaultStatements('combined')
+        self._testDefaultStatements('split')
+      
     def testCreateApp(self):
         #this is minimal logconfig that python's logger seems to accept:
         app = vesper.app.createApp(static_path=['static'], 
