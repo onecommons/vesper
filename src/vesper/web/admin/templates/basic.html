@@ -4,7 +4,7 @@
 <%def name='footer(priority=0)'>${slots.callslot('footer', caller.body, priority)}</%def>
 <%def name='sidebar(priority=0)'>${slots.callslot('sidebar', caller.body, priority)}</%def>
 
-<%def name="layout()">
+<%def name="layout(docId='doc3', docClass='yui-t4')">
 <%
 ##need to do this now so callers calls to callslots defined here are run before they are written out
 callerbody = capture(caller.body)
@@ -26,18 +26,18 @@ callerbody = capture(caller.body)
 </%slots:css>
 
 <!-- doc3 == 100% -->
-<div id='doc3' class="yui-t4">
+<div id='${docId}' class="${docClass}">
 ##XXX using ui-state-active just because it looks good, shouldn't
   <div id="hd" class="header-title ui-state-active">
     ${slots.output('header')}
   </div>
   <div id="bd">
-      <div id="yui-main">          
+      <div id="yui-main">
           <div class="yui-b">
           ${callerbody}
           </div>
       </div>
-      <div class="yui-b rightcol">          
+      <div class="yui-b rightcol">
         ${slots.output('sidebar')}
       </div>      
 </div>   
