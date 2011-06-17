@@ -234,11 +234,12 @@ class NamedGraphManager(base.Model):
         Returns the transaction context URI for the new revision.
         '''
         if self.markLatest:
-            oldLatest = self.revisionModel.getStatements(predicate=CTX_NS + 'latest')            
+            oldLatest = self.revisionModel.getStatements(predicate=CTX_NS + 'latest', 
+                          context=getTxnContextUri(self.modelUri, self.initialRevision))
             if oldLatest:
-                self.lastLatest = oldLatest[0]
-                
-                latest = oldLatest[0].object
+                assert len(oldLatest) == 1, 'more than one latest found %r' % oldLatest
+                self.lastLatest = oldLatest[-1]                
+                latest = self.lastLatest.object
                 #lastScope = oldLatest[0].subject
                 #context urls will always start with a txn context,
                 #with the version after the first ;                
@@ -460,7 +461,8 @@ class NamedGraphManager(base.Model):
             #assert self.currentVersion, 'currentVersion not set'
             txnContext = getTxnContextUri(self.modelUri, txnRev)
             self.lastLatest = Statement(txnContext, CTX_NS + 'latest',
-                    unicode(txnRev), OBJECT_TYPE_LITERAL, txnContext)
+                    unicode(txnRev), OBJECT_TYPE_LITERAL, 
+                    getTxnContextUri(self.modelUri, self.initialRevision))
             self.revisionModel.addStatement(self.lastLatest)
 
     def _finishCtxResource(self, txnInfo):

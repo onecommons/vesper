@@ -293,7 +293,9 @@ class BasicStore(DataStore):
     def join(self, txnService, readOnly=False, setCurrentTxn=True):
         if not txnService.isActive():
             return False
-        if setCurrentTxn and hasattr(txnService.state, 'kw'):
+        
+        #getTransactionContext() can invoke store IO so for efficent don't do if readOnly
+        if not readOnly and setCurrentTxn and hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
             txnService.state.kw['__current-transaction'] = txnCtxtResult
         
