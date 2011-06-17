@@ -323,6 +323,7 @@ class IncrementalNTriplesFileStoreBase(FileStore):
 
     def rollback(self):        
         self.changelist = []
+        super(IncrementalNTriplesFileStoreBase, self).rollback()
 
 class IncrementalNTriplesFileStore(TransactionModel, IncrementalNTriplesFileStoreBase):
     

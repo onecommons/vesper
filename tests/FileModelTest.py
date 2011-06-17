@@ -193,7 +193,7 @@ class IncrementalFileModelTestCase(FileModelTestCase):
         return model#self._getModel(model)
 
     def getTransactionModel(self):
-        model = IncrementalNTriplesFileStore(self.tmpfilename)
+        model = IncrementalNTriplesFileStoreBase(self.tmpfilename)
         return model#self._getModel(model)
     
     def testCommitFailure(self):
@@ -205,6 +205,10 @@ class IncrementalFileModelTestCase(FileModelTestCase):
 class TransactionIncrementalFileModelTestCase(IncrementalFileModelTestCase):
 
     def getModel(self):
+        model = IncrementalNTriplesFileStore(self.tmpfilename)
+        return model#self._getModel(model)
+
+    def getTransactionModel(self):
         model = IncrementalNTriplesFileStore(self.tmpfilename)
         return model#self._getModel(model)
 
