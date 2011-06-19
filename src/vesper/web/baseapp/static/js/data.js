@@ -5,14 +5,14 @@
 
 var konsole = {
     log : function() {
-      if (window.console)
-        window.console.log.apply(null, Array.prototype.slice.call(arguments)); 
+      if (window.console && window.console.log)
+        window.console.log.apply(window.console, Array.prototype.slice.call(arguments)); 
     },
     assert : function(expr, msg) { 
       if (!expr) { 
         if (window.console && window.console.assert) 
           //console.assert doesn't abort, just logs
-          window.console.assert.apply(null, Array.prototype.slice.call(arguments));
+          window.console.assert.apply(window.console, Array.prototype.slice.call(arguments));
         debugger; //note: no-op if debugger isn't active
         throw new Error("assertion failed " + (msg || '')); //abort
       }
