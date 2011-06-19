@@ -2,14 +2,22 @@
  * Copyright 2009-2010 by the Vesper team, see AUTHORS.
  * Dual licenced under the GPL or Apache2 licences, see LICENSE.
  */
-if (!window.console) {
-    var konsole = {
-        log : function() {},
-        assert : function(expr, msg) { if (!expr) { debugger; } }
-    };
-} else {
-    var konsole = window.console;
-}
+
+var konsole = {
+    log : function() {
+      if (window.console)
+        window.console.log.apply(null, Array.prototype.slice.call(arguments)); 
+    },
+    assert : function(expr, msg) { 
+      if (!expr) { 
+        if (window.console && window.console.assert) 
+          //console.assert doesn't abort, just logs
+          window.console.assert.apply(null, Array.prototype.slice.call(arguments));
+        debugger; //note: no-op if debugger isn't active
+        throw new Error("assertion failed " + (msg || '')); //abort
+      }
+    }
+};
 
 var Txn = function(url) {
   this.autocommit = false;
@@ -63,16 +71,14 @@ Txn.prototype = {
         });
                 
         if (callback) {
-            $(elem).one('dbdata.'+this.txnId, function(event) {
-                //the response is a list and jquery turns that into arguments  
-                //konsole.log('thiscallback', arguments);
-                var responses = arguments; //note: first item is the event
-                for (var i=1; i < responses.length; i++) {
+            $(elem).one('dbdata.'+this.txnId, function(event, responses) {
+                if (responses.error) { //error object, not an array of responses
+                  callback(responses);
+                  return;
+                }
+                for (var i=0; i < responses.length; i++) {
                     var response = responses[i];
-                    if (response.id == null && response.error) {
-                        callback(response);
-                        break
-                    } else if (response.id == requestId) {
+                    if (response.id == requestId) {
                         if (response.error)
                             callback.call(elem, response);
                         else
@@ -98,14 +104,15 @@ Txn.prototype = {
         }        
         
         var comment = this.txnComment;
+        var request = this.requests;
         //var clientErrorMsg = this.clientErrorMsg;
         function ajaxCallback(data, textStatus) {
             //responses should be a list of successful responses
             //if any request failed it should be an http-level error
             konsole.log("datarequest", data, textStatus, 'dbdata.'+txnId, comment);
             if (textStatus == 'success') {
-                $(elem).trigger('dbdata.'+txnId, data);
-                $(elem).trigger('dbdata-*', data);
+                $(elem).trigger('dbdata.'+txnId, [data, request, comment]);
+                $(elem).trigger('dbdata-*', [data, request, comment]);
             } else {
                 //when textStatus != 'success', data param will be a XMLHttpRequest obj 
                 var errorObj = {"jsonrpc": "2.0", "id": null,
@@ -114,8 +121,8 @@ Txn.prototype = {
                         'data' : data.responseText
                   } 
                 };
-                $(elem).trigger('dbdata.'+txnId, errorObj);
-                $(elem).trigger('dbdata-*', errorObj);
+                $(elem).trigger('dbdata.'+txnId, [errorObj, request, comment]);
+                $(elem).trigger('dbdata-*', [errorObj, request, comment]);
             }
          };
     
@@ -306,8 +313,8 @@ txn.commit();
                   'data' : null
                 } 
             };
-            this.trigger('dbdata.'+txn.txnId, errorObj);
-            this.trigger('dbdata-*', errorObj);
+            this.trigger('dbdata.'+txn.txnId, [errorObj, txn.requests, txn.txnComment]);
+            this.trigger('dbdata-*', [errorObj, txn.requests, txn.txnComment]);
         } else {
             konsole.log('rollback with no txn');
         }

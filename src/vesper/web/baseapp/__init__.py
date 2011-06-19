@@ -112,7 +112,7 @@ def datarequest(kw, retval):
             #XXX vesper.app should set a default content-type 
             kw._responseHeaders['Content-Type'] = 'application/json'
             response = [isinstance(x, dict) and handleRequest(**x) or 
-                            dict(id=None, jsonrpc='2.0', 
+                dict(id=hasattr(x, 'get') and x.get('id') or None, jsonrpc='2.0',
                             error=dict(code=-32600, message='Invalid Request'))
                                 for x in requests if checkRequest(x)]
             log.debug('request: \n  %r\n response:\n   %r', requests, response)
