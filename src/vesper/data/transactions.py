@@ -77,6 +77,7 @@ class TransactionState(object):
     def __init__(self):
        self.participants = []
        self.info = {}
+       self.readOnly = True
 
     def addInfo(self, info):
         self.info.update(info)
@@ -100,10 +101,21 @@ class TransactionService(object):
         elif self.state.safeToJoin:
             if participant not in self.state.participants:
                 self.state.participants.append(participant)
-                assert not participant.inTransaction
-                participant.inTransaction = self
+                if participant.inTransaction:
+                  if participant.inTransaction is not self:
+                    raise TransactionError(
+    'transaction participant is being used by a different transaction service')
+                  elif not readOnly or not self.state.readOnly:
+                    #participant must be in a transaction in another thread
+                    #we only support this for read-only transactions
+                    raise TransactionError('transaction is not read-only but '
+                      'another thread is currently executing a transaction')
+                else:
+                  participant.inTransaction = self
             else:
-                assert participant.inTransaction == self
+                assert participant.inTransaction is self
+            if not readOnly:
+              self.state.readOnly = False
         else:
             raise TransactionInProgress
 
@@ -279,7 +291,6 @@ class ProcessorTransactionState(TransactionState):
         self.kw = {}
         self.retVal = None
         self.lock = None
-        self.readOnly = True
 
     def addInfo(self, info):
         self.kw = info.pop('kw', self.kw)        
@@ -367,9 +378,8 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
             if not self.state.lock: 
                 #lock on first participant joining that will write
                 self.state.lock = self.server.getLock()
-            self.state.readOnly = False
    
-    def _cleanup(self, committed):        
+    def _cleanup(self, committed):
         if committed:
             #if transaction completed successfully
             self._runActions('after-commit')
