@@ -818,8 +818,8 @@ class SimpleQueryEngine(object):
                     if op.shape is op.listShape: #return an empty list
                         yield self.getShape(context, op.shape)
                     return
-                i+=1                
-                if op.parent.offset is not None and op.parent.offset < i:
+                i+=1
+                if op.parent.offset is not None and op.parent.offset >= i:
                     continue
                 context.constructStack.append(idvalue)
                 context.currentRow = [idvalue] + row
@@ -970,8 +970,8 @@ class SimpleQueryEngine(object):
                 assert idvalue == currentIdvalue
                 yield pattern
                 count+=1
-                if op.parent.limit is not None and op.parent.limit < count:
-                    break
+                if op.parent.limit is not None and op.parent.limit <= count:
+                    return
 
         #columns = [ColumnInfo('construct', object)]            
         return SimpleTupleset(construct, hint=tupleset, op='construct', #columns=columns, 

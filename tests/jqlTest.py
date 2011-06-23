@@ -186,6 +186,22 @@ res = [{'child': '3', 'id': '_:1', 'parent': '1'},
 t('''{ * order by child desc, id }''', res)
 t('''{ * order by child desc, id asc }''', res)
 
+t.group = 'limit'
+
+t('''{ * limit 2}''',
+[{'foo': 'bar', 'id': '3'},
+ {'foo': 'bar', 'id': '2'}]
+)
+
+t('''{ * offset 2}''',
+[{'child': '2', 'id': '_:2', 'parent': '1'},
+{'child': '3', 'id': '_:1', 'parent': '1'}]
+)
+
+t('''{ * offset 2 limit 1}''',
+[{'child': '2', 'id': '_:2', 'parent': '1'}]
+)
+
 t.group = 'parse'
 
 #XXX add real tests for this
