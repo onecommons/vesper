@@ -234,19 +234,19 @@ class NamedGraphManager(base.Model):
         Returns the transaction context URI for the new revision.
         '''
         if self.markLatest:
-            oldLatest = self.revisionModel.getStatements(predicate=CTX_NS + 'latest', 
-                          context=getTxnContextUri(self.modelUri, self.initialRevision))
+            oldLatest = self.revisionModel.getStatements(predicate=CTX_NS+'latest',
+                context=getTxnContextUri(self.modelUri, self.initialRevision))
             if oldLatest:
                 assert len(oldLatest) == 1, 'more than one latest found %r' % oldLatest
                 self.lastLatest = oldLatest[-1]                
                 latest = self.lastLatest.object
-                #lastScope = oldLatest[0].subject
-                #context urls will always start with a txn context,
-                #with the version after the first ;                
-                #parts = lastScope.split(';')
-                #latest = parts[1]
+                next = self._increment(latest)
+                assert not self.revisionModel.getStatements(
+                  getTxnContextUri(self.modelUri, next),
+                  context=getTxnContextUri(self.modelUri, self.initialRevision)
+                  ), 'next revision already used: %s' % next
                 
-                return self._increment(latest)
+                return next
             else:
                 self.lastLatest = None
                 return self._increment(self.currentVersion)
