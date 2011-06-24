@@ -330,21 +330,24 @@ class IncrementalNTriplesFileStore(TransactionModel, IncrementalNTriplesFileStor
     def _getChangeList(self):
         return self.queue
 
+def guessFileType(path):
+  extmap = { '.nt' : 'ntriples',
+    '.nj' : 'ntjson', 
+    '.rdf' : 'rdfxml',
+    '.json' : 'pjson',
+    '.mjson' : 'mjson',
+    '.yaml' : 'yaml',
+  }
+  #try to guess from extension
+  base, ext = os.path.splitext(path)
+  return extmap.get(ext)
+  
 def loadFileStore(path, context='', incrementHook=None, parseOptions=None):
     '''
     If location doesn't exist create a new model and initialize it
     with the statements specified in defaultModel
     '''
-    extmap = { '.nt' : 'ntriples',
-      '.nj' : 'ntjson', 
-      '.rdf' : 'rdfxml',
-      '.json' : 'pjson',
-      '.mjson' : 'mjson',
-      '.yaml' : 'yaml',
-    }
-    #try to guess from extension
-    base, ext = os.path.splitext(path)
-    format = extmap.get(ext, 'unknown')
+    format = guessFileType(path) or 'unknown'
 
     if os.path.exists(path):
         stat = os.stat(path)
