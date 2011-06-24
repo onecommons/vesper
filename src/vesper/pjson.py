@@ -378,7 +378,6 @@ class Serializer(object):
         for stmt in orderedmodel.getProperties(propseq):            
             prop = stmt.predicate
             obj = stmt.object
-            #print '!!propseq member', p.stmt
             if prop == PROPBAG:
                 propbag = obj
             elif prop == base.RDF_SCHEMA_BASE+u'member':
@@ -465,7 +464,8 @@ class Serializer(object):
 
         idName = self.parseContext.idName 
         contextName = self.parseContext.contextName 
-        for res in nodes: 
+        for res in nodes:
+            #get an ordered list of statements with this resource as their subject
             childNodes = root.getProperties(res)
             if not childNodes:
                 #no properties, don't include
@@ -484,6 +484,7 @@ class Serializer(object):
             
             #deal with sequences first
             resScopes = {}
+            #build a map of properties with list values: prop => [rdf:member statements]
             currentobjListprops = {}
             for stmt in childNodes:
                 if stmt.predicate == PROPSEQ:
@@ -496,7 +497,7 @@ class Serializer(object):
                 else:
                     pscope = stmt.scope
                     resScopes[pscope] = resScopes.setdefault(pscope, 0) + 1
-            
+
             mostcommon = 0
             resScope = defaultScope
             for k,v in resScopes.items():
@@ -517,11 +518,12 @@ class Serializer(object):
                 if key in currentobjListprops:
                     #prop already handled by _setPropSeq
                     assert key not in self.parseContext.reservedNames
-                    childlist, listvalues = currentobjListprops[key]                    
+                    childlist, listvalues = currentobjListprops[key]
                     if key not in currentobj:
                         self._finishPropList(childlist, idrefs, resScope, lists)
                         currentobj[key] = childlist
                     if (stmt[2], stmt[3]) in listvalues:
+                        currentlist = []
                         continue
                     #statement's value not in sequence, have the value added to the list
                     currentlist = childlist
@@ -539,11 +541,10 @@ class Serializer(object):
                     pScope = stmt.scope
                 else:
                     pScope = None
-
+                
                 parent[ key ], isRes = self.serializeObjectValue(stmt.object, 
                                                 stmt.objectType, pScope)
                 if isRes:                
-                    #print 'prop key', key, prop, type(parent)
                     if stmt.object != res and pScope is None:
                         #add ref if object isn't same as subject
                         #and we don't have to serialize the pScope

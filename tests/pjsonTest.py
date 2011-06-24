@@ -84,7 +84,8 @@ class SjsonTestCase(unittest.TestCase):
         test()
         
 def test():
-              
+    global test_counter;
+    
     dc = 'http://purl.org/dc/elements/1.1/'
     r1 = "http://example.org/book#1";     
     r2 = "http://example.org/book#2"; 
@@ -570,6 +571,27 @@ def test():
         pass
     else:
         assert 0, "duplicate id detection failed"
+
+    #test that serialize still works even if there are missing propseq statements
+    # this statement is missing from the statement below:
+    # _:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <http://www.w3.org/1999/02/22-rdf-syntax-ns#_2> <tag:tag1> .      
+    import StringIO
+    stream = StringIO.StringIO('''<uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a> <tags> <tag:tag1> .
+<uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a> <type> <post> .
+<uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a> <pjson:schema#propseq> _:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags .
+_:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq> .
+_:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <pjson:schema#propseqtype> .
+_:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <pjson:schema#propseqprop> <tags> .
+_:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <pjson:schema#propseqsubject> <uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a> .
+_:j:proplist:uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a;tags <http://www.w3.org/1999/02/22-rdf-syntax-ns#_1> <tag:tag2> .
+<uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a> <tags> <tag:tag2> .''')
+    stmts = base.NTriples2Statements(stream)
+    
+    assert tojson( stmts )['data'] == [{'id': '@uuid:1eb500bb-ce42-49b2-a0dd-af5abb7d520a', 
+                  'tags': ['@tag:tag2', '@tag:tag1'],
+                  'type': '@post'
+          }]
+    test_counter += 1
     
     print 'ran %d tests, all pass' % test_counter
     
