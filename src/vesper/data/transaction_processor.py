@@ -99,6 +99,8 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                             comment=kw.get('__transaction_comment')
                         )
                         self.txnSvc.commit()
+                elif self.txnSvc.state.readOnly:
+                    self.txnSvc._cleanup(False)
                 else:
                     self.txnSvc.abort()
         return retVal
@@ -131,5 +133,7 @@ class TransactionProcessor(utils.ObjectWithThreadLocals):
                                 comment=kw.get('__transaction_comment')
                             )
                             self.txnSvc.commit()
+                    elif self.txnSvc.state.readOnly:
+                        self.txnSvc._cleanup(False)
                     else:
                         self.txnSvc.abort()

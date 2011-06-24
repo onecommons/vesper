@@ -101,19 +101,6 @@ class TransactionService(object):
         elif self.state.safeToJoin:
             if participant not in self.state.participants:
                 self.state.participants.append(participant)
-                if participant.inTransaction:
-                  if participant.inTransaction is not self:
-                    raise TransactionError(
-    'transaction participant is being used by a different transaction service')
-                  elif not readOnly or not self.state.readOnly:
-                    #participant must be in a transaction in another thread
-                    #we only support this for read-only transactions
-                    raise TransactionError('transaction is not read-only but '
-                      'another thread is currently executing a transaction')
-                else:
-                  participant.inTransaction = self
-            else:
-                assert participant.inTransaction is self
             if not readOnly:
               self.state.readOnly = False
         else:
@@ -204,7 +191,6 @@ class TransactionService(object):
 
     def removeParticipant(self,participant):
         self.state.participants.remove(participant)
-        participant.inTransaction = False
 
     def abort(self):
         if not self.isActive():
@@ -258,8 +244,17 @@ class TransactionService(object):
         return ob in self.state.participants
 
 class TransactionParticipant(object):
-    inTransaction = False
-
+    '''
+    Base class for TransactionParticipants.
+    
+    Participants should support multiple simultaneous read-only transactions in
+    a multi-threaded environment. The easiest way to ensure this is to be 
+    stateless if the transaction is readonly and only reset state 
+    in commitTransaction or abortTransaction, not in finishTransaction
+    If the participant can't support multiple read-only threads, make sure readOnly 
+    is set to False in join().
+    '''
+    
     def isDirty(self,txnService):
         '''return True if this transaction participant was modified'''    
         return True #default to True if we don't know one way or the other
@@ -280,7 +275,7 @@ class TransactionParticipant(object):
         pass
 
     def finishTransaction(self, txnService, committed):
-        self.inTransaction = False
+        pass
 
 class ProcessorTransactionState(TransactionState):
     def __init__(self):
@@ -373,11 +368,11 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
                     errorSequence=errorSequence)
 
     def join(self, participant, readOnly=False):
-        super(ProcessorTransactionService, self).join(participant, readOnly)
         if not readOnly:
             if not self.state.lock: 
                 #lock on first participant joining that will write
                 self.state.lock = self.server.getLock()
+        super(ProcessorTransactionService, self).join(participant, readOnly)
    
     def _cleanup(self, committed):
         if committed:
@@ -469,11 +464,17 @@ class TxnFileFactory(TransactionParticipant, FileFactory):
     def __init__(self, filename):
         super(TxnFileFactory, self).__init__(filename)  
         self.tmpName = self.filename+'.$$$'
+        self.inTransaction = False
 
     def _txnInProgress(self):
         raise TransactionInProgress(
             "Can't use autocommit with transaction in progress"
         )
+
+    def join(self, txnService, readOnly=False):
+        #assume txn is no longer readonly
+        #in particular because TxnFileFactory is not thread-safe
+        return txnService.join(self, False)
 
     def isDirty(self,txnService):
         return self._isDirty or self.isDeleted
@@ -552,6 +553,7 @@ class TxnFileFactory(TransactionParticipant, FileFactory):
 
     def finishTransaction(self, txnService, committed):
         super(TxnFileFactory, self).finishTransaction(txnService, committed)
-        self.isDeleted = False
+        self.isDeleted = False        
+        self.inTransaction = False
 
 #class EditableFile(TxnFile): #todo?

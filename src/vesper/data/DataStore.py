@@ -294,13 +294,13 @@ class BasicStore(DataStore):
         if not txnService.isActive():
             return False
         
+        super(BasicStore,self).join(txnService, readOnly)
+        
         #getTransactionContext() can invoke store IO so for efficent don't do if readOnly
         if not readOnly and setCurrentTxn and hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
             txnService.state.kw['__current-transaction'] = txnCtxtResult
-        
-        super(BasicStore,self).join(txnService, readOnly)
-        
+                
         for participant in self._txnparticipants:
             participant.join(txnService, readOnly)
         return True
@@ -670,6 +670,7 @@ class BasicStore(DataStore):
     def query(self, query=None, bindvars=None, explain=None, debug=False, 
         forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
         import vesper.query
+        #XXX theorectically some queries might not be readonly, set flag as appropriate
         if not self.join(self.requestProcessor.txnSvc, readOnly=True):
             #not in a transaction, so call this inside one
             func = lambda: self.query(query, bindvars, explain,
@@ -734,6 +735,8 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
         assert self.committed
         if self.logPath:
             self.logChanges(txnService)
+        self.undo = []
+        self.committed = False
     
     def abortTransaction(self, txnService):
         if not self.committed and not self.model.autocommit:
@@ -754,6 +757,8 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
                 except:
                     #import traceback; traceback.print_exc()
                     pass
+        self.undo = []
+        self.committed = False
 
     def logChanges(self, txnService):
         import time
@@ -774,11 +779,6 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
         base.writeTriples( unmapQueue(), outputfile)            
         outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
         outputfile.close()
-
-    def finishTransaction(self, txnService, committed):
-        super(TwoPhaseTxnModelAdapter,self).finishTransaction(txnService, committed)
-        self.undo = []
-        self.committed = False
 
 class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
     '''
@@ -809,6 +809,9 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
     def commitTransaction(self, txnService):
         if self.ctxStmts:
             self.graph._finalizeCommit(self.ctxStmts)
+        self.graph._currentTxn = None
+        self.ctxStmts = None
+        self.dirty = False
 
     def abortTransaction(self, txnService):
         if self.ctxStmts:
@@ -824,9 +827,6 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
             #called before underlying models' abort
             graph._markLatest(baseRevision)
             graph.currentVersion = baseRevision
-                            
-    def finishTransaction(self, txnService, committed):
-        super(TwoPhaseTxnGraphManagerAdapter,self).finishTransaction(txnService, committed)
         self.graph._currentTxn = None
         self.ctxStmts = None
         self.dirty = False

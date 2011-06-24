@@ -689,12 +689,70 @@ class AppTestCase(unittest.TestCase):
 
     def testDefaultStatements(self):
         '''
-        Test revision history updates with multiple transaction participants
+        Test that default statements are loaded and modified properly.
         '''                
         self._testDefaultStatements(False)
         self._testDefaultStatements('combined')
         self._testDefaultStatements('split')
+    
+    def _testThreading(self, save_history):
+      import threading, time
+
+      data = [{
+      "id": "a", 
+      "prop" : 1
+       }, {
+       "id": "b", 
+       "prop" : 1
+       }]
+      store = vesper.app.createStore(data, save_history=save_history)
+            
+      def thread1():
+        store.requestProcessor.txnSvc.begin()
+        #non-readonly operation will obtain a lock
+        store.update({
+         "id": "a", 
+         "prop" : 2
+        })
+        event.set()
+        time.sleep(.2) #keep the transaction open while the other thread runs
+        store.requestProcessor.txnSvc.commit()
+          
+      def thread2():
+        event.wait()
+        #readonly transactions don't block but
+        #result will still be 2 as there's no transaction isolation
+        self.assertEquals(store.query("(prop where id='a')"), [2])        
+        #will block until the other transaction is done
+        self.failUnless(t1.isAlive())
+        store.update({
+        "id": "b", 
+        "prop" : 2
+         })
+        self.failUnless(not t1.isAlive())
+        self.assertEquals(store.query("(prop where id='b')"), [2])
+
+      event = threading.Event()
+      t1 = threading.Thread(target=thread1)
+      t2 = threading.Thread(target=thread2)
+      t2.start()
+      time.sleep(.01) #just to be extra sure thread2 is waiting on the event
+      t1.start()
+      t1.join()
+      t2.join()
       
+      #both updates should have succeeded
+      self.assertEquals(store.query("{*}"), 
+          [{'id': '@a', 'prop': 2}, {'id': '@b', 'prop': 2}])
+
+    def testThreading(self):
+        '''
+        Test that default statements are loaded and modified properly.
+        '''                
+        self._testThreading(False)
+        self._testThreading('combined')
+        self._testThreading('split')
+         
     def testCreateApp(self):
         #this is minimal logconfig that python's logger seems to accept:
         app = vesper.app.createApp(static_path=['static'], 
@@ -745,7 +803,6 @@ class AppTestCase(unittest.TestCase):
             self.assertEquals(str(e), 'unrecognized or invalid file contents')
         else:
             self.fail('should have raised a ParseException')
-
 
     def testMultipleStores(self):
         app = vesper.app.createApp(stores = { 
