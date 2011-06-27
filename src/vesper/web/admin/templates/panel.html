@@ -123,7 +123,7 @@ def kwtoattr(kw, **merge):
 </%slots:css>
 
 <%slots:scripts>
-<script type="text/javascript" src="/static/jquery.hresize.js"></script>
+##<script type="text/javascript" src="/static/jquery.hresize.js"></script>
 <script type='text/javascript'>  
 /** begin generic panel/item code **/
     
@@ -247,7 +247,7 @@ function initItems(context) {
      $entry.dbBegin().dbUpdate().dbQuery(gItemSaveQuery, {
        comment: "edited post " + $entry.attr('itemid'),
        callback: function(data) {
-         console.log('saved entry', data);
+         //console.log('saved entry', data);
          if (!data.error) { //query action returns errors 
              var textarea = $(this).find('.entry-edit textarea');
              textarea.data('originalValue', textarea.val());
