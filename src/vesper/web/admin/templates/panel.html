@@ -173,7 +173,7 @@ function editEntry(event) {
 function makePanels(selector) {
     var panels = $(selector || document);
 
-    $('.panel-body', panels).hresize(); //{ minHeight: 100})
+   ## $('.panel-body', panels).hresize(); //{ minHeight: 100})
 
     $('.panel-header .showhide-button', panels).live('click', function() {
         var content = $(this).closest('.panel-header').next();
