@@ -230,14 +230,19 @@ function initItems(context) {
    $('.entry-cancelcreate-button', context).click(function(event) {
        event.preventDefault();
        var $entry = $(this).closest('.entry');
-       if ($entry.find('.entry-create-button:enabled').length &&
+       if ($entry.find('textarea').val() &&
           !confirm('lose changes?')) {
               return;
        }
        $entry.find('.preview-contents').html('');
        $entry[0].reset();        
        $entry.find('.tagfield,.bit-box').remove();
-       $entry.parent('.outline').hide();
+       //$entry.parent('.outline').hide();
+       var $inlineParent = $entry.parent('.inline-new-entry-form');
+       if ($inlineParent.length)
+         $inlineParent.hide().prev().show();
+       else
+         $entry.find('.entry-edit-commands').hide();
    });
    
    $('.entry-save-button', context).click(function(event) {
@@ -286,7 +291,7 @@ $(document).ready(function(){
     initItems( document );
     makePanels('.panel');
      $(".yui-b").sortable({ tolerance: 'pointer', connectWith: '.yui-b', 
-        handle : '.panel-header',
+        handle : '.panel-header:not(.freefloating)',
         stop: function(event, ui) { //add this to enable free-floating panels that snap into the grid when dragged
           ui.item.css({zIndex:'auto', position:'static', width: 'auto'})
         }
