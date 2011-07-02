@@ -267,13 +267,13 @@ configuration variables for command line handling
       
   Default: ``lambda app, args: args``
 
-..confval:: cmd_usage
+.. confval:: cmd_usage
 
   Command usage string 
   
   Default: `"%prog [options] [settings]"`
 
-..confval:: cmd_help
+.. confval:: cmd_help
 
   Help text appended to command line help message (invoked by -h or --help)
   

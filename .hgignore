@@ -5,3 +5,5 @@ syntax: glob
 *.orig
 *.bak
 .DS_Store
+*/mako_modules/*
+*/.idea/*

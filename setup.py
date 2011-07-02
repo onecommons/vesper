@@ -1,6 +1,8 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 
+#XXX from distribute_setup import use_setuptools
+#use_setuptools()
 import ez_setup
 ez_setup.use_setuptools()
 from setuptools import setup, find_packages
@@ -10,8 +12,9 @@ import sys, os
 install_requires = ['ply', 'routes', 'mako']
 extras_require = { 'yaml' : ['pyyaml'],
   'docs' : ['Sphinx'],
-  #'replication' : [stomp.py],
-  #'tests' : [],
+  'replication' : ["stomp.py"],
+  'tests' : [ "rdflib" ],
+  'tyrant' : ["pytyrant"]  
 }
 PACKAGE_NAME = 'vesper'
 pyver = sys.version_info[:2]
@@ -19,9 +22,13 @@ if pyver < (2,4):
     print "Sorry, %s requires version 2.4 or later of Python" % PACKAGE_NAME
     sys.exit(1)        
 if pyver < (2,5):
-  install_requires.extend(['wsgiref', 'uuid'])
+    install_requires.extend(['wsgiref', 'uuid'])
+    #coilmq doesn't support python 2.4, use morbid instead
+    extras_require['tests'].extend(['Twisted', 'morbid'])
+else:
+    extras_require['tests'].append('coilmq')
 if pyver < (2,6):
-  install_requires.extend(['simplejson'])
+  install_requires.extend(['simplejson', 'multiprocessing'])
 
 # data_files generation derived from django setup.py
 data_files = []
