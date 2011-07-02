@@ -297,6 +297,12 @@ class BasicStore(DataStore):
         
         super(BasicStore,self).join(txnService, readOnly)
         
+        if not hasattr(txnService.state, 'queryCache'):
+            #create a cache that will be used by the query engine
+            #its local to this transaction so dont have worry about memory usage
+            #or invalidating across transactions or processes
+            txnService.state.queryCache = {}
+
         #getTransactionContext() can invoke store IO so for efficent don't do if readOnly
         if not readOnly and setCurrentTxn and hasattr(txnService.state, 'kw'):
             txnCtxtResult = self.getTransactionContext()
@@ -367,6 +373,8 @@ class BasicStore(DataStore):
         stmts, jsonrep, emptyobjs = self._toStatements(adds)
         resources = set()
         newresources = []
+        if stmts: #invalidate cache
+            self.requestProcessor.txnSvc.state.queryCache = {}
         for s in stmts:
             if mustBeNewResources or self.newResourceTrigger:
                 subject = s[0]
@@ -487,6 +495,8 @@ class BasicStore(DataStore):
         
     def _remove(self, removes):
         stmts, jsonrep, emptyobjs = self._toStatements(removes)
+        if stmts: #invalidate cache
+            self.requestProcessor.txnSvc.state.queryCache = {}
 
         if self.removeTrigger and stmts:
             self.removeTrigger(stmts, jsonrep)        
@@ -686,8 +696,9 @@ class BasicStore(DataStore):
                 useSerializer = pjsonOptions
         
         start = time.clock()
+        cache = self.requestProcessor.txnSvc.state.queryCache
         results = vesper.query.getResults(query, self.model, bindvars, explain,
-                    debug, forUpdate, captureErrors, contextShapes, useSerializer)
+          debug, forUpdate, captureErrors, contextShapes, useSerializer, cache)
         elapsed = time.clock() - start
         self.log.debug('%s elapsed for query %s', elapsed, query)
         if not captureErrors and not explain and not debug:
