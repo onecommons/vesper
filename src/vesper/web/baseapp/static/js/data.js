@@ -433,12 +433,15 @@ function bindElement(elem, rootOnly, forItemRef) {
     }
 
     function descend($this) {
+        //remove because itemidonly isn't cleaned up properly
+        //and so might be set from elsewhere
+        $this.removeData('itemidonly');
         return $this.children().map(function() {
           if (descendPredicate(this)) {
              var desc = descend($(this));
              if (desc.length) {
                 return [this].concat(desc.get());
-             } else { 
+             } else {
                 return this;
              }
           } else { //we want this item to just be a ref

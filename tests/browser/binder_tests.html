@@ -294,6 +294,9 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
         testBindElement: function() {
           var items = bindElement($$('microdata1'));
           Assert.isNotNull(items);
+          Assert.isUndefined($('*').data('item'));
+          Assert.isUndefined($('*').data('itemidonly'));
+          Assert.isUndefined($('*').data('itemref'));
           var itemsJson = JSON.stringify(items);
           //console.log('items', itemsJson);
           //console.log($('#microdata1expected').text());
@@ -309,6 +312,9 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           //test itemrefs 
           var items2asRefs = JSON.stringify(bindElement($$('amanda')) );
           Assert.areEqual(items2, items2asRefs); 
+          Assert.isUndefined($('*').data('item'));
+          Assert.isUndefined($('*').data('itemidonly'));
+          Assert.isUndefined($('*').data('itemref'));
           
           //test multiple values for a prop
           var items3 = JSON.stringify(bindElement($$('microdata3')) );
@@ -346,6 +352,9 @@ derived from http://code.google.com/p/js-binding/source/browse/trunk/test/binder
           //test rootOnly option
           var items12 = JSON.stringify(bindElement($$('outer1'), true) );
           Assert.areEqual('[{"id":"1","child":{"id":"2"},"anotherprop":{"comment":"an anonymous object"}}]', items12);
+          Assert.isUndefined($('*').data('item'));
+          Assert.isUndefined($('*').data('itemidonly'));
+          Assert.isUndefined($('*').data('itemref'));
         }
         
     }));
