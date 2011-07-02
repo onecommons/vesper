@@ -260,22 +260,24 @@ class Serializer(object):
         #XXX add replaceRefWithObject option: always, ifShared, never (default: ifShared (current behahavior))
         #also, includeObjectMap == True default replaceRefWithObject to never
         self.includeObjectMap = includeObjectMap
-        self.preserveRdfTypeInfo = preserveTypeInfo
+        self.preserveTypeInfo = preserveTypeInfo
         self.explicitRefObjects = explicitRefObjects
         self.asList = asList
-        self.onlyEmbedBnodes = onlyEmbedBnodes #objects without embedded ids are always top level
-        self.saveOrder = saveOrder
+        self.onlyEmbedBnodes = onlyEmbedBnodes #objects without embedded ids are always top level        
         self.serializeIdAsRefs = serializeIdAsRefs
-        self.omitEmbeddedIds = omitEmbeddedIds
-        
-        self.nameMap = nameMap and nameMap.copy() or {}        
+        self.omitEmbeddedIds = omitEmbeddedIds        
+        nameMap = nameMap and nameMap.copy() or {}
         if explicitRefObjects:
-            if 'refpattern' in self.nameMap:
-                del self.nameMap['refpattern']
+            if 'refpattern' in nameMap:
+                del nameMap['refpattern']
         else:
-            if not parseContext and 'refpattern' not in self.nameMap:            
-                self.nameMap['refpattern'] = defaultRefPattern
-        self.parseContext = ParseContext(self.nameMap, parseContext)
+            if not parseContext and 'refpattern' not in nameMap:
+                nameMap['refpattern'] = defaultRefPattern
+        self.parseContext = ParseContext(nameMap, parseContext)
+        self.config = self.__dict__.copy()
+        self.nameMap = nameMap
+        self.saveOrder = saveOrder        
+        #self.configHash = (nameMap.items() self.config
         self.outputRefPattern, self.inputRefPattern, self.refTemplate = None, None, None
         idrefpattern = self.parseContext.refpatternValue
         if idrefpattern:
@@ -284,6 +286,14 @@ class Serializer(object):
             self.inputRefPattern = patterns.serializePattern
             self.refTemplate = patterns.serializeTemplate
 
+    def __eq__(self, other):
+        if not isinstance(other, Serializer):
+            return False
+        return self.config == other.config
+    
+    def __hash__(self):
+        return hash(tuple(self.config.iteritems()))
+    
     def serializeObjectValue(self, objectValue, objectType, scope):
         if objectType != OBJECT_TYPE_RESOURCE:
             return self._value(objectValue, objectType, scope), False
@@ -308,7 +318,7 @@ class Serializer(object):
                         else:
                             falsePositive = True
         if v is None:
-            v = toJsonValue(objectValue, objectType, self.preserveRdfTypeInfo,
+            v = toJsonValue(objectValue, objectType, self.preserveTypeInfo,
                                         context, datatypeName, contextName)
 
         if isinstance(v, (str, unicode)):
@@ -712,10 +722,10 @@ class ParseContext(object):
             self.datatypepatternsValue = self.nameMap.get('datatypepatterns', {})
             
         self.validateProps()
-        self.reservedNames = [self.idName, self.contextName, self.refName, 
+        self.reservedNames = (self.idName, self.contextName, self.refName, 
             self.datatypeName, 'pjson', 
             #it's the parent context's namemap propery that is in effect:
-            parent and parent.namemapName or 'namemap']
+            parent and parent.namemapName or 'namemap')
                             
         self.idrefpattern, self.refTemplate = None, None
         self._setIdRefPattern(self.refpatternValue)
@@ -723,7 +733,22 @@ class ParseContext(object):
         self.idReplacements = self._setReplacements(self.idpatternsValue)
         self.datatypeReplacements = self._setDataTypePatterns(self.datatypepatternsValue)
         self.currentProp = None
-    
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, ParseContext):
+            return False 
+        for name in ('reservedNames', 'idrefpattern', 'refTemplate', 
+                    'propReplacements', 'idReplacements', 'datatypeReplacements'):
+            if getattr(self, name) != getattr(other, name):
+                return False
+
+    def __hash__(self):
+        return hash((tuple(getattr(self, name) for name in ('reservedNames', 
+            'idrefpattern', 'refTemplate','propReplacements', 'idReplacements')),
+             tuple(self.datatypeReplacements.iteritems())))
+        
     def validateProps(self):
         for name in 'id', 'context', 'namemap', 'datatype', 'ref':
             if not isinstance(getattr(self, name+'Name'), (str, unicode)):
@@ -751,7 +776,7 @@ class ParseContext(object):
                 else:
                     replacements.append(_parseIdRefPattern(d))
         replacements.sort(key=lambda v: v.weight)
-        return replacements
+        return tuple(replacements)
             
     def getProp(self, obj, name, default=None):
         nameprop = getattr(self, name+'Name')        
@@ -809,7 +834,7 @@ class ParseContext(object):
                 replacements = [_parseIdRefPattern(r) for r in replacements]
                 replacements.sort(key=lambda v: v.weight)
             
-            patterns[pjsonDataTypeToRdfDataType(datatype)] = replacements
+            patterns[pjsonDataTypeToRdfDataType(datatype)] = tuple(replacements)
         return patterns
         
     def lookslikeIdRef(self, s):

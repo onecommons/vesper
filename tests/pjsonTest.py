@@ -50,7 +50,9 @@ def assert_json_and_back_match(src, backagain=True, expectedstmts=None,
     if expectedstmts is not None:
         assert_stmts_match(expectedstmts, result_stmts)
     
-    result_json = Serializer(**serializerOptions).to_pjson( result_stmts)
+    serializer = Serializer(**serializerOptions)
+    hash(serializer)
+    result_json = serializer.to_pjson( result_stmts)
     if 'nameMap' not in serializerOptions:
         result_json = result_json['data']
     #pprint( result_json )
@@ -66,7 +68,9 @@ def assert_stmts_and_back_match(stmts, expectedobj = None,
                         serializerOptions=None, parserOptions=None):
     global test_counter; test_counter += 1                        
     serializerOptions = serializerOptions or {}
-    result = Serializer(**serializerOptions).to_pjson( stmts )
+    serializer = Serializer(**serializerOptions)
+    hash(serializer)    
+    result = serializer.to_pjson( stmts )
     #print 'serialized', result
     if expectedobj is not None:
         if 'nameMap' not in serializerOptions:
