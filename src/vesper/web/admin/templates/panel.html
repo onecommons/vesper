@@ -166,7 +166,10 @@ function editEntry(event) {
     }
     event.preventDefault();
     toggleEditEntry.call(this);
-    $(this).closest('.entry').find('.entry-edit textarea')[0].focus();
+    var textarea = $(this).closest('.entry').find('.entry-edit textarea');
+    if (textarea.TextAreaExpander)
+      textarea.TextAreaExpander();
+    textarea[0].focus();
     return false;
 }
 
