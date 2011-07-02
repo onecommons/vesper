@@ -8,6 +8,7 @@
 """
 import StringIO, os, os.path
 import logging
+import time
 
 from vesper.data import base, transactions
 from vesper.data.base import graph as graphmod # avoid aliasing some local vars
@@ -683,8 +684,12 @@ class BasicStore(DataStore):
             pjsonOptions=self.model_options.get('serializeOptions',{}).get('pjson')
             if pjsonOptions is not None:
                 useSerializer = pjsonOptions
+        
+        start = time.clock()
         results = vesper.query.getResults(query, self.model, bindvars, explain,
                     debug, forUpdate, captureErrors, contextShapes, useSerializer)
+        elapsed = time.clock() - start
+        self.log.debug('%s elapsed for query %s', elapsed, query)
         if not captureErrors and not explain and not debug:
             return results.results
         else:
