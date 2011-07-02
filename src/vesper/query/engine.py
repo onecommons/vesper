@@ -594,9 +594,12 @@ class SimpleQueryEngine(object):
         
     def evalSelect(self, op, context):
         context.engine = self
-        if context.serializer:
-            parseContext = vesper.pjson.ParseContext(op.namemap, context.serializer.parseContext)
-            context.serializer = pjson.Serializer(parseContext = parseContext)
+        if context.serializer and op.namemap:
+            parseContext = vesper.pjson.ParseContext(op.namemap,
+                                    context.serializer.parseContext)
+            config = context.serializer.config.copy()
+            config['parseContext'] = parseContext
+            context.serializer = pjson.Serializer(**config)
         
         if op.isIndependent(): #constant expression
             context.currentTupleset = MutableTupleset(
@@ -606,7 +609,7 @@ class SimpleQueryEngine(object):
                 context.currentTupleset = op.where.evaluate(self, context)
             if op.groupby:
                 context.currentTupleset = op.groupby.evaluate(self, context)
-            if op.orderby:            
+            if op.orderby:
                 context.currentTupleset = op.orderby.evaluate(self, context)
 
         if not op.groupby and op.construct.hasAggFunc:
@@ -1488,14 +1491,14 @@ class SimpleQueryEngine(object):
         isbnode = bnodeFunc.execFunc(context, v)
         if ( (isref and context.depth > 0) or isbnode):
                             #and v not in context.constructStack):
-
-            #XXX because we can generate a duplicate objects it'd be nice
-            #to cache the results. but this is a little complicated because
-            #of depth -- cache different versions based on needed depth
-            #have context track maxdepth, so we know how deep the object is
-            #don't use cache object if maxdepth > context.depth
-            #    v = context.constructCache[v]
-            #    return v
+            #look up object in cache
+            #use context.depth (depth count-down) in the key so we don't 
+            #reuse an object that we generated with a different depth
+            #XXX could have a pragma to ignore depth to boost performance on 
+            #queries where this doesn't matter
+            obj = context.objCache.get((v, context.serializer, context.depth))
+            if obj is not None:
+                return obj
 
             query = jqlAST.Select(
                         jqlAST.Construct([jqlAST.Project('*')]),
@@ -1511,9 +1514,10 @@ class SimpleQueryEngine(object):
             if result:
                 assert len(result) == 1, (
                     'only expecting one construct for %s, get %s' % (v, result))
-                #context.constructCache[v] = result
                 obj = result[0]
+                context.objCache[(v, ccontext.serializer, ccontext.depth)] = obj
                 return obj
+                #XXX remove dead code below?
                 if not isinstance(obj, dict):
                     v = obj
                 else:

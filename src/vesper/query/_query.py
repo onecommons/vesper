@@ -77,7 +77,8 @@ def runQuery(query, model):
     return evalAST(ast, model)
 
 def getResults(query, model, bindvars=None, explain=None, debug=False,
-    forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
+    forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True,
+    queryCache=None):
     '''
     Returns a dict with the following keys:
         
@@ -128,7 +129,8 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     
     if ast != None:        
         try:
-            results = list(evalAST(ast, model, bindvars, explain, debug, forUpdate, contextShapes, useSerializer))
+            results = list(evalAST(ast, model, bindvars, explain, debug, 
+                    forUpdate, contextShapes, useSerializer, queryCache))
             #XXX: if forUpdate add a pjson header including namemap
             #this we have a enough info to reconstruct refs and datatypes without guessing
             #if forUpdate: 
@@ -169,7 +171,7 @@ def _parsePjson(parseContext, v):
     return v
 
 def evalAST(ast, model, bindvars=None, explain=None, debug=False, 
-                    forUpdate=False, contextShapes=None, useSerializer=True):
+    forUpdate=False, contextShapes=None, useSerializer=True, queryCache=None):
     from vesper.query import engine
     
     astNameMap = getattr(ast,'namemap', None)
@@ -194,7 +196,8 @@ def evalAST(ast, model, bindvars=None, explain=None, debug=False,
                     bindvars[k] = _parsePjson(parseContext, v)
 
     queryContext = QueryContext(model, ast, explain, bindvars, debug, 
-            forUpdate=forUpdate, shapes=contextShapes, serializer=serializer)
+            forUpdate=forUpdate, shapes=contextShapes, 
+            serializer=serializer, cache=queryCache)
     result = ast.evaluate(engine.SimpleQueryEngine(),queryContext)
     if explain:
         result.explain(explain)
@@ -212,7 +215,7 @@ class QueryContext(object):
     complexPredicateHack = False
     
     def __init__(self, initModel, ast, explain=False, bindvars=None, debug=False,
-                 depth=0, forUpdate=False, shapes=None, serializer=None):
+            depth=0, forUpdate=False, shapes=None, serializer=None, cache=None):
         self.initialModel = initModel
         self.currentTupleset = initModel        
         self.explain=explain
@@ -226,10 +229,15 @@ class QueryContext(object):
         self.accumulate = {}
         self.shapes = shapes or self.defaultShapes.copy()
         self.serializer = serializer
+        if cache is None:            
+            self.objCache = {}
+        else:
+            self.objCache = cache
 
     def __copy__(self):
         copy = QueryContext(self.initialModel,self.ast,self.explain,self.bindvars,
-            self.debug, self.depth, self.forUpdate, self.shapes, self.serializer)
+            self.debug, self.depth, self.forUpdate, self.shapes, 
+            self.serializer, self.objCache)
         copy.currentTupleset = self.currentTupleset
         copy.currentValue = self.currentValue
         copy.currentRow = self.currentRow
