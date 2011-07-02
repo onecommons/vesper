@@ -352,7 +352,7 @@ function bindElement(elem, rootOnly, forItemRef) {
     var itemElems = (forItemRef && forItemRef.itemElems) || [];
 
     function setAttrProps(elem, item) {
-        var type = $(elem).attr('itemtype');
+        var type = elem.getAttribute('itemtype');
         if (type) 
             item['type'] = type;
         var attrs = elem.attributes, name;
@@ -779,7 +779,7 @@ Binder.FormBinder.prototype = {
     return accessor.target;
   },
   serializeField: function( element, obj ) {
-    if (!element.name) //added if (!element.name) check
+    if (!element.name || (element.className && element.className.match(/excludefield/))) //added if (!element.name) check
         return; //skip unnamed fields
     var accessor = this._getAccessor( obj );
     var value = undefined;
