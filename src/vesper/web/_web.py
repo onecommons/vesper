@@ -320,3 +320,31 @@ def get_http_params(environ):
         _params = getparams or postparams
 
     return dict(_params=_params, _postContent=_postContent)
+
+################ utilities for rendering html #################################
+def q(s):
+  '''
+  Escape the string so that it can be used in double-quoted attribute values
+  '''  
+  return s.replace('&', '&amp;').replace('"','&quot;')
+
+def aq(s):
+  '''
+  Return the given string quoted and escaped.
+  '''
+  if s.count('"') > s.count("'"):
+    #technically html < 5 doesn't support &apos and so &#39; should be used but all
+    #modern browsers do: see http://code.google.com/p/doctype/wiki/AposCharacterEntity
+    return "'"+s.replace('&', '&amp;').replace("'",'&apos;')+"'"
+  else:
+    return '"'+s.replace('&', '&amp;').replace('"','&quot;')+'"'
+
+def kwtoattr(kw, **merge):
+  for k,v in merge.items():
+    if k in kw:
+      v = kw[k] + ' ' + v
+    kw[k] = v 
+  return ' '.join([
+    ##strip _ so we can have python keywords as attributes (e.g. _class)
+    (name.startswith('_') and name[1:] or name) + '='+ aq(str(value))
+                                    for name, value in kw.items()])

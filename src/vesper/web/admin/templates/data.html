@@ -4,6 +4,7 @@
 import re
 from vesper.backports import json
 from vesper.utils import defaultproxyattrdict, attrdict
+from vesper.web import q, aq, kwtoattr
 
 def selected(test): 
   if test: return 'selected'
@@ -35,33 +36,6 @@ def resolve(obj, prop):
     elif not obj:
       return obj
   return obj
-
-def q(s):
-  '''
-  Escape the string so that it can be used in double-quoted attribute values
-  '''  
-  return s.replace('&', '&amp;').replace('"','&quot;')
-
-def aq(s):
-  '''
-  Return the given string quoted and escaped.
-  '''
-  if s.count('"') > s.count("'"):
-    #technically html < 5 doesn't support &apos and so &#39; should be used but all
-    #modern browsers do: see http://code.google.com/p/doctype/wiki/AposCharacterEntity
-    return "'"+s.replace('&', '&amp;').replace("'",'&apos;')+"'"
-  else:
-    return '"'+s.replace('&', '&amp;').replace('"','&quot;')+'"'
-  
-def kwtoattr(kw, **merge):
-  for k,v in merge.items():
-    if k in kw:
-      v = kw[k] + ' ' + v
-    kw[k] = v   
-  return ' '.join([
-    ##strip _ so we can have python keywords as attributes (e.g. _class)
-    (name.startswith('_') and name[1:] or name) + '='+ aq(value)
-                                    for name, value in kw.items()])
 
 def getobj(context, kw):
   '''
