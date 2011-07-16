@@ -914,8 +914,9 @@ class Parser(object):
         self.defaultParseContext.context = scope
     
     def to_rdf(self, json, scope = None):
-        m = MemStore() 
-        emptyObjects = []
+        stmts = []
+        emptyObjects = [] #XXX have an option to add directly to a store
+        canHandleStatementWithOrder = False #XXX make this an option for use with store than can do this
         parentid = ''
         parseContext = self.defaultParseContext
         if scope is None:
@@ -973,24 +974,24 @@ class Parser(object):
             prefix = parentid and 'j:e:' or 'j:t:'
             suffix = parentid and (parentid + ':') or ''            
             seq = self._blank(prefix+'list:'+ suffix)
-            m.addStatement( Statement(seq, RDF_MS_BASE+'type',
+            stmts.append( Statement(seq, RDF_MS_BASE+'type',
                 RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
-            m.addStatement( Statement(seq, RDF_MS_BASE+'type',
+            stmts.append( Statement(seq, RDF_MS_BASE+'type',
                 STANDALONESEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
 
             for i, item in enumerate(val):
                 item, objecttype, itemscope = self.deduceObjectType(item, parseContext)
                 if isinstance(item, dict):
                     itemid, itemParseContext = getorsetid(item)
-                    m.addStatement( Statement(seq,
+                    stmts.append( Statement(seq,
                         RDF_MS_BASE+'_'+str(i+1), itemid, OBJECT_TYPE_RESOURCE, itemscope) )
                     todo.append( (item, (itemid, itemParseContext), parentid))
                 elif isinstance(item, list):
                     nestedlistid = _createNestedList(item)
-                    m.addStatement( Statement(seq,
+                    stmts.append( Statement(seq,
                             RDF_MS_BASE+'_'+str(i+1), nestedlistid, OBJECT_TYPE_RESOURCE, itemscope) )
                 else: #simple type
-                    m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
+                    stmts.append( Statement(seq, RDF_MS_BASE+'_'+str(i+1), item, objecttype, itemscope) )
             return seq
         
         alreadySeen = {}
@@ -1025,7 +1026,7 @@ class Parser(object):
                 val, objecttype, scope = self.deduceObjectType(val, parseContext)
                 if isinstance(val, dict):
                     objid, valParseContext = getorsetid(val)
-                    m.addStatement( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
+                    stmts.append( Statement(id, prop, objid, OBJECT_TYPE_RESOURCE, scope) )    
                     todo.append( (val, (objid, valParseContext), parentid) )
                 elif isinstance(val, list):
                     #dont build a PROPSEQTYPE if prop in rdf:_ rdf:first rdfs:member                
@@ -1034,7 +1035,7 @@ class Parser(object):
                     addOrderInfo = not specialprop and self.addOrderInfo
                     #XXX special handling for prop == PROPSEQ ?
                     if not val:
-                        m.addStatement( Statement(id, prop, RDF_MS_BASE+'nil', 
+                        stmts.append( Statement(id, prop, RDF_MS_BASE+'nil', 
                                                 OBJECT_TYPE_RESOURCE, scope) )
                         
                     #to handle dups, build itemdict
@@ -1071,9 +1072,9 @@ class Parser(object):
                                 s = Statement(id, prop, item, objecttype, itemscope)
                             listStmts.append(s)
                     
-                    m.addStatements(listStmts)
+                    stmts.extend(listStmts)
                     
-                    if addOrderInfo and not m.canHandleStatementWithOrder:    
+                    if addOrderInfo and not canHandleStatementWithOrder:
                         lists = {}
                         for s in listStmts:
                             if not isinstance(s, StatementWithOrder):
@@ -1083,16 +1084,16 @@ class Parser(object):
                             for p in s.listpos:
                                 ordered.append( (p, value) )
                         if lists:
-                            self.generateListResources(m, lists)
+                            self.generateListResources(stmts, lists)
                                 
                 else: #simple type
-                    m.addStatement( Statement(id, prop, val, objecttype, scope) )
+                    stmts.append( Statement(id, prop, val, objecttype, scope) )
             
             if istoplevel and not parseContext.currentProp:
                 emptyObjects.append(id)
             parseContext.currentProp = None
             
-        return m.getStatements(), emptyObjects
+        return stmts, emptyObjects
 
     def _blank(self, prefix=''):
         #prefixes include:
@@ -1161,7 +1162,7 @@ class Parser(object):
             value, valueType = getDataType(item, parseContext)
             return value, valueType, context
 
-    def generateListResources(self, m, lists):
+    def generateListResources(self, stmts, lists):
         '''
         Generate property list resources
         `lists` is a dictionary: (scope, subject, prop) => [(pos, (object, objectvalue))+]
@@ -1170,19 +1171,19 @@ class Parser(object):
         for (scope, subject, prop), ordered in lists.items(): 
             #use special bnode pattern so we can find these quickly
             seq = self.bnodeprefix + 'j:proplist:' + subject+';'+prop
-            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+            stmts.append( Statement(seq, RDF_MS_BASE+'type', 
                 RDF_MS_BASE+'Seq', OBJECT_TYPE_RESOURCE, scope) )
-            m.addStatement( Statement(seq, RDF_MS_BASE+'type', 
+            stmts.append( Statement(seq, RDF_MS_BASE+'type', 
                 PROPSEQTYPE, OBJECT_TYPE_RESOURCE, scope) )
-            m.addStatement( Statement(seq, PROPBAG, prop, 
+            stmts.append( Statement(seq, PROPBAG, prop, 
                 OBJECT_TYPE_RESOURCE, scope) )
-            m.addStatement( Statement(seq, PROPSUBJECT, subject, 
+            stmts.append( Statement(seq, PROPSUBJECT, subject, 
                 OBJECT_TYPE_RESOURCE, scope) )
-            m.addStatement( Statement(subject, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
+            stmts.append( Statement(subject, PROPSEQ, seq, OBJECT_TYPE_RESOURCE, scope) )
 
             ordered.sort()
             for pos, (item, objecttype) in ordered:
-                m.addStatement( Statement(seq, RDF_MS_BASE+'_'+str(pos+1), item, objecttype, scope) )
+                stmts.append( Statement(seq, RDF_MS_BASE+'_'+str(pos+1), item, objecttype, scope) )
 
 def tojson(statements, **options):
     results = Serializer(**options).to_pjson(statements)

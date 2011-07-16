@@ -370,7 +370,7 @@ def test():
       "prop2": ["@a_ref", "a value"]
     }]
     
-    stmts = [('1', 'pjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'),
+    stmts = set([('1', 'pjson:schema#propseq', 'bnode:j:proplist:1;prop2', 'R', 'context1'),
     ('1', 'prop1', u'1', 'http://www.w3.org/2001/XMLSchema#integer', 'context1'),
     StatementWithOrder('1', 'prop2', 'a value', 'L', 'context1', (1,)),
     StatementWithOrder('1', 'prop2', 'a_ref', 'R', 'context1', (0,)),
@@ -379,9 +379,9 @@ def test():
     ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq', 'R', 'context1'),
     ('bnode:j:proplist:1;prop2', u'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', 'pjson:schema#propseqtype', 'R', 'context1'),
     ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqprop', 'prop2', 'R', 'context1'),
-    ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqsubject', '1', 'R', 'context1')]
-    
-    assert Parser().to_rdf(src)[0] == stmts
+    ('bnode:j:proplist:1;prop2', 'pjson:schema#propseqsubject', '1', 'R', 'context1')])
+        
+    assert set(Parser().to_rdf(src)[0]) == stmts
     assert_json_and_back_match(src)
 
     src = [{"id": "1",
