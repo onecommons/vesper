@@ -28,7 +28,7 @@ def _toStatements(contents, **kw):
     if isinstance(contents, (list, tuple)):
         if isinstance(contents[0], (tuple, base.BaseStatement)):
             return contents, None, [] #looks like a list of statements
-        
+
     #at this point assume contents is pjson
     kw['setBNodeOnObj']=True #set this option so generated ids are visible
     stmts, emptyobjs = pjson.Parser(**kw).to_rdf(contents)
@@ -375,16 +375,21 @@ class BasicStore(DataStore):
         newresources = []
         if stmts: #invalidate cache
             self.requestProcessor.txnSvc.state.queryCache = {}
-        for s in stmts:
-            if mustBeNewResources or self.newResourceTrigger:
-                subject = s[0]
+        
+        if mustBeNewResources or self.newResourceTrigger:
+            def getSubjects():
+                for s in stmts:
+                    if not s[0].startswith(self.model.bnodePrefix+'j:proplist:'):
+                        yield s[0]
+            
+            for subject in getSubjects():
                 if subject not in resources:
-                    resources.update(subject)
+                    resources.add(subject)
                     if not self.model.getStatements(subject, hints=dict(limit=1)):
                         newresources.append(subject)
                     elif mustBeNewResources:
                         raise DataStoreError("id %s already exists" % subject)
-        
+
         if self.newResourceTrigger and newresources:  
             self.newResourceTrigger(newresources)
         if self.addTrigger and stmts:
