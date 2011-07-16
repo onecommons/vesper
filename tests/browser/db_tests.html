@@ -7,7 +7,7 @@
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/logger/logger-min.js"></script> 
     <script type="text/javascript" src="http://yui.yahooapis.com/2.8.1/build/yuitest/yuitest.js"></script>
     <script type="text/javascript" src="yuitest-async.js"></script>
-    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.js"></script>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.js"></script>
     <script type="text/javascript" src="js/json2.js"></script>
     <script type="text/javascript" src="js/data.js"></script>
   </head>
@@ -21,7 +21,9 @@
      function(data) {
        testcase.offthread(function() {
         Assert.isUndefined(data.error, errormsg);
-        Assert.isArray(data.results, errormsg);        
+        Assert.isArray(data.results, errormsg);
+        //javascript doesn't provide an easy way to do deep equality on objects, 
+        //so instead we'll compare JSON strings of objects
         assertJsonEqual(data.results, expected, errormsg);
       }, done);
     });
@@ -45,16 +47,27 @@
             verifyQuery(testcase, "{* where (id='1')}", [pjson1], done);
           }
 
-          //javascript doesn't provide an easy way to do deep equality on objects, 
-          //so instead we'll compare JSON strings of objects
-
-          $(document).dbCreate(pjson1,
-            function(data) {
+          $(document).dbBegin().dbCreate(pjson1, {
+            comment : "created $new0",
+            callback : function(data) {
               testcase.checkResponse(data, true, 'dbcreate');
               verifyData();
             }
-          );
-
+          }
+          ).dbCommit(function(event, responses, requests) {
+             testcase.offthread(function() {
+               var found = false;
+               for (var i=0; i < responses.length; i++) {
+                   if (responses[i].result && responses[i].result.comment ) {
+                       found = true;
+                       Assert.areEqual("created 1", responses[i].result.comment);
+                       break;
+                   }
+               }
+               Assert.areEqual(true, found);
+            });
+          });
+          
           /*
           $().dbAdd({
             id : '1',
@@ -103,7 +116,7 @@
             }, 
             function(response){
                 testcase.checkResponse(response, false, 'dbcreate on failed txn');
-            }).dbCommit(function(event, response){
+            }).dbCommit(function(event, response, requests){
               //console.log('dbcommit', arguments)
               testcase.checkResponse(response, false, 'dbcommit on failed txn');
               //make sure this failed transaction didn't alter the object

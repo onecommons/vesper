@@ -36,14 +36,17 @@ Txn.prototype = {
     idcounter : 0, 
     
     url : 'datarequest',
+
+    _newRequestId : function() {
+        if ($.db && $.db.requestIdBase)
+            return $.db.requestIdBase + '_' + this.txnId;
+        else
+            return Math.random().toString().replace('.','');
+    },
     
     execute : function(action, data, callback, elem) {
         var elem = elem || document;
-        if ($.db && $.db.requestIdBase)
-            var requestId = $.db.requestIdBase + '.' + this.txnId;
-        else
-            var requestId = Math.random();
-
+        var requestId = this._newRequestId();
         //XXX allow requestid specified to replace a previous request
 
         //XXX if a new request updates an object in a previous request
@@ -99,7 +102,7 @@ Txn.prototype = {
     commit : function(callback, elem) {
         var elem = elem || document;
         var txnId = this.txnId;        
-        if (callback) { //callback signature: function(event, *responses)
+        if (callback) { //callback signature: function(event, responses, requests)
             $(elem).one('dbdata.'+txnId, callback);
         }        
         
@@ -119,7 +122,7 @@ Txn.prototype = {
                   "error": {"code": -32000, 
                         "message": data.statusText || textStatus,
                         'data' : data.responseText
-                  } 
+                  }
                 };
                 $(elem).trigger('dbdata.'+txnId, [errorObj, request, comment]);
                 $(elem).trigger('dbdata-*', [errorObj, request, comment]);
@@ -142,7 +145,7 @@ Txn.prototype = {
                     jsonrpc : '2.0',
                     method : 'transaction_info', 
                     params : { 'comment' : this.txnComment }, 
-                    id : null
+                    id : this._newRequestId()
                 });
                 this.txnComment = '';
             }
@@ -180,12 +183,16 @@ txn.commit();
 (function($) {
     
     function deduceArgs(args) {
-        //return data, { callback, txn, comment}        
-        // accepts: [], [data], [callback], [data, options], [null, options], [null, callback]        
+        //return data, { callback, txn, comment}
+        // accepts: [] | [data] | [callback] | [data, options] | [null, options] | [null, callback]
         var data = null;
         if (args[0]) {
-            if (!jQuery.isFunction(args[0]))
+            if (!jQuery.isFunction(args[0])) {
                 data = args.shift();
+                //sanity check first arg
+                konsole.assert( !jQuery.isFunction(data.callback), 
+                    "options dictionary must be second parameter, not first");
+            }
         } else if (args.length > 1) {
             args.shift(); //[null, callback] or [null, options]
         }
@@ -219,7 +226,8 @@ txn.commit();
                  commitNow = true;
              }
          }         
-         konsole.log('execute', action, data, callback);                  
+         //konsole.log('execute', action, data, callback);
+         var requestIds = [];
          if (data) {
             if (action == 'query') {
                 if (typeof data == 'string') {
@@ -236,15 +244,16 @@ txn.commit();
             } else if (!data.id && this.attr('itemid')) {
                 data.id = this.attr('itemid');
             }
-            txn.execute(action, data, callback, this.length ? this[0] : null);
+            requestIds = [txn.execute(action, data, callback, this.length ? this[0] : null)];
          } else {
-            this.each(function() {
+            requestIds = this.map(function() {
                 var obj = bindElement(this);
                 konsole.log('about to', action, 'obj', obj);
-                txn.execute(action, obj, callback, this);
-            });
+                return txn.execute(action, obj, callback, this);
+            }).get();
          }
-         if (comment) {
+         if (comment) { //XXX this is all kind of hacky
+            comment = comment.replace('$new0', '$new'+requestIds[0]);
             if (txn.txnComment) 
                 txn.txnComment += ' and ' + comment;
             else
@@ -290,6 +299,8 @@ txn.commit();
                  return $(this).attr('itemid') || null;
              }).get();
         }
+        konsole.assert(jQuery.isArray(data), 
+            "dbDestroy requires array of ids to delete as its data argument");
         return this._executeTxn('remove', data, options);
      },
      dbBegin : function() {

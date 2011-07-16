@@ -199,7 +199,7 @@ class HTTPRequestProcessor(RequestProcessor):
             test = result[:30].strip().lower()
         else:
             test = ''
-        if test.startswith("<html") or result.startswith("<!doctype html"):
+        if test.startswith("<html") or test.startswith("<!doctype html"):
             return "text/html"
         elif test.startswith("<?xml") or test[2:].startswith("<?xml"):
             return "text/xml"

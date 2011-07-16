@@ -357,7 +357,7 @@ class BasicStore(DataStore):
         return _toStatements(json, **parseOptions)
         
     def add(self, adds):
-        return self._add(adds, False)
+        return self._add(adds, False)[0]
         
     def _add(self, adds, mustBeNewResources):
         '''
@@ -390,7 +390,7 @@ class BasicStore(DataStore):
         if self.addTrigger and stmts:
             self.addTrigger(stmts, jsonrep)
         self.model.addStatements(stmts)
-        return jsonrep or stmts
+        return jsonrep or stmts, newresources
 
     def create(self, adds):
         '''

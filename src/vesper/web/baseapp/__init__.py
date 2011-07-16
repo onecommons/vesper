@@ -6,6 +6,7 @@ import vesper.web.route
 from vesper.utils import attrdict
 from vesper.app import getCurrentApp
 from vesper.backports import json
+from string import Template
 import mako.runtime
 import logging
 log = logging.getLogger('datarequest')
@@ -36,6 +37,8 @@ def datarequest(kw, retval):
     '''
     from vesper import pjson
 
+    newresourcesCreated = {}
+    
     def handleRequest(id=None, method=0, params=0, jsonrpc=None):
         requestid = id; action = method; data = params
         response = dict(id=requestid, jsonrpc='2.0')
@@ -58,8 +61,10 @@ def datarequest(kw, retval):
             addJson = dataStore.add(data)
             result = dict(added=addJson)
         elif action == 'create':
-            addJson = dataStore.create(data)
-            result = dict(added=addJson)
+            addJson, newresources = dataStore.create(data)
+            if newresources:
+                newresourcesCreated['new'+str(id)] = newresources[0]
+            result = dict(added=addJson, new=newresources)
         elif action == 'query':
             #returns { errors, results }
             if isinstance(data, (str, unicode)):
@@ -74,6 +79,13 @@ def datarequest(kw, retval):
         elif action == 'remove':
             removeJson = dataStore.remove(data)
             result = dict(removed=removeJson)
+        elif action == 'transaction_info':
+            comment = params.get('comment')
+            result = {}
+            if comment:
+                comment = Template(comment).safe_substitute(newresourcesCreated)
+                result['comment'] = comment
+                kw['__transaction_comment'] = comment
         else:
             response['error'] = dict(code=-32601, message='Method not found')
             return response
@@ -81,14 +93,6 @@ def datarequest(kw, retval):
         response['result'] = result
         return response
     
-    def checkRequest(x):
-        if isinstance(x, dict) and x['method'] == 'transaction_info':
-            comment = x['params'].get('comment')
-            if comment:
-                kw['__transaction_comment'] =  comment
-            return False #no response for this type of request
-        return True
-
     if kw.urlvars.store:
         dataStore = kw.__server__.stores.get(kw.urlvars.store)
     else:
@@ -114,7 +118,7 @@ def datarequest(kw, retval):
             response = [isinstance(x, dict) and handleRequest(**x) or 
                 dict(id=hasattr(x, 'get') and x.get('id') or None, jsonrpc='2.0',
                             error=dict(code=-32600, message='Invalid Request'))
-                                for x in requests if checkRequest(x)]
+                                                                for x in requests]
             log.debug('request: \n  %r\n response:\n   %r', requests, response)
     return json.dumps(response, indent=4) 
 
