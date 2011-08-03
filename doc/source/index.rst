@@ -57,6 +57,7 @@ Documentation Contents
    datastore
    vesper.app
    vesper.web
+   replication
    configvars
 
 * :ref:`modindex`

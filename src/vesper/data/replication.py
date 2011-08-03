@@ -1,22 +1,22 @@
 #:copyright: Copyright 2009-2010 by the Vesper team, see AUTHORS.
 #:license: Dual licenced under the GPL or Apache2 licences, see LICENSE.
 import logging
-import threading, Queue, time
+import time
 from datetime import datetime
 
 import stomp
 
 from vesper.backports import *
+from vesper.utils import Worker
 
 class ChangesetListener(object):
     """
     Receives message notifications from Stomp.
     This is called in a Stomp listener thread, not the main program thread
     """
-    def __init__(self, replicator, storeName='default', sendAck=True):
+    def __init__(self, replicator):
         self.replicator = replicator
-        self.sendAck = sendAck
-        self.storeName = storeName
+        self.sendAck = replicator.sendAck
     
     def on_connecting(self, host_and_port):
         self.replicator.log.debug("connecting to %s:%s" % host_and_port)
@@ -64,7 +64,7 @@ class ChangesetListener(object):
             else:
                 
                 try:
-                    dataStore = self.replicator.server.stores[self.storeName]
+                    dataStore = self.replicator.store
                     assert not dataStore.model._currentTxn
                     dataStore.merge(obj)
                     self.replicator.msg_recv += 1
@@ -81,21 +81,22 @@ class ChangesetListener(object):
     # def on_receipt(self, headers, message):
     #     print 'receipt: %s' % message
 
-class StompQueueReplicator(object):
-    
+class StompQueueReplicator(Worker):
+
     log = logging.getLogger("replication")
-    
-    def __init__(self, clientid, channel, hosts, storeName='default', sendAck=True):
+    retryInterval = 1
+
+    def __init__(self, datastore, clientid, channel, hosts, sendAck=True):
+        super(StompQueueReplicator, self).__init__()
+        self.store = datastore
+        self.server = datastore.requestProcessor
         self.clientid = clientid
         self.channel  = channel
         self.hosts    = hosts
-        self.storeName = storeName
         self.sendAck  = sendAck
         self.connected = False
         self.connected_to = None
-        
-        self.changeset_queue = Queue.Queue()
-        
+
         # statistics
         self.msg_sent = 0
         self.msg_recv = 0
@@ -103,59 +104,44 @@ class StompQueueReplicator(object):
         self.msg_recv_err = 0
         self.first_ts = None
         self.last_ts  = None
-        
-    def start(self, server):
+
+    def doStuff(self, changeset):
+        while True:
+            try:
+                self.send_changeset(changeset)
+                break
+            except Exception:
+                self.log.error("couldn't post changeset, waiting to retry")
+                time.sleep(self.retryInterval)
+        return True
+
+    def start(self):
         """
         Connect to the stomp server and subscribe to the replication topic
         """
-        self.server = server
-        
+
         self.log.info("connecting to %s" % str(self.hosts))
         self.conn = stomp.Connection(self.hosts)
-        self.conn.set_listener('changes', ChangesetListener(self, self.storeName, self.sendAck))
+        self.conn.set_listener('changes', ChangesetListener(self))
         self.conn.start()
-        
+
         subscription_name = "%s-%s" % (self.clientid, self.channel)
         subscribe_headers = {
             "activemq.subscriptionName":subscription_name,
             "selector":"clientid <> '%s'" % self.clientid  # XXX perf implications here?
         }
         self.log.debug("subscribing to topic:" + self.channel)
-        
+
         self.conn.connect(headers={'client-id':self.clientid})
         self.conn.subscribe(destination='/topic/%s' % self.channel, 
                                 ack='client', headers=subscribe_headers)
-        self.start_sending_thread()
-        
-    def start_sending_thread(self):
-        def worker():
-            log = logging.getLogger("replication")
-            while True:
-                changeset = self.changeset_queue.get()
-                if changeset == 'done':
-                    break
-                    
-                while changeset != None:
-                    try:
-                        self.send_changeset(changeset)
-                        changeset = None
-                    except Exception:
-                        log.error("couldn't post changeset, waiting to retry")
-                        time.sleep(1)
-                
-        
-        send_thread = threading.Thread(target=worker)
-        send_thread.daemon = True
-        send_thread.start()
-        
+        super(StompQueueReplicator, self).start()
+
     def stop(self):
-        self.changeset_queue.put("done")
+        super(StompQueueReplicator, self).stop()
         if self.connected:
             self.conn.disconnect()
-        
-    def replication_hook(self, changeset):
-        self.changeset_queue.put(changeset)
-        
+
     def send_changeset(self, changeset):    
         HEADERS = {
             'persistent':'true',
@@ -170,7 +156,7 @@ class StompQueueReplicator(object):
             self.log.exception("exception posting changeset")
             self.msg_sent_err += 1
             raise e
-    
+
     def stats(self):
         if self.connected:
             state = self.connected_to
@@ -192,9 +178,8 @@ class StompQueueReplicator(object):
             ('elapsed', elapsed),            
             ('send queue size', self.changeset_queue.qsize()),
         ])
-        
 
-def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeName='default', sendAck=True):
+def get_replicator(datastore, clientid, channel, host=None, port=61613, hosts=None, sendAck=True):
     """
     Connect to a Stomp message queue for replication
     
@@ -202,8 +187,7 @@ def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeNa
     - channel is the stomp topic to listen to
     - host, port specifies a single stomp server to connect to
     - hosts specifies a list of (host,port) tuples to use for failover
-      e.g. hosts=[('tokyo-vm', 61613), ('mqtest-vm', 61613)]
-    - storeName specifies which data store to update ('default' by default)
+      e.g. hosts=[('localhost', 61613), ('mqtest-vm', 61613)]
     - sendAck Specifies whether a acknowledgment message should sent after the message has been processed successfully.
       Not all Stomp message brokers support this (e.g. MorbidQ doesn't) (default: True) 
     
@@ -212,5 +196,5 @@ def get_replicator(clientid, channel, host=None, port=61613, hosts=None, storeNa
     if not hosts:
         hosts=[(host,port)]
     
-    obj = StompQueueReplicator(clientid, channel, hosts, storeName, sendAck)
+    obj = StompQueueReplicator(datastore, clientid, channel, hosts, sendAck)
     return obj

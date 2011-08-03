@@ -106,9 +106,11 @@ class BasicStore(DataStore):
                  version_model_factory=None,
                  storage_template_options=None,
                  model_options=None,
-                 changeset_hook=None,
-                 trunk_id = '0A', 
-                 branch_id = None,                  
+                 trunk_id = '0A',
+                 branch_id = None,
+                 replication_hosts=None,
+                 replication_channel=None,
+                 send_stomp_ack=True,
                  **kw):
         '''
         model_factory is a base.Model class or factory function that takes
@@ -130,7 +132,13 @@ class BasicStore(DataStore):
         self.storage_template_options = storage_template_options or {}
         self.trunk_id = trunk_id
         self.branch_id = branch_id
-        self.changesetHook = changeset_hook
+        if isinstance(replication_hosts, (str, unicode)):
+            replication_hosts = [tuple(hostport.strip().split(':',1)) 
+                            for hostport in replication_hosts.split(',')]
+        self.replication_hosts = replication_hosts
+        self.replication_channel = replication_channel
+        self.send_stomp_ack = send_stomp_ack
+                
         self._txnparticipants = []
         self.model_options = model_options or {}
 
@@ -174,7 +182,8 @@ class BasicStore(DataStore):
         if self.save_history:
             model, historyModel = self._addModelTxnParticipants(model, historyModel)
             self.model = self.graphManager = graphmod.MergeableGraphManager(model, 
-                historyModel, requestProcessor.model_uri, lastScope, self.trunk_id, self.branch_id) 
+                historyModel, requestProcessor.model_uri, lastScope, 
+                self.trunk_id, self.branch_id) 
             if self._txnparticipants:
                 self._txnparticipants.insert(0, #must go first
                         TwoPhaseTxnGraphManagerAdapter(self.graphManager))
@@ -202,11 +211,16 @@ class BasicStore(DataStore):
                 else:
                     self.log.warning(
                 "transaction_log is configured but not compatible with model")
-        
-        if self.changesetHook:
-            assert self.save_history, "replication requires save_history to be on"
-            self.model.notifyChangeset = self.changesetHook
-        
+
+        if self.replication_hosts and self.replication_channel:
+            import vesper.data.replication
+            assert self.save_history, "replication requires save_history to be on"  
+            rep = vesper.data.replication.get_replicator(self, 
+                self.branch_id, self.replication_channel,
+                hosts=self.replication_hosts, sendAck=self.send_stomp_ack)
+            self.model.notifyChangeset = rep.send
+            rep.start()
+                
         #set the schema (default is no-op)
         self.schema = self.schemaFactory(self.model)
         #XXX need for graphManager?:

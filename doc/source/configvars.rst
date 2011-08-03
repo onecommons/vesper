@@ -117,10 +117,6 @@ datastore configuration variables
 
     Default: ``model_options=None``
 
-.. confval:: changeset_hook 
-
-    Default: ``changeset_hook=None``
-
 .. confval:: trunk_id 
 
     Default: ``trunk_id = '0A'``
@@ -137,6 +133,9 @@ datastore configuration variables
 
     Default: ``replication_channel = None``
 
+.. confval:: send_stomp_ack
+
+    Default: ``send_stomp_ack = True``
 
 web configuration variables 
 =================================
@@ -301,7 +300,7 @@ advanced configuration variables
   Any other datastore settings override the settings here.
   If the value of the settings is another dictionary of settings (e.g. ``model_options``) those dictionaries are merged recursively.
   
-  Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}
+  Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}``
   
 .. confval:: app_name
 
@@ -316,16 +315,16 @@ advanced configuration variables
       The dictionary that defines the Actions the app should use.
       The key is the name of the trigger and the value is a list of Actions that are invoked in that order
       Vesper currently uses these triggers:
-       * 'http-request' is invoked by HTTPRequestProcessor.handleHTTPRequest
-       * 'load-model' is invoked on start-up after the app's stores have been initialized
-       * 'run-cmds' is invoked on start-up (after 'load-model') to handle command line arguements
-       * 'before-add' and 'before-remove' is invoked when data is added or removed from a store
-       * 'before-new' is invoked when a new resource is added to a store
-       * 'before-commit' is invoked at the end of a transaction but trigger still has a chance to modify it
-       * 'finalize-commit' is invoked after all transaction participants have successfully prepared to commit, one last chance to abort about the transaction
-       * 'after-commit' is invoked after a transaction has completed successfully 
-       * 'after-abort' is invoked after a transaction was aborted
-       * triggerName + '-error' is invoked when an exception is raised while processing a trigger
+      * 'http-request' is invoked by HTTPRequestProcessor.handleHTTPRequest
+      * 'load-model' is invoked on start-up after the app's stores have been initialized
+      * 'run-cmds' is invoked on start-up (after 'load-model') to handle command line arguements
+      * 'before-add' and 'before-remove' is invoked when data is added or removed from a store
+      * 'before-new' is invoked when a new resource is added to a store
+      * 'before-commit' is invoked at the end of a transaction but trigger still has a chance to modify it
+      * 'finalize-commit' is invoked after all transaction participants have successfully prepared to commit, one last chance to abort about the transaction
+      * 'after-commit' is invoked after a transaction has completed successfully 
+      * 'after-abort' is invoked after a transaction was aborted
+      * triggerName + '-error' is invoked when an exception is raised while processing a trigger
 
 .. confval:: default_trigger 
 

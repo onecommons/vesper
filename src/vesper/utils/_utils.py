@@ -5,6 +5,7 @@
 """
 import os.path
 import os, sys, threading, copy
+import Queue
 from stat import *
 from time import *
 from types import *
@@ -955,3 +956,32 @@ to return (item, index, self) instead of item.
     def __iter__(self):
         for i, v in enumerate(list.__iter__(self)):
             yield enumlist.item((v, i, self))
+
+class Worker(object):
+
+    _done = object()
+
+    def __init__(self):
+        self.queue = Queue.Queue()
+
+    def start(self):
+        def worker():
+            while True:
+                msg = self.queue.get()
+                if msg is self._done:
+                    break
+                if not self.doStuff(msg):
+                    break
+
+        send_thread = threading.Thread(target=worker)
+        send_thread.daemon = True
+        send_thread.start()
+
+    def stop(self):
+        self.queue.put(self._done)
+
+    def send(self, msg):
+        self.queue.put(msg)
+
+    def doStuff(self, msg):
+        return True

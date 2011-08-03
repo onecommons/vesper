@@ -84,32 +84,23 @@ def startVesperInstance(trunk_id, nodeId, port, queueHost, queuePort, channel):
         pass
     
     print "creating vesper instance:%s (%s:%d)" % (nodeId, queueHost, port)
-    conf = {
-        'storage_url':"mem://",
-        'save_history':True,
-        'trunk_id': trunk_id,
-        'branch_id':nodeId,
-        'replication_hosts':[(queueHost, queuePort)],
-        'replication_channel':channel
-        
-    }
     # assume remote queue implements message ack
     sendAck=True
     if startQueue is startMorbidQueue:
         #morbid doesn't support stomp ack
         sendAck=False
 
-    rep = replication.get_replicator(nodeId, conf['replication_channel'], hosts=conf['replication_hosts'], sendAck=sendAck)
-    conf['changeset_hook'] = rep.replication_hook
-    
-    @app.Action
-    def startReplication(kw, retVal):
-        # print "startReplication callback!"
-        rep.start(kw.__server__)
-        
-    conf['actions'] = {
-        'http-request':route.gensequence,
-        'load-model':[startReplication]    
+    conf = {
+        'storage_url':"mem://",
+        'save_history':True,
+        'trunk_id': trunk_id,
+        'branch_id':nodeId,
+        'replication_hosts':[(queueHost, queuePort)],
+        'replication_channel':channel,
+        'send_stomp_ack':sendAck,
+        'actions': {
+            'http-request':route.gensequence
+        }
     }
     
     app.createApp(baseapp='miniserver.py',model_uri = 'test:', port=port, **conf).run()
