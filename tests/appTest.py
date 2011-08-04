@@ -276,7 +276,7 @@ class AppTestCase(unittest.TestCase):
         updates = utils.attrdict()        
         @vesper.app.Action
         def recordUpdates(kw, retval):
-            updates.update(kw)
+            updates.update(kw._dbchanges[0])
         
         store = vesper.app.createStore({
         "id": "hello", 
@@ -324,7 +324,7 @@ class AppTestCase(unittest.TestCase):
         updates = utils.attrdict()        
         @vesper.app.Action
         def recordUpdates(kw, retval):
-            updates.update(kw)
+            updates.update(kw._dbchanges[0])
 
         store = vesper.app.createStore({
         "id": "hello", 
@@ -357,7 +357,7 @@ class AppTestCase(unittest.TestCase):
         updates = utils.attrdict()        
         @vesper.app.Action
         def recordUpdates(kw, retval):
-            updates.update(kw)
+            updates.update(kw._dbchanges[0])
 
         store = vesper.app.createStore({
         "id": "hello", 

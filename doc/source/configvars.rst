@@ -86,24 +86,6 @@ datastore configuration variables
     default is whatever 'model_factory' is set to
     
     ``version_model_factory=RxPath.RedlandHashBdbModel``
-
-.. confval:: use_file_lock 
-
-    If True `vesper.app` will use interprocess file lock when committing 
-    a transaction. Alternately use_file_lock can be a reference to a class or factory
-    function that conforms to the glock.LockFile interface.
-
-    Default is False
-    
-    ``use_file_lock=True #enable``
-
-.. confval:: file_lock_path
-  
-    The path name for the lock file. If `file_lock_path` is not set, a path name is generated 
-    using the os's temp directory and a file name based on a hash of the `model_resource_uri` 
-    (this is to ensure that any process opening the same datastore will share the same lock file).
-    
-    ``file_lock_path='./appinstance1.lock'``
     
 .. confval:: save_history 
 
@@ -301,6 +283,24 @@ advanced configuration variables
   If the value of the settings is another dictionary of settings (e.g. ``model_options``) those dictionaries are merged recursively.
   
   Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}``
+
+.. confval:: use_file_lock 
+
+  If True `vesper.app` will use interprocess file lock when committing 
+  a transaction. Alternately use_file_lock can be a reference to a class or factory
+  function that conforms to the glock.LockFile interface.
+
+  Default is False
+
+  ``use_file_lock=True #enable``
+
+.. confval:: file_lock_path
+
+  The path name for the lock file. If `file_lock_path` is not set, a path name is generated 
+  using the os's temp directory and a file name based on a hash of the `model_resource_uri` 
+  (this is to ensure that any process opening the same datastore will share the same lock file).
+
+  ``file_lock_path='./appinstance1.lock'``
   
 .. confval:: app_name
 

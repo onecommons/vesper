@@ -280,7 +280,7 @@ class BasicStore(DataStore):
 
     def isDirty(self, txnService):
         '''return True if this transaction participant was modified'''    
-        return txnService.state.additions or txnService.state.removals
+        return txnService.state.dbstates
     
     def is2PhaseTxn(self):
         return not not self._txnparticipants
@@ -405,9 +405,9 @@ class BasicStore(DataStore):
                         raise DataStoreError("id %s already exists" % subject)
 
         if self.newResourceTrigger and newresources:  
-            self.newResourceTrigger(newresources)
+            self.newResourceTrigger(self, newresources)
         if self.addTrigger and stmts:
-            self.addTrigger(stmts, jsonrep)
+            self.addTrigger(self, stmts, jsonrep)
         self.model.addStatements(stmts)
         return jsonrep or stmts, newresources
 
@@ -518,7 +518,7 @@ class BasicStore(DataStore):
             self.requestProcessor.txnSvc.state.queryCache = {}
 
         if self.removeTrigger and stmts:
-            self.removeTrigger(stmts, jsonrep)        
+            self.removeTrigger(self, stmts, jsonrep)        
         self._removePropLists(stmts)
         self.model.removeStatements(stmts)
         
@@ -756,7 +756,7 @@ class TwoPhaseTxnModelAdapter(transactions.TransactionParticipant):
     
     def isDirty(self,txnService):
         '''return True if this transaction participant was modified'''
-        return txnService.state.additions or txnService.state.removals    
+        return txnService.state.dbstates
     
     def voteForCommit(self, txnService):
         #the only way we can tell if commit will succeed is to do it now 
@@ -830,7 +830,7 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
 
     def isDirty(self,txnService):
         '''return True if this transaction participant was modified'''
-        return self.dirty or txnService.state.additions or txnService.state.removals    
+        return self.dirty or txnService.state.dbstates
 
     def readyToVote(self, txnService):
         #need to do this now so the underlying model gets ctxStmts before it commits

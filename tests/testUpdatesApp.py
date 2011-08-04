@@ -14,9 +14,8 @@ def updateAction(kw, retval):
 
 @Action
 def queryAction(kw, retval):
-    query = "{comment where(label='%s')}" % kw['_name'] #XXX qnames are broken         
+    query = "{comment where(label='%s')}" % kw['_name']
     result = kw['__server__'].defaultStore.query(query)
-    #print result
         
     template = '<html><body>%s</body></html>'
     if result:
@@ -27,7 +26,7 @@ def queryAction(kw, retval):
 
 @Action 
 def recordUpdates(kw, retval):
-    kw['__server__'].updateResults = kw
+    kw['__server__'].updateResults = kw._dbchanges and kw._dbchanges[0] or None
 
 @Action
 def testLoadModelHook(kw, retVal):

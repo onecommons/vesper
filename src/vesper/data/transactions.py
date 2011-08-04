@@ -277,12 +277,16 @@ class TransactionParticipant(object):
     def finishTransaction(self, txnService, committed):
         pass
 
-class ProcessorTransactionState(TransactionState):
+class DbChanges(object):
     def __init__(self):
-        super(ProcessorTransactionState, self).__init__()        
         self.additions = []
         self.removals = []
         self.newResources = []
+
+class ProcessorTransactionState(TransactionState):
+    def __init__(self):
+        super(ProcessorTransactionState, self).__init__()
+        self.dbstates = {}
         self.kw = {}
         self.retVal = None
         self.lock = None
@@ -301,67 +305,82 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         self.initThreadLocals(state=ProcessorTransactionState())
         super(ProcessorTransactionService, self).__init__(server.log.name)
         
-    def newResourceHook(self, uris):
+    def newResourceHook(self, db, uris):
         '''
         This is intended to be set as the DataStore's newResourceTrigger
         '''
         if self.isActive() and self.state.safeToJoin:
-            self.state.newResources.extend(uri)
-            self._runActions('before-new', {'_newResources' : uris})
+            dbchanges = self.state.dbstates.setdefault(db, DbChanges())
+            dbchanges.newResources.extend(uri)
+            self._runActions('before-new', {'_newResources' : uris,
+                '_db' : db
+            })
 
-    def addHook(self, stmts, jsonrep=None):
+    def addHook(self, db, stmts, jsonrep=None):
         '''
         This is intended to be set as the DataStore's addTrigger
         '''
         state = self.state
-        if self.isActive() and state.safeToJoin:            
-            state.additions.extend(stmts)
+        if self.isActive() and state.safeToJoin:
+            dbchanges = state.dbstates.setdefault(db, DbChanges())
+            additions, removals = dbchanges.additions, dbchanges.removals
+            additions.extend(stmts)
             for stmt in stmts:
-                if stmt in state.removals:
-                    state.removals.pop( state.removals.index(stmt) )
+                if stmt in removals:
+                    removals.pop( removals.index(stmt) )
             if 'before-add' in self.server.actions:
                 if jsonrep is None:
                     jsonrep = pjson.tojson(stmts)
                 kw = {
-                    '_addedStatements' : state.additions,
+                    '_addedStatements' : additions,
                     '_added' : jsonrep, 
-                    '_newResources' : state.newResources }
+                    '_newResources' : dbchanges.newResources,
+                    '_db' : db
+                 }
                 self._runActions('before-add', kw)
 
-    def removeHook(self, stmts, jsonrep=None):
+    def removeHook(self, db, stmts, jsonrep=None):
         '''
         This is intended to be set as the DataStore's removeTrigger
         '''
         state = self.state
         if self.isActive() and state.safeToJoin:
-            state.removals.extend(stmts)
+            dbchanges = state.dbstates.setdefault(db, DbChanges())
+            additions, removals = dbchanges.additions, dbchanges.removals
+            removals.extend(stmts)
             for stmt in stmts:
-                if stmt in state.additions:
-                    state.additions.pop( state.additions.index(stmt) )
+                if stmt in additions:
+                    additions.pop( additions.index(stmt) )
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
                     jsonrep = pjson.tojson(stmts)
                 kw = {
-                    '_removedStatements' : state.removals, 
+                    '_removedStatements' : removals, 
                     '_removed' : jsonrep, 
-                    '_newResources' : state.newResources 
+                    '_newResources' : dbchanges.newResources,
+                    '_db' : db
                 }
                 self._runActions('before-remove', kw)
     
-    def _runActions(self, trigger, morekw=None):      
-       actions = self.server.actions.get(trigger)       
+    def _runActions(self, trigger, morekw=None):
+       actions = self.server.actions.get(trigger)
        if actions:
             state = self.state
-            kw = state.kw.copy()
-            if morekw is None:                
-                morekw = { 
-                '_addedStatements' : state.additions,
-                '_removedStatements' : state.removals,
-                '_added' : pjson.tojson(state.additions),
-                '_removed' : pjson.tojson(state.removals),
-                '_newResources' : state.newResources
+            kw = state.kw.copy()            
+            if morekw is None:
+                morekw = {'_dbchanges' :
+                  [ utils.attrdict({
+              '_addedStatements' : dbstate.additions,
+              '_removedStatements' : dbstate.removals,
+              '_added' : pjson.tojson(dbstate.additions),
+              '_removed' : pjson.tojson(dbstate.removals),
+              '_newResources' : dbstate.newResources,
+              '_db' : db
+              })  for db, dbstate in self.state.dbstates.items() ]
                 }
+
             kw.update(morekw)
+            kw['_txninfo'] = self.state.info
             errorSequence= self.server.actions.get(trigger+'-error')
             self.server.callActions(actions, kw, state.retVal,
                     globalVars=morekw.keys(),
