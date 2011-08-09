@@ -133,8 +133,11 @@ class BasicStore(DataStore):
         self.trunk_id = trunk_id
         self.branch_id = branch_id
         if isinstance(replication_hosts, (str, unicode)):
-            replication_hosts = [tuple(hostport.strip().split(':',1)) 
-                            for hostport in replication_hosts.split(',')]
+            def splitAddr(hostport): 
+                a, b = hostport.strip().split(':',1)
+                return a, int(b)
+            replication_hosts = [splitAddr(hostport) 
+                for hostport in replication_hosts.split(',')]
         self.replication_hosts = replication_hosts
         self.replication_channel = replication_channel
         self.send_stomp_ack = send_stomp_ack
