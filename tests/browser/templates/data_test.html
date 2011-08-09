@@ -89,7 +89,7 @@ objectArray = [{ "id": "@1",
 %>
 
 % for obj in testdata:
-<div class='alertdiv'>
+<div>
 <%df:form o='${obj}' _class='testclass'>
 <div>
      <div class='test'>text field bound to a string property <%df:input prop='a string' /> </div>
@@ -119,10 +119,23 @@ objectArray = [{ "id": "@1",
   <div class='expected'><input type='text' value="" name='missing' ></input> </div>
 </div>
 <div>
+   <div class='test'>text field bound to a missing property with defaultValue set
+     <%df:input type='text' prop='missing' defaultValue="default" /> </div>
+   <div class='expected'>
+     <input type='text' value="default" name='missing' ></input>
+   </div>
+</div>
+<div>
    <div class='test'>text field bound to a nested missing property <%df:input prop='nested.missing.value' /> 
    </div>
     <div class='expected'><input type='text' value="" name='nested.missing.value' ></input> </div>
-   ##XXX: ifmissing support -- value to use if property is missing
+</div>
+<div>
+   <div class='test'>text field bound to a missing property with defaultValue set
+     <%df:input type='text' prop='nested.missing.value' defaultValue="default" /> </div>
+   <div class='expected'>
+     <input type='text' value="default" name='nested.missing.value' ></input>
+   </div>
 </div>
 <div>   
    <div class='test'>checkbox bound to true: <%df:input type='checkbox' prop='enabled' /> </div>
@@ -150,8 +163,15 @@ objectArray = [{ "id": "@1",
    </div>
 </div>
 <div>
-   <div class='test'>checkbox bound to "" with ifempty: 
-     <%df:input type='checkbox' prop='emptystring' ifempty="hello" /> </div>
+   <div class='test'>checkbox bound to a missing property with defaultValue set to true: 
+     <%df:input type='checkbox' prop='missingproperty' defaultValue="${True}" /> </div>
+   <div class='expected'>
+     <input type='checkbox' value="true" checked class="type[boolean]" name='missingproperty' />
+   </div>
+</div>
+<div>
+   <div class='test'>checkbox bound to "" with defaultOnValue set: 
+     <%df:input type='checkbox' prop='emptystring' defaultOnValue="hello" /> </div>
    <div class='expected'>
      <input type='checkbox' value="hello" name='emptystring' />
    </div>
@@ -163,8 +183,8 @@ objectArray = [{ "id": "@1",
    </div>
 </div>
 <div>
-   <div class='test'>checkbox bound to null with ifempty: 
-      <%df:input type='checkbox' prop='none' ifempty='"@ref"' />  </div>
+   <div class='test'>checkbox bound to null with defaultOnValue set: 
+      <%df:input type='checkbox' prop='none' defaultOnValue='"@ref"' />  </div>
    <div class='expected'>
      <input <input type='checkbox' class="type[json]" value='"@ref"' name='none'/>
    </div>
@@ -235,6 +255,7 @@ objectArray = [{ "id": "@1",
 </div>
 % endfor
 
+<%slots:scripts>
   <script type="text/javascript">
    
     var logger = new YAHOO.tool.TestLogger(); // Log results to browser window
@@ -257,8 +278,9 @@ objectArray = [{ "id": "@1",
             Assert.areEqual($expectedInputs.length, $testInputs.length);            
             if ($expectedInputs.length) {
               $expectedInputs.each(function(index) {
-                 Assert.areEqual(this.value, $testInputs.get(index).value);
-                 Assert.areEqual(this.checked, $testInputs.get(index).checked);
+                 Assert.areEqual(this.value, $testInputs.get(index).value, $test.text());
+                 Assert.areEqual(this.checked, $testInputs.get(index).checked, $test.text());
+                 Assert.areEqual(this.className, $testInputs.get(index).className, $test.text());
              });
            }
             var $expectedOptions = $expected.find('option');
@@ -269,7 +291,7 @@ objectArray = [{ "id": "@1",
                  Assert.areEqual(this.value, $testOptions.get(index).value);
                  Assert.areEqual(this.innerHTML, $testOptions.get(index).innerHTML);
              });
-           }            
+           }
           });
         }
         
@@ -292,6 +314,7 @@ objectArray = [{ "id": "@1",
     TestRunner.subscribe(TestRunner.COMPLETE_EVENT, testRunComplete);        
     TestRunner.run();
   </script> 
+</%slots:scripts>
 
 <div id='test1'></div>
 

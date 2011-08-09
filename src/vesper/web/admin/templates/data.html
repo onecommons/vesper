@@ -10,9 +10,9 @@ def selected(test):
   if test: return 'selected'
   else: return ''
 
-def resolve(obj, prop):
+def resolve(obj, prop, defaultValue=UNDEFINED):
   if not obj:
-    return obj
+    return defaultValue
   #regex negative look-ahead assertion to escape \ but not \\
   escbs = r'(?<!(?<!\\)\\)' 
   for name in re.split(escbs + r'\.', prop):    
@@ -24,14 +24,14 @@ def resolve(obj, prop):
         index = match.group(2)
     name = re.sub(r'\\(.)', r'\1', name)
     if not hasattr(obj, 'get'):
-      return UNDEFINED
-    obj = obj.get(name, UNDEFINED)
+      return defaultValue
+    obj = obj.get(name, defaultValue)
     if index:      
       if not isinstance(obj, list):
-        return UNDEFINED
+        return defaultValue
       index = int(index)
       if len(obj) <= index:
-        return UNDEFINED
+        return defaultValue
       obj = obj[index]
     elif not obj:
       return obj
@@ -119,16 +119,18 @@ def serializeValue(val):
    <%
    obj = getobj(context, kw)
    itype = kw.pop('type', 'text')
-   value = resolve(obj,prop)
+   value = resolve(obj,prop, kw.pop('defaultValue', UNDEFINED))
    toggleInput = itype in ['radio', 'checkbox']
    bindclass = setFormBindClass(value, kw, toggleInput)
    if 'value' not in kw:
       if toggleInput and not value:
-        #current value will set input to unchecked state
-        #set the value to will be used if the input is checked
+        #current value will set the input to unchecked state
+        #set the value that will be used if the input is checked
         #it needs to match the type of current empty value
-        if 'ifempty' in kw:
-          kw['value'] = kw.pop('ifempty')
+        if 'defaultOnValue' in kw:
+          #use this value
+          kw['value'] = kw.pop('defaultOnValue')
+          bindclass = setFormBindClass(kw['value'], kw, toggleInput)
         else:
           if not bindclass or bindclass == 'type[string]':
             #in html, input.value defaults to "on" when checked
@@ -148,7 +150,7 @@ def serializeValue(val):
 <%def name='hidden(prop, **kw)'>
   <%
   obj = getobj(context, kw)
-  value = resolve(obj, prop)
+  value = resolve(obj, prop, kw.pop('defaultValue', UNDEFINED))
   setFormBindClass(value, kw)
   if 'value' not in kw:
     kw['value'] = serializeValue(value)
@@ -159,7 +161,7 @@ def serializeValue(val):
 <%def name='select(prop, options, **kw)'>
   <%
   obj = getobj(context, kw)
-  selection = resolve(obj,prop)
+  selection = resolve(obj,prop, kw.pop('defaultValue', UNDEFINED))
   islist = isinstance(selection, list)
   if islist:
     prop += '[]'
@@ -198,7 +200,7 @@ def serializeValue(val):
 <%def name='textarea(prop, **kw)'>
   <%
   obj = getobj(context, kw)
-  value = resolve(obj, prop)
+  value = resolve(obj, prop, kw.pop('defaultValue', UNDEFINED))
   setFormBindClass(value, kw)
   %>   
   <textarea name='${prop}' ${kwtoattr(kw)}>${serializeValue(value)|h}</textarea>
