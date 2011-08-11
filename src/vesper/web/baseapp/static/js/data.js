@@ -816,8 +816,11 @@ Binder.FormBinder.prototype = {
     } else if ( element.type == "select-one" || element.type == "select-multiple" ) {
       accessor.set( element.name, accessor.isIndexed( element.name ) ? [] : undefined );
       for( var j = 0; j < element.options.length; j++ ) {
-        var v = this._parse( element.name, element.options[j].value, element );
-        if( element.options[j].selected ) {
+        var option = element.options[j];
+        //if option specifies a type use that, otherwise use the select element
+        var typeElement = option.className && option.className.match( this.type_regexp ) ? option : element;
+        var v = this._parse( element.name, option.value, typeElement );
+        if( option.selected ) {
           accessor.set( element.name, v );
         }
       }
