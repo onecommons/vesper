@@ -636,7 +636,7 @@ True
 >>> d.missingattribute
 Traceback (most recent call last):
     ...
-AttributeError: missingattribute not found
+AttributeError: 'attrdict' object has no attribute 'missingattribute'
 >>> del d['newattribute']
 >>> 'newattribute' in d
 False
@@ -646,13 +646,21 @@ False
 True
 >>> attrdict(foo=1) != attrdict(bar=1)
 True
+>>> import pickle
+>>> p = attrdict(a=1)
+>>> pds = pickle.dumps(p)
+>>> pd = pickle.loads(pds)
+>>> pd == p
+True
+>>> type(pd) == type(p)
+True
     '''
 
     def __getattr__(self, name):
         try:
             return self[name]
         except KeyError:
-            raise AttributeError(name + ' not found')
+            raise AttributeError("'attrdict' object has no attribute '" + name + "'")
 
     def __setattr__(self, name, value):
         self[name] = value
@@ -722,10 +730,20 @@ True
 True
 >>> defaultattrdict(foo=1) != defaultattrdict(bar=1)
 True
+>>> import pickle
+>>> p = defaultattrdict(a=1)
+>>> pds = pickle.dumps(p)
+>>> pd = pickle.loads(pds)
+>>> pd == p
+True
+>>> type(pd) == type(p)
+True
     '''
     UNDEFINED = None
     
     def __getitem__(self, name):
+        if name in ['__getstate__', '__setstate__', '__getinitargs__', '__getnewargs__']:
+            raise AttributeError("'defaultattrdict' object has no attribute '" + name + "'")
         return dict.get(self, name, defaultattrdict.UNDEFINED)
 
     def copy(self):
@@ -813,6 +831,15 @@ False
 >>> __dt = {}; __dt.update(defaultproxyattrdict({'foo':1})); __dt
 {'foo': 1}
     '''
+    #XXX bug: pickling is broken
+    # >>> import pickle
+    # >>> p = defaultproxyattrdict(dict(a=1))
+    # >>> pds = pickle.dumps(p)
+    # >>> pd = pickle.loads(pds)
+    # >>> pd == d
+    # True
+    # >>> type(pd) == type(p)
+    # True
 
     def __init__(self, d):
         dict.__setattr__(self, '_dict', d)
