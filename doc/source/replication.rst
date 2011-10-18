@@ -13,7 +13,7 @@ Requirements
 
 `stomp.py <http://code.google.com/p/stomppy/>`_ (``easy_install stomp.py`` if you didn't include the "replication" extra when you installed vesper [e.g.  ``easy_install "vesper[replication]"``])
 
-But note that the current version only works on Python 2.6 -- ``easy_install http://stomppy.googlecode.com/files/stomp.py-2.0.2.tar.gz`` for compatibility with older versions of Python.
+But note that the current version only works on Python 2.6 or later -- ``easy_install http://stomppy.googlecode.com/files/stomp.py-2.0.2.tar.gz`` for compatibility with older versions of Python.
 
 A `STOMP <http://stomp.codehaus.org/>`_-compatible message queue broker. The following message queue brokers have been tested:
  * ActiveMQ 5.3.0 or greater. Recommended for production use.
