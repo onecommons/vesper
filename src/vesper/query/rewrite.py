@@ -438,8 +438,10 @@ class _ParseState(object):
         joinsInDocOrder = []
         self._findJoinsInDocOrder(root, joinsInDocOrder, removedJoins)
         assert not self.orphanedJoins, 'orphaned joins left-over: %s' % self.orphanedJoins
-        assert set(joinsInDocOrder) == set(joins), 'missing join in doc: %s' % (
+        assert set(joinsInDocOrder) >= set(joins), 'missing join in doc: %s' % (
                                               set(joins) - set(joinsInDocOrder))
+        assert set(joins) >= set(joinsInDocOrder), 'doc has extra joins: %s' % (
+                                              set(joinsInDocOrder) - set(joins))
 
         joinsInDocOrder, simpleJoins, complexJoins = self._findJoinPreds(root, joinsInDocOrder)
         #next, in reverse document order (i.e. start with the most nested joins)
