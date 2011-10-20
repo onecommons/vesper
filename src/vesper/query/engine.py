@@ -360,7 +360,9 @@ def _serializeValue(context, v, isId):
         else:
             return v
     if isId:
-        return context.serializer.serializeId(str(v))
+        if not isinstance(v, (str,unicode)):
+            v = str(v)
+        return context.serializer.serializeId(v)
     scope = None #context.scope
     if isinstance(v, ResourceUri):
         return context.serializer.serializeRef(v.uri, scope)

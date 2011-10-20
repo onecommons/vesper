@@ -804,16 +804,15 @@ def writeTriples(stmts, stream, enc='utf8', writejson=False):
         else:            
             stream.write(" <" + stmt[predicate].encode(enc) + ">")
         if stmt[objectType] == OBJECT_TYPE_RESOURCE:
-            if wspcProg.search(stmt[subject]):
-                raise RuntimeError("unable to write NTriples, statement scope "
-                "is an invalid URI: %s" % stmt[scope])
-
             if stmt[object].startswith(BNODE_BASE):
                 stream.write(' _:' + stmt[object][BNODE_BASE_LEN:].encode(enc)  + " .\n") 
             else:
                 stream.write(" <" + stmt[object].encode(enc)  + "> .\n")
-        else:           
-            escaped = (stmt[object].replace('\\', r'\\').encode(enc, 'backslashreplace'))
+        else:
+            objval = stmt[object]
+            if isinstance(objval, str):
+                objval = objval.decode('utf8')
+            escaped = objval.replace('\\', r'\\').encode(enc, 'backslashreplace')
             #fix differences between python and ntriples escaping:
             #* ascii range is escaped as \xXX instead of \u00XX,
             #* hex digits are lowercase instead of upper
