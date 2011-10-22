@@ -198,6 +198,9 @@ class AppTestCase(unittest.TestCase):
                 
         self.assertEquals(root2.defaultStore.query("{*}"), 
             [{'comment': 'page content.', 'id':  '@a_resource', 'label': 'foo'}])
+        root2.defaultStore.remove({'id':  'a_resource', 'label': 'foo'})
+        self.assertEquals(root2.updateResults['_removed']['data'], 
+                                [{'id': '@a_resource', 'label': 'foo'}])
 
     def testRemoves(self):
         store = vesper.app.createStore({
@@ -300,9 +303,7 @@ class AppTestCase(unittest.TestCase):
         }
         })
         
-        #XXX this statement shouldn't be duplicated
         self.assertEquals(updates._removedStatements, [
-            ('_:j:e:object:hello:1', 'foo', 'not first-class', 'L', ''), 
             ('_:j:e:object:hello:1', 'foo', 'not first-class', 'L', '')])            
         self.assertEquals(updates._addedStatements, 
                   [('_:j:e:object:hello:1', 'foo', 'modified', 'L', '')])
@@ -337,10 +338,7 @@ class AppTestCase(unittest.TestCase):
           "embedded": [{'id' : '_:j:e:object:hello:3', 'foo' : 'c', 'prop2':'a'}, {'id' : '_:j:e:object:hello:4', 'foo' : 'd'}]        
         })
 
-        #XXX these statements shouldn't be duplicated
         removed = [('_:j:e:object:hello:1', 'foo', 'a', 'L', ''), 
-        ('_:j:e:object:hello:2', 'foo', 'b', 'L', ''), 
-        ('_:j:e:object:hello:1', 'foo', 'a', 'L', ''), 
         ('_:j:e:object:hello:2', 'foo', 'b', 'L', '')] 
  
         #XXX shouldn't include the redundant proplist statements
@@ -367,15 +365,15 @@ class AppTestCase(unittest.TestCase):
         )
 
         store.replace({"id":"hello",
-          "embedded": [{'id' : '_:j:e:object:hello:3', 'foo' : 'c'}, {'id' : '_:j:e:object:hello:4', 'foo' : 'd'}]        
+          "embedded": [{'id' : '_:j:e:object:hello:3', 'foo' : 'c'}, {'id' : '_:j:e:object:hello:4', 'foo' : 'd'}]
         })
 
         removed = set(updates._removedStatements) - set(updates._addedStatements)
         expectedRemoved = set([('_:j:e:object:hello:2', 'foo', 'b', 'L', ''),
                                 ('_:j:e:object:hello:1', 'foo', 'a', 'L', '')])
-        self.assertEquals(removed, expectedRemoved)        
+        self.assertEquals(removed, expectedRemoved)
         
-        added = set(updates._addedStatements) - set(updates._removedStatements)        
+        added = set(updates._addedStatements) - set(updates._removedStatements)
         expectedAdded = set([('_:j:e:object:hello:2', 'foo', 'd', 'L', ''), 
                             ('_:j:e:object:hello:1', 'foo', 'c', 'L', '')])
         self.assertEquals(added, expectedAdded)

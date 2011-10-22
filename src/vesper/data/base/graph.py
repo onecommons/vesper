@@ -944,8 +944,8 @@ class MergeableGraphManager(NamedGraphManager):
         '''
         
         #default strategy:
-        # take the later version of the resource        
-        for (resources, local, remote) in conflicts:            
+        # take the later version of the resource
+        for (resources, local, remote) in conflicts:
             pass
         #changes different from just committing the incoming changeset
         

@@ -424,12 +424,16 @@ class BasicStore(DataStore):
         return self._add(adds, True)
 
     def _removePropLists(self, stmts):
+        removed = []
         if not self.model.canHandleStatementWithOrder:
             for stmt in stmts:
-                #check if the statement is part of a json list, remove that list item too                
+                #check if the statement is part of a json list, remove that list item too
                 rows = list(pjson.findPropList(self.model, stmt[0], stmt[1], stmt[2], stmt[3], stmt[4]))
                 for row in rows:
-                    self.model.removeStatement(base.Statement(*row[:5]))
+                    rowStmt = base.Statement(*row[:5])
+                    self.model.removeStatement(rowStmt)
+                    removed.append(rowStmt)
+        return removed
 
     def _getStatementsForResources(self, resources):
         stmts = []
@@ -508,20 +512,18 @@ class BasicStore(DataStore):
             self._removePropLists([(s[0], s[1], None, None, None)])
             currentStmts = self.model.getStatements(s[0], s[1], context = s[4] or None)
             stmts.extend(currentStmts)
-                
         for res in resources:
             stmts.extend( self._getStatementsForResources(resources) )
-        
-        stmts.extend( self._removeEmbedded(stmts, set()) )
+        stmts = self._removeEmbedded(stmts, set())
         return self._remove(stmts)
         
-    def _remove(self, removes):
+    def _remove(self, removes, proplistremoves=[]):
         stmts, jsonrep, emptyobjs = self._toStatements(removes)
         if stmts: #invalidate cache
             self.requestProcessor.txnSvc.state.queryCache = {}
 
         if self.removeTrigger and stmts:
-            self.removeTrigger(self, stmts, jsonrep)        
+            self.removeTrigger(self, stmts+proplistremoves, jsonrep)
         self._removePropLists(stmts)
         self.model.removeStatements(stmts)
         
@@ -650,6 +652,7 @@ class BasicStore(DataStore):
         #get all statements with the subject and remove them (along with associated lists)        
         root = OrderedModel(replaceStmts, self._isEmbedded)
         renamed = {}
+        removedPropListStmts = []
         for resource in root.resources:
             currentStmts = self.model.getStatements(resource)
             newStmts = root.getProperties(resource)
@@ -683,7 +686,7 @@ class BasicStore(DataStore):
                     removals.append(stmt)
             #the new proplist probably have different ids even for values that
             #don't need to be added so remove all current proplists
-            self._removePropLists(currentStmts)
+            removedPropListStmts.extend( self._removePropLists(currentStmts) )
         newStatements.extend( root.getAll() )
         
         #remove: remove all statements and associated lists
@@ -693,9 +696,9 @@ class BasicStore(DataStore):
         for stmt in newStatements:
             if self._isEmbedded(stmt.object, stmt.objectType):
                 embeddedAdded.add(stmt.object)            
-        removals.extend(self._removeEmbedded(removals, embeddedAdded))
-        
-        self._remove(removals)
+        removals = self._removeEmbedded(removals, embeddedAdded)
+        self._remove(removals, removedPropListStmts)
+        removals.extend(removedPropListStmts)
         addStmts = self.add(newStatements)
 
         return addStmts, removals
@@ -855,7 +858,6 @@ class TwoPhaseTxnGraphManagerAdapter(transactions.TransactionParticipant):
         if self.ctxStmts:
             #undo the transaction we just voted for
             graph = self.graph
-            assert not graph._currentTxn, 'shouldnt be inside a transaction'
            
             #set the current revision to one prior to this
             baseRevisions = [s.object for s in ctxStmts if s[1] == graphmod.CTX_NS+'baseRevision']
