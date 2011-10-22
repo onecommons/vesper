@@ -201,6 +201,32 @@ class IncrementalFileModelTestCase(FileModelTestCase):
 
     def testExternalChange(self):
         pass #XXX override overwriteString in test with one compatible with this model
+    
+    def testLogfileRecovery(self):
+        model = self.getModel()
+        stmts = [Statement('s', 'p1', 'o1')]
+        model.addStatements(stmts)
+        model.commit() #create the file
+        f = open(model.path)
+        expectedFileContents = '<s> <p1> "o1" .'
+        self.assertEqual(expectedFileContents, f.read().strip()) #strip trailing newline
+        f.close()
+        
+        model.addStatement(Statement('s', 'p2', 'o2'))
+        #make comitting explode right when we are writing to disk:
+        changelist = model._getChangeList()
+        changelist.append((0,1,3)) 
+        try:
+            model.commit()
+        except:
+            self.assertTrue("got expected exception")
+        else:
+            self.assertFalse('expected exception during commit')
+        
+        #make sure old contents is preserved in file
+        f = open(model.path)
+        self.assertEqual(expectedFileContents, f.read().strip()) #strip trailing newline
+        f.close()        
         
 class TransactionIncrementalFileModelTestCase(IncrementalFileModelTestCase):
 

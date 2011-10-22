@@ -298,6 +298,7 @@ class IncrementalNTriplesFileStoreBase(FileStore):
 
     def commit(self, **kw): 
         if os.path.exists(self.path):
+            originalsize = os.path.getsize(self.path)
             outputfile = file(self.path, "a+")
             changelist = self._getChangeList()
             def unmapQueue():
@@ -312,11 +313,16 @@ class IncrementalNTriplesFileStoreBase(FileStore):
                 comment = comment and comment[0] or ''
             if getattr(comment, 'getAttributeNS', None):
                 comment = comment.getAttributeNS(RDF_MS_BASE, 'about')
-                
-            outputfile.write("#begin " + comment + "\n")            
-            writeTriples( unmapQueue(), outputfile)            
-            outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
-            outputfile.close()
+            try:
+                outputfile.write("#begin " + comment + "\n")            
+                writeTriples( unmapQueue(), outputfile)            
+                outputfile.write("#end " + time.asctime() + ' ' + comment + "\n")
+            except:
+                outputfile.truncate(originalsize)
+                outputfile.close()
+                raise
+            else:
+                outputfile.close()
         else: #first time
             super(IncrementalNTriplesFileStoreBase, self).commit()
         self.changelist = []
