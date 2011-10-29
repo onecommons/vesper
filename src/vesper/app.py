@@ -230,10 +230,6 @@ class RequestProcessor(TransactionProcessor):
         self.loadModel()
         self.handleCommandLine(self.argsForConfig)
 
-    @property
-    def defaultStore(self):
-        return self.stores.get('default')
-        
     def handleCommandLine(self, argv):
         '''  the command line is translated into the `_params`
         request variable as follows:
@@ -266,24 +262,25 @@ class RequestProcessor(TransactionProcessor):
         self.txnSvc = transactions.ProcessorTransactionService(self)
         initConstants( [ 'stores', 'storeDefaults'], {})
         addNewResourceHook = self.actions.get('before-new')
+        self.defaultStore = None
         if 'stores' in appVars:
             stores = utils.attrdict()
             for name, storeConfig in appVars['stores'].items():
                 stores[name] = self.loadDataStore(storeConfig, 
                                     self.storeDefaults, addNewResourceHook)
-                if storeConfig.get('default_store'):
-                    stores['default'] = stores[name]
-            if stores and 'default' not in stores:
+                if storeConfig.get('default_store') or name == 'default':
+                    self.defaultStore = stores[name]
+            if stores and not self.defaultStore:
                 if len(stores) > 1:
                     raise VesperError('default store not set')
                 else:
-                    stores['default'] = stores.values()[0]
+                    self.defaultStore = stores.values()[0]
             #XXX in order to allow cmdline and config file storage settings to be useful
             #merge appVars into the default store's config before loadDataStore
             self.stores = stores
         else:
-            self.stores = utils.attrdict(default=
-             self.loadDataStore(appVars,self.storeDefaults,addNewResourceHook))
+            self.defaultStore = self.loadDataStore(appVars,self.storeDefaults,addNewResourceHook)
+            self.stores = utils.attrdict(default=self.defaultStore)
 
         #app_name is a unique name for this request processor instance
         initConstants( ['app_name'], 'root')
