@@ -330,7 +330,8 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
                     removals.pop( removals.index(stmt) )
             if 'before-add' in self.server.actions:
                 if jsonrep is None:
-                    jsonrep = pjson.tojson(stmts)
+                    jsonrep = pjson.tojson(stmts,
+                **db.model_options.get('serializeOptions',{}).get('pjson',{}))
                 kw = {
                     '_addedStatements' : additions,
                     '_added' : jsonrep, 
@@ -353,7 +354,8 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
                     additions.pop( additions.index(stmt) )
             if 'before-remove' in self.server.actions:
                 if jsonrep is None:
-                    jsonrep = pjson.tojson(stmts)
+                    jsonrep = pjson.tojson(stmts,
+                **db.model_options.get('serializeOptions',{}).get('pjson',{}))
                 kw = {
                     '_removedStatements' : removals, 
                     '_removed' : jsonrep, 
@@ -372,8 +374,10 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
                   [ utils.attrdict({
               '_addedStatements' : dbstate.additions,
               '_removedStatements' : dbstate.removals,
-              '_added' : pjson.tojson(dbstate.additions),
-              '_removed' : pjson.tojson(dbstate.removals),
+              '_added' : pjson.tojson(dbstate.additions,
+                **db.model_options.get('serializeOptions',{}).get('pjson',{})),
+              '_removed' : pjson.tojson(dbstate.removals,
+                **db.model_options.get('serializeOptions',{}).get('pjson',{})),
               '_newResources' : dbstate.newResources,
               '_db' : db
               })  for db, dbstate in self.state.dbstates.items() ]
