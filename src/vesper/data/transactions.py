@@ -415,12 +415,7 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         
         #we're about to complete the transaction,
         #here's the last chance to modify it
-        try:
-            self._runActions('before-commit')
-        except:
-            self.abort()
-            raise
-
+        self._runActions('before-commit')
         super(ProcessorTransactionService, self)._prepareToVote()
         
     def _vote(self):

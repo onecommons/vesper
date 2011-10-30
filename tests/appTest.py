@@ -630,6 +630,28 @@ class AppTestCase(unittest.TestCase):
         self._test2PhaseTxn('split')
         self._test2PhaseTxn('combined')
 
+    def testFailingCommitHooks(self):
+        class TestError(Exception):
+            pass
+        
+        @vesper.app.Action
+        def raiseError(kw, retval):
+            raise TestError('mock unexpected error')
+        
+        store = vesper.app.createStore(
+            #save_history=save_history, 
+            model_uri = 'test:',
+            actions = {
+                'before-commit' : [raiseError]
+            }            
+        )
+        try:
+            store.update({"id":"1", "test": "foo"})
+        except TestError:
+            pass
+        else:
+            self.failUnless(False, 'didnt see expected exception')
+        
     def testGraphManagerSerialize(self):
         import os
         import warnings
