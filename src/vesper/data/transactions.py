@@ -429,12 +429,8 @@ class ProcessorTransactionService(TransactionService,utils.ObjectWithThreadLocal
         #you can't modify the transaction any more but
         #this trigger let's you look at the completed state    
         #and gives you one last chance to abort the transaction        
-        assert not self.state.safeToJoin 
-        try:
-            self._runActions('finalize-commit')
-        except:
-            self.abort()
-            raise
+        assert not self.state.safeToJoin
+        self._runActions('finalize-commit')
 
 class FileFactory(object):
     """Stream factory for a local file object"""

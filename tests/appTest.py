@@ -638,19 +638,28 @@ class AppTestCase(unittest.TestCase):
         def raiseError(kw, retval):
             raise TestError('mock unexpected error')
         
-        store = vesper.app.createStore(
-            #save_history=save_history, 
-            model_uri = 'test:',
-            actions = {
-                'before-commit' : [raiseError]
-            }            
-        )
-        try:
-            store.update({"id":"1", "test": "foo"})
-        except TestError:
-            pass
-        else:
-            self.failUnless(False, 'didnt see expected exception')
+        def testHook(hook, save_history):
+            store = vesper.app.createStore(
+                save_history=save_history, 
+                model_uri = 'test:',
+                actions = {
+                    hook : [raiseError]
+                }
+            )
+            self.failUnless(not store.query("{*}"), "store should be empty")
+            try:
+                store.update({"id":"1", "test": "foo"})
+            except TestError:
+                pass
+            else:
+                self.failUnless(False, 'didnt see expected exception')            
+            self.failUnless(not store.query("{*}"), "update should have been reverted")
+        
+        testHook('before-commit', False)
+        testHook('finalize-commit', False)
+        testHook('before-commit', "split")
+        testHook('finalize-commit', "split")
+
         
     def testGraphManagerSerialize(self):
         import os
