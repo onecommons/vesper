@@ -13,7 +13,7 @@ from vesper.data.store.sqlite import SqliteStore, TransactionSqliteStore
 class SqliteModelTestCase(modelTest.BasicModelTestCase):
     
     def getModel(self):
-        model = SqliteStore(self.tmpfilename)
+        model = SqliteStore(None)
         return self._getModel(model)
 
     def getTransactionModel(self):
