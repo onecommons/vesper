@@ -260,7 +260,7 @@ Please check the URL to ensure that the path is correct.</p>
 
 class UploadFile(object):
 
-    def __init__(field):
+    def __init__(self, field):
         self._field = field
 
     filename = property(lambda self: self._field.filename)
