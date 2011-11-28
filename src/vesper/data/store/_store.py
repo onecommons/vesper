@@ -8,7 +8,8 @@ _proto_map = { # XXX don't hardcode this
     'tyrant':'vesper.data.store.tyrant.TransactionTyrantStore',
     'file':'vesper.data.store.basic.FileStore',
     'mem':'vesper.data.store.basic.MemStore',
-    'bdb':'vesper.data.store.bdb.TransactionBdbStore'
+    'bdb':'vesper.data.store.bdb.TransactionBdbStore',
+    'sqlite':'vesper.data.store.sqlite.TransactionSqliteStore'
 }
     
 def get_factory(proto):
