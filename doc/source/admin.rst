@@ -10,7 +10,7 @@ Download and installation
 You can find Vesper on Github at https://github.com/aszs/vesper or download the latest code as eggs, zips or tarballs at
 http://onecommons.org/vesper/dist/.
 
-Vesper requires Python 2.4 or later. If you've downloaded an egg, install it with easy_install, for example ``easy_install vesper-LATEST-py2.6.egg``. If you are installing from the source directory run either ``python setup.py install`` or run ``python setup.py develop`` if you don't want to reinstall it everytime its source is updated.
+Vesper requires Python 2.4 or later. To install using easy_install, pass it an URL to the egg, for example ``easy_install http://onecommons.org/vesper/dist/vesper-LATEST-py2.6.egg``. If you are installing from the source directory run either ``python setup.py install`` or run ``python setup.py develop`` if you don't want to reinstall it everytime its source is updated.
 
 If you've downloaded the source you can verify it working properly by running the unit tests: ``cd tests && python __init__.py``
 
