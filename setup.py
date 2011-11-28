@@ -28,7 +28,8 @@ if pyver < (2,5):
 else:
     extras_require['tests'].append('coilmq')
 if pyver < (2,6):
-  install_requires.extend(['simplejson', 'multiprocessing'])
+  install_requires.extend(['simplejson'])
+  extras_require['tests'].append('multiprocessing')
 
 # data_files generation derived from django setup.py
 data_files = []
