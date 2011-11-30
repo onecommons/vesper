@@ -288,7 +288,8 @@ class RequestProcessor(TransactionProcessor):
                         
         self.defaultRequestTrigger = appVars.get('default_trigger','http-request')
         initConstants( ['global_request_vars', 'static_path', 'template_path'], [])
-        self.mako_module_dir = appVars.get('mako_module_dir', 'mako_modules')
+        self.work_dir = appVars.get('work_dir', 'vesper_work')
+        self.mako_module_dir = appVars.get('mako_module_dir', os.path.join(self.work_dir,'mako_modules'))
         initConstants( ['template_options'], {})        
         self.global_request_vars.extend( self.defaultGlobalVars )
         self.default_page_name = appVars.get('default_page_name', 'index')
@@ -804,10 +805,6 @@ def createApp(derivedapp=None, baseapp=None, static_path=(), template_path=(), a
 
         addToPath(static_path, 'static_path')
         addToPath(template_path, 'template_path')
-        #set the 'mako_modules' directory default to be relative to directory of
-        #the most derived app to prevent tmp directory spew in current directory
-        mako_module_dir = config.get('mako_module_dir', 'mako_modules')
-        _current_config.mako_module_dir = _normpath(basedir, mako_module_dir)
         
         #storage_template_path should be relative to the app config 
         #that sets it, not the final (most derived) app

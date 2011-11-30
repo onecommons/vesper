@@ -4,12 +4,77 @@
 configuration variables 
 -----------------------
 
+general configuration variables 
+===============================
+
+.. confval:: logconfig 
+
+   A string that is either a Python log configuration or a path to the configuration file
+
+   Default: ``logconfig=None``
+
+.. confval:: exec_cmd_and_exit 
+
+  If set to True, invoking the app will not start the web server -- it will just execute 
+  any given command line arguments and exit. Equivalent to the ``--exit`` command line option.
+  
+  Default: False
+
+.. confval:: work_dir
+
+   Directory where temporary files and directories are created.
+
+   Default: ``work_dir="vesper_work"``
+   
+.. confval:: stores
+
+  A dictionary of stores, whose keys are the names of the store and values are dictionaries 
+  containing the datastore configuration settings for that store.
+  
+  If more than one store is specified, a default store must be indicated, in one of two ways:
+  either by naming the store "default" or by including a "default_store" setting in the stores' 
+  dictionary of configuration settings.
+
+  If `stores` is set, then other datastore configuration settings are ignored. 
+  
+  Example: ``stores = {'config': {'storage_path': 'config.json'}, 'data': {'storage_path': 'data.json', 'default_store': True}}``
+
+.. confval:: storeDefaults
+
+  A dictionary containing datastore configuration settings that are applied to each store defined in the configuration. 
+  Any other datastore settings override the settings here.
+  If the value of the settings is another dictionary of settings (e.g. ``model_options``) those dictionaries are merged recursively.
+  
+  Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}``
+
+.. confval:: use_file_lock 
+
+  If True `vesper.app` will use interprocess file lock when committing 
+  a transaction. Alternately use_file_lock can be a reference to a class or factory
+  function that conforms to the glock.LockFile interface.
+
+  Default is False
+
+  ``use_file_lock=True #enable``
+
+.. confval:: file_lock_path
+
+  The path name for the lock file. If `file_lock_path` is not set, a path name is generated 
+  using the os's temp directory and a file name based on a hash of the `model_resource_uri` 
+  (this is to ensure that any process opening the same datastore will share the same lock file).
+
+  ``file_lock_path='./appinstance1.lock'``
+
 datastore configuration variables 
 =================================
 
+These configuration variables can be specified either directly in the configuration 
+(if configuring only one store) or in each store in the ``stores`` configuration. 
+They can also appear in the ``storeDefaults`` dictionary. 
+
 .. confval:: datastore_factory
 
-  The class or factory function the Raccoon will call to instantiate the application's primary data store
+  The class or factory function called to instantiate the application's primary data store
   It is passed as keyword arguments the dictionary of the variables contained in the config file
   note that this is a callable object which may need to be imported into the config file
 
@@ -32,9 +97,9 @@ datastore configuration variables
 
 .. confval:: storage_path
 
-    The location of the RDF model. Usually a file path but the appropriate value depends on 'modelFactory'
+    The location of the store. Usually a file path but the appropriate value depends on 'modelFactory'
     default is '' 
-    storage_path = 'mywebsite.nt'
+    storage_path = 'mywebsite.json'
 
 .. confval:: transaction_log
  
@@ -126,25 +191,12 @@ web configuration variables
 
     Default: ``port=8000``
 
-.. confval:: logconfig 
-
-   A string that is either a Python log configuration or a path to the configuration file
-
-   Default: ``logconfig=None``
-
 .. confval:: httpserver 
 
   The Python class (or callable object) of the WSGI server that is instantiated
   when the app is started
 
   Default: ``httpserver=wsgiref.simple_server``
-
-.. confval:: exec_cmd_and_exit 
-
-  If set to True, invoking the app will not start the web server -- it will just execute 
-  any given command line arguements and exit.
-  
-  Default: False
 
 .. confval:: wsgi_middleware 
 
@@ -157,7 +209,7 @@ web configuration variables
 
 .. confval:: record_requests 
 
-  Any HTTP requests made are saved to a file. They can be played-back using the ``DEBUG_FILENAME``
+  Any HTTP requests made are saved to a file. They can be played-back using the ``debug_filename``
   option.
 
 .. confval:: debug_filename 
@@ -193,7 +245,7 @@ web configuration variables
 .. confval:: default_mime_type
 
     The MIME type sent on any request that doesn't set its own mimetype 
-    and Raccoon can't guess its MIME type
+    and the app can't guess its MIME type
     default is '' (not set)
     default_mime_type='text/plain'
 
@@ -217,12 +269,11 @@ web configuration variables
 
 .. confval:: mako_module_dir
 
-    Specifies the directory where the mako templates are compiled. If an absolute
-    path is not specified, the path is made relative to the location of the app 
-    configuration file. This property sets the `module_directory` parameter 
+    Specifies the directory where the mako templates are compiled. 
+    This property sets the `module_directory` parameter 
     in the `mako.lookup.TemplateLookup` constructor.
     
-    Default is `"mako_module"` relative to the location of the app configuration file.
+    Default is `"work_dir/mako_module"` where `work_dir`:confval: is that given configuration value.
     
 .. confval:: template_options
 
@@ -231,6 +282,14 @@ web configuration variables
   Keys in this dictionary override the default values for that parameter.
   
   Default is `{}`
+
+.. confval:: secure_file_access
+
+    Limits URLs access to only the directories reachable through `static_path` or `templates_path`
+
+    default is True
+
+    secure_file_access = True
 
 configuration variables for command line handling 
 =================================================
@@ -257,49 +316,10 @@ configuration variables for command line handling
   Help text appended to command line help message (invoked by -h or --help)
   
   Default: `"Settings:\n--[name]=VALUE Add [name] to config settings"`
-  
+
 advanced configuration variables 
 ================================
 
-.. confval:: stores
-
-  A dictionary of stores, whose keys are the names of the store and values are dictionaries 
-  containing the datastore configuration settings for that store.
-  
-  If more than one store is specified, a default store must be indicated, in one of two ways:
-  either by naming the store "default" or by including a "default_store" setting in the stores' 
-  dictionary of configuration settings.
-
-  If `stores` is set, then other datastore configuration settings are ignored. 
-  
-  Example: ``stores = {'config': {'storage_path': 'config.json'}, 'data': {'storage_path': 'data.json', 'default_store': True}}``
-
-.. confval:: storeDefaults
-
-  A dictionary containing datastore configuration settings that are applied to each store defined in the configuration. 
-  Any other datastore settings override the settings here.
-  If the value of the settings is another dictionary of settings (e.g. ``model_options``) those dictionaries are merged recursively.
-  
-  Example ``storeDefaults = {'model_options': {'serializeOptions': {'pjson': 'omitEmbeddedIds': True}}}``
-
-.. confval:: use_file_lock 
-
-  If True `vesper.app` will use interprocess file lock when committing 
-  a transaction. Alternately use_file_lock can be a reference to a class or factory
-  function that conforms to the glock.LockFile interface.
-
-  Default is False
-
-  ``use_file_lock=True #enable``
-
-.. confval:: file_lock_path
-
-  The path name for the lock file. If `file_lock_path` is not set, a path name is generated 
-  using the os's temp directory and a file name based on a hash of the `model_resource_uri` 
-  (this is to ensure that any process opening the same datastore will share the same lock file).
-
-  ``file_lock_path='./appinstance1.lock'``
-  
 .. confval:: app_name
 
   A short name for this application, must be unique within the current ``vesper.app`` process
@@ -359,14 +379,6 @@ advanced configuration variables
       It should raise vesper.app.NotAuthorized if the request should not be processed.
       
       default is lambda *args: True
-
-.. confval:: secure_file_access
-
-    Limits URLs access to only the directories reachable through `static_path` or `templates_path`
-
-    default is True
-
-    secure_file_access = True
 
 .. confval:: action_cache_size
 
