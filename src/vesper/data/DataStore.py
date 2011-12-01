@@ -704,7 +704,8 @@ class BasicStore(DataStore):
         return addStmts, removals
 
     def query(self, query=None, bindvars=None, explain=None, debug=False, 
-        forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True):
+        forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True,
+        printast=False):
         import vesper.query
         #XXX theorectically some queries might not be readonly, set flag as appropriate
         if not self.join(self.requestProcessor.txnSvc, readOnly=True):
@@ -719,13 +720,11 @@ class BasicStore(DataStore):
             pjsonOptions=self.model_options.get('serializeOptions',{}).get('pjson')
             if pjsonOptions is not None:
                 useSerializer = pjsonOptions
-        
-        start = time.clock()
+                
         cache = self.requestProcessor.txnSvc.state.queryCache
         results = vesper.query.getResults(query, self.model, bindvars, explain,
-          debug, forUpdate, captureErrors, contextShapes, useSerializer, cache)
-        elapsed = time.clock() - start
-        self.log.debug('%s elapsed for query %s', elapsed, query)
+          debug, forUpdate, captureErrors, contextShapes, useSerializer, printast, cache)
+        self.log.debug('%s elapsed for query %s', results.elapsed, query)
         if not captureErrors and not explain and not debug:
             return results.results
         else:

@@ -64,7 +64,7 @@ from vesper.backports import json
     margin-top: 12px;
     margin-bottom: 12px;
   }  
-  #explainresults {
+  #explainresults, #ast {
     display:none;
     background-color:palegreen;
     margin-top: 12px;
@@ -110,8 +110,12 @@ from vesper.backports import json
   <div id='queryresults' class="precontent">
   </div>
   <div id='explainresults' class="resultbox">
-  <b>Explain:</b><hr>
-  <div class="precontent">&nbsp;</div>
+    <b>Explain:</b><hr>
+    <div class="precontent">&nbsp;</div>
+  </div>
+  <div id='ast' class="resultbox">
+    <b>AST:</b><hr>
+    <div class="precontent">&nbsp;</div>
   </div>
   <div id='debugresults' class="resultbox">
   <b>Debug:</b><hr>
@@ -124,7 +128,7 @@ from vesper.backports import json
     function runQuery() {
       var q = {captureErrors:true};
       q.query = $('#query').val();
-      q.explain = $('#opt-explain').is(':checked');
+      q.printast = q.explain = $('#opt-explain').is(':checked');
       q.forUpdate = $('#opt-forupdate').is(':checked');
       q.debug = $('#opt-debug').is(':checked');
       $('#queryresults').dbQuery(q, function(data) {
@@ -141,8 +145,11 @@ from vesper.backports import json
           if (data.explain) {
               $('#explainresults .precontent').text(data.explain);
               $('#explainresults').show();
+              $('#ast .precontent').text(data.ast);
+              $('#ast').show();
           } else {
               $('#explainresults').hide();
+              $('#ast').hide();
           }
           if (data.debug) {
               $('#debugresults .precontent').text(data.debug);

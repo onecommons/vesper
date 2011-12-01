@@ -50,6 +50,7 @@ from vesper.data.base import Tupleset, ColumnInfo, EMPTY_NAMESPACE, ResourceUri
 from vesper import utils, pjson
 import StringIO
 import vesper.utils._utils
+import time
 
 SUBJECT = 0
 PROPERTY = 1
@@ -78,7 +79,7 @@ def runQuery(query, model):
 
 def getResults(query, model, bindvars=None, explain=None, debug=False,
     forUpdate=False, captureErrors=False, contextShapes=None, useSerializer=True,
-    queryCache=None):
+    printast=False, queryCache=None):
     '''
     Returns a dict with the following keys:
         
@@ -113,6 +114,7 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
     '''
     #XXX? add option to include `resources` in the result,
     # a list describing the resources (used for track changes)
+    start = time.clock()
     response = utils.attrdict()
     errors = []
     
@@ -148,12 +150,18 @@ def getResults(query, model, bindvars=None, explain=None, debug=False,
                 errors.append("unexpected exception: %s" % traceback.format_exc())
             else:
                 raise
+    
+    response['elapsed'] = time.clock() - start
     response['errors'] = errors
     if explain:
         response['explain'] = explain.getvalue()        
 
     if debug and hasattr(debug, 'getvalue'):
-        response['debug'] = debug.getvalue()        
+        response['debug'] = debug.getvalue()
+    
+    if printast:
+        import pprint
+        response['ast'] = pprint.pformat(ast)
     
     return response
 
